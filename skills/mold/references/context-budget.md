@@ -11,7 +11,7 @@ Use the sub-agent context gate for heavy work. Resolve the read-only role throug
 - **Prototype Cycle:** Always run the temporary build in an `explorer`. See `prototype-cycle.md`.
 - **Diagnose:** Delegate large logs and traces to an `explorer`. Keep only the concise root-cause hypothesis in the parent context.
 
-The sub-agent returns a digest of 2 KB or less. Do not copy raw evidence into the parent context. The parent keeps the dialogue, contradictions, approval state, and two-key handshake. Never delegate these items.
+The sub-agent returns a digest of 2 KB or less. Do not copy raw evidence into the parent context. The parent keeps the dialogue, contradictions, save-approval state, and coherence self-check. Never delegate these items.
 
 ## Orchestration budgets
 

@@ -15,14 +15,13 @@ The order of the checks is the contract:
    replay is one the record has not caught up to: a complete pair whose parent
    is still the current revision is an interrupted promotion, and the retry
    finishes it instead of reporting a save no reader can serve.
-2. **Lineage before application.** The parent the record names has to have a
-   structurable receipt whose digest the record still quotes, and the receipts
-   behind it have to walk back to genesis; a chain that cannot be walked
-   backwards is not extended forwards. The walk reads receipts only: whether
-   an ancestor's projection is present is lint's question, not this one's.
-3. **Rehydration before compaction.** A delta written after a context
-   compaction has to prove it read the *current* revision, not the revision the
-   compacted session remembered.
+2. **Receipt before application.** The parent the record names has to have a
+   structurable receipt whose digest the record still quotes. The check reads
+   receipts only: whether an ancestor's projection is present is recovery's
+   question, not this one's.
+3. **No compaction proofs.** A delta that declares compaction is refused.
+   Compaction safety is the parent rule above: a writer that lost its context
+   re-reads the record and names the revision it read.
 
 Identity is derived, never drawn. Revision ids hash the parent and the request;
 entry ids hash the parent and the proposed entry. Nothing here reads a clock or
@@ -30,8 +29,8 @@ a random source, so the same request against the same parent produces the same
 names -- which is what makes replay recognisable at all.
 
 Omission carries forward. A delta field left `None` means "unchanged", and the
-additive fields only ever add, so no protected entry, artifact link, or dossier
-fork can leave the record without an `EntryTransition` naming it.
+additive fields only ever add, so no protected entry or artifact link
+can leave the record without an `EntryTransition` naming it.
 
 A delta whose `expected_revision_id` is `GENESIS_PARENT` is the one request with
 nothing to carry forward from: it *creates* the first record for a work id. It
@@ -44,7 +43,7 @@ first: an identical genesis resubmission is a replay, not a conflict.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
@@ -52,8 +51,6 @@ from attrs import define, evolve
 from easy_cheese_schemas import (
     SCHEMA_VERSION,
     ArtifactLink,
-    CompactionRecord,
-    DecisionFork,
     Durability,
     EntryKind,
     EntryState,
@@ -74,7 +71,6 @@ from easy_cheese.shared import paths
 
 from . import canonical
 from . import edges as edges_mod
-from . import fork_reconcile, lineage
 from . import projection as projection_mod
 from . import records, refs, storage
 
@@ -83,7 +79,7 @@ from . import records, refs, storage
 # which receipt quoted it. This placeholder holds that field open in between.
 _UNPINNED_DIGEST = f"{canonical.DIGEST_PREFIX}{'0' * 64}"
 _ID_HEX = 12
-_FORK_EDGE_KINDS = frozenset({EdgeKind.FORKED_FROM, EdgeKind.FORKED_TO})
+_FORK_EDGE_KINDS = frozenset({EdgeKind.FORKED_FROM})
 # The parent a delta names when it is asking for the *first* record. Every
 # derived revision id is `rev-<12 hex>` (see `_revision_id`), so this sentinel
 # lives outside that namespace by construction: no hash can produce it, and no
@@ -92,19 +88,16 @@ GENESIS_PARENT = "genesis"
 _KIND_PREFIX = {
     EntryKind.DECISION: "d",
     EntryKind.QUESTION: "q",
-    EntryKind.BLOCKER: "b",
     EntryKind.DIRECTIVE: "v",
 }
 ADDITION_FIELDS = {
     EntryKind.DECISION: "add_decisions",
     EntryKind.QUESTION: "add_questions",
-    EntryKind.BLOCKER: "add_blockers",
     EntryKind.DIRECTIVE: "add_directives",
 }
 _RECORD_FIELDS = {
     EntryKind.DECISION: "decisions",
     EntryKind.QUESTION: "questions",
-    EntryKind.BLOCKER: "blockers",
     EntryKind.DIRECTIVE: "directives",
 }
 
@@ -167,14 +160,14 @@ def commit(
     durability: Durability = Durability.CANONICAL_LOCAL,
     finalize: Callable[[PendingRevision], None] | None = None,
     artifact_root: Path | str | None = None,
-    origins: Mapping[int, str] | None = None,
     fork_edge: WorkEdge | None = None,
+    imported_stamps: tuple[int | None, int | None] | None = None,
 ) -> CommitResult:
     """Apply `delta` to the store's current record under the record lock.
 
-    `origins` is host-only input: it maps the index of a proposed entry, in
-    `ADDITION_FIELDS` order across the delta's `add_*` lists, to the `origin`
-    the new entry carries. A delta cannot author `origin` itself.
+    `imported_stamps` is host-only input for an import genesis: the source
+    record's `(notes_revision_number, decisions_revision_number)`, kept so the
+    drift marker the source projection showed still renders.
 
     `fork_edge` is host-only input too: the `forked_from` edge `fork()` writes
     into a child. A delta cannot author a fork edge itself.
@@ -186,18 +179,9 @@ def commit(
     ]
     if forged_edges:
         raise CommitError(
-            "host-only-edge: fork edges are written by the host when it forks "
-            + f"or reconciles a fork, not on request ({', '.join(forged_edges)})"
+            "host-only-edge: the fork edge is written by the host when it forks, "
+            + f"not on request ({', '.join(forged_edges)})"
         )
-    forged_reciprocals = [
-        edge.to for edge in delta.add_edges or () if edges_mod.host_written(edge)
-    ]
-    if forged_reciprocals:
-        raise CommitError(
-            "host-only-edge: a reciprocal rationale is written by the host, not "
-            + f"on request ({', '.join(forged_reciprocals)})"
-        )
-    stamped = origins or {}
     repository_value: RepositoryProvenance = (
         RepositoryProvenance() if repository is None else repository
     )
@@ -210,6 +194,11 @@ def commit(
         raise CommitError(
             f"delta names work {delta.work_id!r} but the store holds "
             + f"{store.work_id!r}"
+        )
+    if delta.compacted or delta.compaction is not None:
+        raise CommitError(
+            "compaction-unsupported: a delta no longer declares compaction; "
+            + "re-read the record and name the revision you read as the parent"
         )
     fingerprint = records.request_fingerprint(delta)
     with store.lock():
@@ -254,8 +243,9 @@ def commit(
                     project_key=paths.project_key(digest_root),
                     durability=durability,
                     digest_of=digest_of,
-                    origins=stamped,
+                    checkout=digest_root,
                     fork_edge=fork_edge,
+                    imported_stamps=imported_stamps,
                 ),
                 finalize=finalize,
             )
@@ -279,22 +269,19 @@ def commit(
                 f"delta expects revision {delta.expected_revision_id!r} but the "
                 + f"current revision is {current.revision_id!r}"
             )
-        checked_lineage = _check_lineage(store, current)
-        _check_rehydration(delta, current)
+        _check_lineage(store, current)
         return _finalize(
             store,
             _apply(
                 store,
                 delta,
                 current,
-                lineage=checked_lineage,
                 fingerprint=fingerprint,
                 repository=repository_value,
                 digest_of=digest_of,
+                checkout=digest_root,
                 durability=durability,
-                origins=stamped,
                 fork_edge=fork_edge,
-                replay=replay,
             ),
             finalize=finalize,
         )
@@ -411,145 +398,85 @@ def _finalize(
     )
 
 
-def _check_lineage(
-    store: storage.WorkStore, current: WheypointRecord
-) -> lineage.Lineage:
-    receipts = store.receipt_revisions()
-    parent = next(
-        (
-            receipt
-            for receipt in receipts
-            if receipt.revision_id == current.revision_id
-            and receipt.revision_number == current.revision_number
-        ),
-        None,
-    )
-    if parent is None:
+def _check_lineage(store: storage.WorkStore, current: WheypointRecord) -> None:
+    found = store.stored_receipt(current.revision_number, current.revision_id)
+    if found is None:
         raise CommitError(
             f"current revision {current.revision_id!r} has no immutable receipt "
             + "in this store"
         )
-    if records.revision_digest(parent) != current.revision_digest:
+    if found.digest != current.revision_digest:
         raise CommitError(
             f"current revision {current.revision_id!r} does not match the digest "
             + "the record quotes"
         )
-    checked = lineage.walk(receipts, parent)
-    if checked.issues:
-        raise CommitError(_lineage_issue_detail(checked.issues[0]))
-    return checked
 
 
-def _lineage_issue_detail(issue: lineage.LineageIssue) -> str:
-    if issue.kind is lineage.LineageIssueKind.PARENT_UNRESOLVED:
-        if issue.cycle:
-            return (
-                f"revision {issue.revision.revision_id!r} re-enters the chain at "
-                + f"{issue.parent_revision_id!r}"
-            )
-        return (
-            f"revision {issue.revision.revision_id!r} names parent "
-            + f"{issue.parent_revision_id!r}, which is not a complete immutable "
-            + "revision"
-        )
-    if issue.kind is lineage.LineageIssueKind.PARENT_NOT_CONTIGUOUS:
-        parent = issue.parent
-        assert parent is not None
-        return (
-            f"revision {issue.revision.revision_id!r} of work "
-            + f"{issue.revision.work_id!r} names parent "
-            + f"{issue.parent_revision_id!r} of work {parent.work_id!r} at "
-            + f"revision number {parent.revision_number}, but its own revision "
-            + f"number is {issue.revision.revision_number}"
-        )
-    if issue.expected_digest is None:
-        return (
-            f"revision {issue.revision.revision_id!r} is stamped schema version "
-            + f"{issue.revision.schema_version} and names parent "
-            + f"{issue.parent_revision_id!r} without pinning its digest"
-        )
-    return (
-        f"revision {issue.revision.revision_id!r} pins parent "
-        + f"{issue.parent_revision_id!r} at {issue.expected_digest}, but that "
-        + f"receipt now hashes to {issue.actual_digest}"
-    )
+def ancestry(
+    receipts: tuple[WheypointRevision, ...], current: WheypointRevision
+) -> tuple[WheypointRevision, ...]:
+    """The current-first receipts reachable through parent pointers."""
+    known = {receipt.revision_id: receipt for receipt in receipts}
+    chain = [current]
+    seen = {current.revision_id}
+    parent_id = current.parent_revision_id
+    while parent_id is not None and parent_id not in seen:
+        parent = known.get(parent_id)
+        if parent is None:
+            break
+        chain.append(parent)
+        seen.add(parent_id)
+        parent_id = parent.parent_revision_id
+    return tuple(chain)
 
 
-def _check_rehydration(delta: WheypointDelta, current: WheypointRecord) -> None:
-    """Make a compacted delta prove it re-read the record it is writing over.
-
-    The flag says a compaction happened; the record is the evidence that the
-    durable state was reloaded first. Naming the current revision is the weakest
-    of the three checks -- an id survives in a stale transcript -- so the record
-    also has to quote the digest of the record it re-read and account for every
-    protected entry that record still carries. Only a session that actually
-    reloaded the record can produce all three, and a later reader can re-derive
-    each of them rather than take the claim on faith.
-    """
-    if not delta.compacted:
-        return
-    compaction = delta.compaction
-    if compaction is not None and compaction.prior_compaction_revision_id is not None:
-        raise CommitError(
-            "a delta may not declare prior_compaction_revision_id "
-            + f"{compaction.prior_compaction_revision_id!r}: the runtime derives "
-            + "the previous compaction from the lineage on disk, because a "
-            + "compacted session's memory of that lineage is exactly what was lost"
-        )
-    if compaction is None:
-        raise CommitError(
-            "a compacted delta must rehydrate first: it carries no compaction "
-            + f"record naming the current revision {current.revision_id!r}, the "
-            + "digest of the record it re-read, and the entries it reconciled"
-        )
-    if compaction.rehydrated_from_revision_id != current.revision_id:
-        raise CommitError(
-            "a compacted delta must be rehydrated from the current revision "
-            + f"{current.revision_id!r}, not "
-            + f"{compaction.rehydrated_from_revision_id!r}"
-        )
-    expected_digest = records.record_digest(current)
-    if compaction.rehydrated_record_digest != expected_digest:
-        raise CommitError(
-            "the compaction record quotes record digest "
-            + f"{compaction.rehydrated_record_digest}, but revision "
-            + f"{current.revision_id!r} hashes to {expected_digest}: the delta "
-            + "did not re-read the record it is writing over"
-        )
-    reconciled = set(compaction.reconciled_entry_ids)
-    unreconciled = [
-        entry.entry_id
-        for entry in records.entries(current)
-        if entry.entry_id not in reconciled
-    ]
-    if unreconciled:
-        raise CommitError(
-            "the compaction record does not reconcile protected entries "
-            + f"{', '.join(repr(entry_id) for entry_id in unreconciled)} held by "
-            + f"revision {current.revision_id!r}"
-        )
-
-
-def _entry_id(delta: WheypointDelta, proposed: ProposedEntry, index: int) -> str:
+def proposed_entry_id(
+    work_id: str,
+    parent: str,
+    kind: EntryKind,
+    summary: str,
+    blocks_continuation: bool,
+    index: int,
+) -> str:
     """A name derived from the request that proposed the entry.
 
     The parent revision and the proposal's own content and position are all in
     the hash, so two writers proposing the same entry against the same parent
     agree on its id -- and the replay of one request cannot collide with a
-    different request's entry.
+    different request's entry. `index` is the position among the proposals of
+    the same kind.
     """
     digest = canonical.digest_value(
         {
-            "work_id": delta.work_id,
-            "parent": delta.expected_revision_id,
-            "kind": proposed.kind.value,
-            "summary": proposed.summary,
-            "blocks_continuation": proposed.blocks_continuation,
+            "work_id": work_id,
+            "parent": parent,
+            "kind": kind.value,
+            "summary": summary,
+            "blocks_continuation": blocks_continuation,
             "index": index,
         }
     )
     hexdigest = digest[len(canonical.DIGEST_PREFIX) :]
-    return f"{_KIND_PREFIX[proposed.kind]}-{hexdigest[:_ID_HEX]}"
+    return f"{_KIND_PREFIX[kind]}-{hexdigest[:_ID_HEX]}"
+
+
+def kind_of_entry_id(entry_id: str) -> EntryKind | None:
+    """The kind an entry id's prefix names, or None for a foreign id."""
+    for kind, prefix in _KIND_PREFIX.items():
+        if entry_id.startswith(f"{prefix}-"):
+            return kind
+    return None
+
+
+def _entry_id(delta: WheypointDelta, proposed: ProposedEntry, index: int) -> str:
+    return proposed_entry_id(
+        delta.work_id,
+        delta.expected_revision_id,
+        proposed.kind,
+        proposed.summary,
+        proposed.blocks_continuation,
+        index,
+    )
 
 
 def _revision_id(delta: WheypointDelta, fingerprint: str) -> str:
@@ -569,14 +496,10 @@ def _proposed_entries(delta: WheypointDelta, kind: EntryKind) -> list[ProposedEn
     )
 
 
-def _additions(
-    delta: WheypointDelta, origins: Mapping[int, str]
-) -> dict[EntryKind, list[ProtectedEntry]]:
-    """New entries by kind; `origins` is keyed by the flattened proposal index."""
+def _additions(delta: WheypointDelta) -> dict[EntryKind, list[ProtectedEntry]]:
+    """New entries by kind."""
     additions: dict[EntryKind, list[ProtectedEntry]] = {}
-    offset = 0
     for kind in ADDITION_FIELDS:
-        proposed = _proposed_entries(delta, kind)
         additions[kind] = [
             ProtectedEntry(
                 entry_id=_entry_id(delta, entry, index),
@@ -586,11 +509,12 @@ def _additions(
                 blocks_continuation=entry.blocks_continuation,
                 rationale=entry.rationale,
                 quote=entry.quote,
-                origin=origins.get(offset + index),
+                owner=entry.owner,
+                when=entry.when,
+                scope=entry.scope,
             )
-            for index, entry in enumerate(proposed)
+            for index, entry in enumerate(_proposed_entries(delta, kind))
         ]
-        offset += len(proposed)
     return additions
 
 
@@ -670,9 +594,11 @@ def _merge_artifact_links(
             for key in [k for k in by_ref if k != ref and _record_target(k) == target]:
                 del by_ref[key]
                 order[order.index(key)] = ref
-        if ref not in order:
-            order.append(ref)
-        by_ref[ref] = evolve(
+        # A line ref pinned at a new HEAD replaces the one pinned at an old HEAD.
+        key = refs.strip_pin(ref)
+        if key not in order:
+            order.append(key)
+        by_ref[key] = evolve(
             link,
             ref=ref,
             path=ref.partition(":")[2],
@@ -718,7 +644,7 @@ def _unpinned_record(ref: str) -> str | None:
 def _link_key(link: ArtifactLink) -> str:
     ref = records.effective_ref(link)
     try:
-        return refs.normalize_ref(ref)
+        return refs.strip_pin(refs.normalize_ref(ref))
     except ValueError:
         return ref
 
@@ -726,7 +652,7 @@ def _link_key(link: ArtifactLink) -> str:
 def _removal_key(value: str) -> str:
     """A removal names a reference, or a bare path read as `repo:`."""
     try:
-        return refs.normalize_ref(value)
+        return refs.strip_pin(refs.normalize_ref(value))
     except ValueError:
         return _link_key(ArtifactLink(path=value))
 
@@ -741,11 +667,6 @@ def _transitioned(
         state=transition.resulting_state,
         rationale=transition.rationale,
         superseded_by=transition.target_entry_id,
-        successor=(
-            transition.successor
-            if transition.action is TransitionAction.FORK
-            else entry.successor
-        ),
     )
 
 
@@ -754,82 +675,35 @@ def _apply(
     delta: WheypointDelta,
     current: WheypointRecord,
     *,
-    lineage: lineage.Lineage,
     fingerprint: str,
     repository: RepositoryProvenance,
     digest_of: Callable[[str], str | None],
+    checkout: Path,
     durability: Durability,
-    origins: Mapping[int, str],
     fork_edge: WorkEdge | None,
-    replay: WheypointRevision | None,
 ) -> PendingRevision:
-    """The next revision of `current`, with pending forks and reciprocals.
-
-    `replay` is the receipt an interrupted promotion of this same request
-    already wrote. Its reconciliation is rebuilt from that receipt, not from a
-    new sibling scan, so the retry derives the identical triple.
-    """
+    """The next revision of `current`."""
     transitions = list(delta.transitions or [])
     forged = [t.entry_id for t in transitions if t.action is TransitionAction.FORK]
     if forged:
         raise CommitError(
-            "fork transitions are host-derived: the host applies them when it "
-            + f"reconciles a child's fork, not on request ({', '.join(forged)})"
+            "fork transitions are host-derived, not on request "
+            + f"({', '.join(forged)})"
         )
-    # A pending fork is reconciled host-side (F-2): the moved entries join the
-    # agent's transitions, so the receipt lists both and nothing leaves the
-    # record without a transition naming it.
-    siblings = edges_mod.sibling_records(store.corpus_root, work_id=current.work_id)
-    pending_forks = fork_reconcile.pending_forks(current, siblings=siblings)
-    if replay is None:
-        pending_reciprocals = edges_mod.pending_reciprocals(
-            current, siblings=siblings, receipts=lineage.revisions
-        )
-    else:
-        pending_reciprocals = edges_mod.replayed_reciprocals(replay)
-        replayed_forks = {
-            edges_mod.edge_key(edge)
-            for edge in replay.applied_edges
-            if edge.kind is EdgeKind.FORKED_TO
-        }
-        pending_forks = tuple(
-            item
-            for item in pending_forks
-            if edges_mod.edge_key(
-                WorkEdgeKey(
-                    to=f"{item.child_ref}@{item.child_revision_id}",
-                    kind=EdgeKind.FORKED_TO,
-                )
-            )
-            in replayed_forks
-        )
-    forks = fork_reconcile.apply_pending_forks(
-        current,
-        pending_forks,
-        agent_transitioned={t.entry_id for t in transitions},
-    )
-    transitions.extend(forks.transitions)
-    problems = records.validate_transitions(current, transitions)
+    additions = _additions(delta)
+    added_ids = {entry.entry_id for group in additions.values() for entry in group}
+    problems = records.validate_transitions(current, transitions, added_ids=added_ids)
     if problems:
         raise CommitError("; ".join(problems))
     by_entry = {transition.entry_id: transition for transition in transitions}
 
     kept: dict[EntryKind, list[ProtectedEntry]] = {}
-    preserved: list[str] = []
     for kind in _RECORD_FIELDS:
         existing = _existing_entries(current, kind)
         kept[kind] = [
-            _copied(
-                _transitioned(entry, by_entry.get(entry.entry_id)),
-                forks.copies.get(entry.entry_id, ()),
-            )
-            for entry in existing
+            _transitioned(entry, by_entry.get(entry.entry_id)) for entry in existing
         ]
-        preserved.extend(
-            entry.entry_id for entry in existing if entry.entry_id not in by_entry
-        )
 
-    additions = _additions(delta, origins)
     revision_id = _revision_id(delta, fingerprint)
     number = current.revision_number + 1
     draft = _draft_record(
@@ -840,30 +714,21 @@ def _apply(
         kept=kept,
         additions=additions,
         digest_of=digest_of,
+        decisions_moved=bool(additions[EntryKind.DECISION])
+        or any(
+            (entry := records.find_entry(current, transition.entry_id)) is not None
+            and entry.kind is EntryKind.DECISION
+            for transition in transitions
+        ),
     )
     merged = _merge_edges(
         current.edges, delta, host=fork_edge, revision_id=revision_id
     )
-    reciprocals = edges_mod.apply_pending_reciprocals(
-        merged.edges, pending_reciprocals, revision_id=revision_id
-    )
-    forked_to = edges_mod.merge_edges(
-        reciprocals.edges, forks.edges, None, revision_id=revision_id
-    )
-    draft = _forked_away(draft, forks, edges=forked_to.edges)
-    compaction = (
-        None
-        if delta.compaction is None
-        else evolve(
-            delta.compaction,
-            prior_compaction_revision_id=lineage.prior_compaction_revision_id,
-        )
-    )
+    draft = _with_edges(draft, merged.edges)
     return _finish(
         store,
         delta,
         draft,
-        compaction=compaction,
         parent_revision_id=current.revision_id,
         # `_check_lineage` has already proven the record's own pointer against
         # the receipt on disk, so quoting it here pins the ancestor rather than
@@ -872,54 +737,19 @@ def _apply(
         fingerprint=fingerprint,
         additions=[entry for kind in ADDITION_FIELDS for entry in additions[kind]],
         transitions=transitions,
-        preserved=preserved,
-        applied_edges=merged.applied + reciprocals.applied + forked_to.applied,
+        applied_edges=merged.applied,
         removed_edges=merged.removed,
         repository=repository,
         durability=durability,
+        checkout=checkout,
     )
 
 
-def _copied(entry: ProtectedEntry, refs: tuple[str, ...]) -> ProtectedEntry:
-    if not refs:
-        return entry
-    try:
-        return evolve(entry, copies=entry.copies + refs)
-    except ValueError as exc:
-        raise CommitError(
-            f"a pending fork cannot add to entry {entry.entry_id!r}'s copies: {exc}"
-        ) from exc
-
-
-def _forked_away(
-    draft: WheypointRecord,
-    forks: fork_reconcile.AppliedFork,
-    *,
-    edges: tuple[WorkEdge, ...],
+def _with_edges(
+    draft: WheypointRecord, edges: tuple[WorkEdge, ...]
 ) -> WheypointRecord:
-    """Drop the dossier forks and links a child took, and set the edges.
-
-    A dossier fork stays when dropping it would leave a remaining gate with no
-    fork to describe it: the record must stay legal for the parent to commit.
-    """
-    dossier = [
-        item
-        for item in draft.decision_dossier
-        if item.fork not in forks.dossier_removed
-    ]
-    if not dossier and draft.gating_entry_ids:
-        dossier = draft.decision_dossier
     try:
-        return evolve(
-            draft,
-            decision_dossier=dossier,
-            artifact_links=[
-                link
-                for link in draft.artifact_links
-                if _link_key(link) not in forks.link_refs_removed
-            ],
-            edges=edges,
-        )
+        return evolve(draft, edges=edges)
     except ValueError as exc:
         raise CommitError(f"the delta does not produce a legal record: {exc}") from exc
 
@@ -932,9 +762,10 @@ def _genesis(
     repository: RepositoryProvenance,
     project_key: str,
     digest_of: Callable[[str], str | None],
+    checkout: Path,
     durability: Durability,
-    origins: Mapping[int, str],
     fork_edge: WorkEdge | None,
+    imported_stamps: tuple[int | None, int | None] | None = None,
 ) -> PendingRevision:
     """The first record for a work id, built from the delta alone.
 
@@ -956,11 +787,6 @@ def _genesis(
             + f"carry {', '.join(missing)}"
         )
     next_action = cast(NextAction, delta.next_action)
-    if delta.compacted:
-        raise CommitError(
-            "a genesis delta cannot declare compaction: there is no current "
-            + "revision to rehydrate from"
-        )
     if delta.transitions:
         raise CommitError("a genesis delta has no existing entries to transition")
     created = (
@@ -974,11 +800,11 @@ def _genesis(
             + "runtime derives the record's created time rather than reading a clock"
         )
 
-    additions = _additions(delta, origins)
-    if not any(additions.values()) and delta.notes is None:
+    additions = _additions(delta)
+    if not any(additions.values()) and delta.notes is None and fork_edge is None:
         raise CommitError(
             "a first checkpoint must capture at least one decision, question, "
-            + "blocker, or directive, or a notes body: orientation alone is not a record"
+            + "or directive, or a notes body: orientation alone is not a record"
         )
     revision_id = _revision_id(delta, fingerprint)
     merged = _merge_edges((), delta, host=fork_edge, revision_id=revision_id)
@@ -998,10 +824,19 @@ def _genesis(
             orientation=delta.orientation or "",
             working_context=list(delta.working_context or []),
             notes=delta.notes,
+            notes_revision_number=(
+                (1 if delta.notes is not None else None)
+                if imported_stamps is None
+                else (imported_stamps[0] if delta.notes is not None else None)
+            ),
+            decisions_revision_number=(
+                (1 if additions[EntryKind.DECISION] else None)
+                if imported_stamps is None
+                else imported_stamps[1]
+            ),
             next_action=next_action,
             decisions=additions[EntryKind.DECISION],
             questions=additions[EntryKind.QUESTION],
-            blockers=additions[EntryKind.BLOCKER],
             directives=additions[EntryKind.DIRECTIVE],
             artifact_links=_merge_artifact_links(
                 [],
@@ -1010,7 +845,6 @@ def _genesis(
                 revision_id=revision_id,
                 digest_of=digest_of,
             ),
-            decision_dossier=_merged_dossier([], delta),
             edges=merged.edges,
         )
     except ValueError as exc:
@@ -1020,17 +854,16 @@ def _genesis(
         store,
         delta,
         draft,
-        compaction=None,
         parent_revision_id=None,
         parent_revision_digest=None,
         fingerprint=fingerprint,
         additions=[entry for kind in ADDITION_FIELDS for entry in additions[kind]],
         transitions=[],
-        preserved=[],
         applied_edges=merged.applied,
         removed_edges=merged.removed,
         repository=repository,
         durability=durability,
+        checkout=checkout,
     )
 
 
@@ -1061,20 +894,21 @@ def _finish(
     delta: WheypointDelta,
     draft: WheypointRecord,
     *,
-    compaction: CompactionRecord | None,
     parent_revision_id: str | None,
     parent_revision_digest: str | None,
     fingerprint: str,
     additions: list[ProtectedEntry],
     transitions: list[EntryTransition],
-    preserved: list[str],
     applied_edges: tuple[WorkEdge, ...],
     removed_edges: tuple[WorkEdgeKey, ...],
     repository: RepositoryProvenance,
     durability: Durability,
+    checkout: Path,
 ) -> PendingRevision:
     """Render the draft into one typed pending revision."""
-    projected, markdown = projection_mod.build_projection(draft, durability=durability)
+    projected, markdown = projection_mod.build_projection(
+        draft, durability=durability, checkout=checkout
+    )
     revision = WheypointRevision(
         schema_version=SCHEMA_VERSION,
         work_id=store.work_id,
@@ -1085,16 +919,13 @@ def _finish(
         record_digest=records.record_digest(draft),
         applied_additions=additions,
         applied_transitions=transitions,
-        preserved_entry_ids=preserved,
         applied_edges=applied_edges,
         removed_edges=removed_edges,
         projection_path=store.relative_projection_path(
             draft.revision_number, draft.revision_id
         ),
-        projection_digest=projected.projection_digest,
         repository=repository,
         parent_revision_digest=parent_revision_digest,
-        compaction=compaction,
         session_provenance=delta.session_provenance,
     )
     record = evolve(draft, revision_digest=records.revision_digest(revision))
@@ -1115,8 +946,13 @@ def _draft_record(
     kept: dict[EntryKind, list[ProtectedEntry]],
     additions: dict[EntryKind, list[ProtectedEntry]],
     digest_of: Callable[[str], str | None],
+    decisions_moved: bool,
 ) -> WheypointRecord:
     """The next record: replacements where the delta spoke, carry-forward else.
+
+    `notes_revision_number` and `decisions_revision_number` move to `number`
+    exactly when the delta replaced the notes or added or transitioned a
+    decision.
 
     Every committed revision restamps `schema_version` at the runtime's
     current version, not just the genesis record. A carried-forward record
@@ -1134,11 +970,16 @@ def _draft_record(
             orientation=_replaced(delta.orientation, current.orientation),
             working_context=_replaced(delta.working_context, current.working_context),
             notes=_replaced(delta.notes, current.notes),
+            notes_revision_number=_replaced(
+                None if delta.notes is None else number,
+                current.notes_revision_number,
+            ),
+            decisions_revision_number=number
+            if decisions_moved
+            else current.decisions_revision_number,
             next_action=_replaced(delta.next_action, current.next_action),
-            decision_dossier=_merged_dossier(current.decision_dossier, delta),
             decisions=kept[EntryKind.DECISION] + additions[EntryKind.DECISION],
             questions=kept[EntryKind.QUESTION] + additions[EntryKind.QUESTION],
-            blockers=kept[EntryKind.BLOCKER] + additions[EntryKind.BLOCKER],
             directives=kept[EntryKind.DIRECTIVE] + additions[EntryKind.DIRECTIVE],
             artifact_links=_merge_artifact_links(
                 list(current.artifact_links),
@@ -1155,35 +996,3 @@ def _draft_record(
 def _replaced(proposed: object, carried: object) -> object:
     """`None` means unchanged; an explicit value -- including `[]` -- replaces."""
     return carried if proposed is None else proposed
-
-
-def _merged_dossier(
-    carried: list[DecisionFork], delta: WheypointDelta
-) -> list[DecisionFork]:
-    """The dossier as a set of forks keyed by title.
-
-    `remove_dossier_forks` drops carried titles first. Then each proposed fork
-    replaces the carried fork with its title in place, or appends. `None`
-    carries the dossier forward; an explicit `[]` still empties it.
-    """
-    removed = delta.remove_dossier_forks or ()
-    titles = {fork.fork for fork in carried}
-    unknown = [title for title in removed if title not in titles]
-    if unknown:
-        raise CommitError(
-            f"unknown-dossier-fork: the record carries no fork titled {unknown!r}"
-        )
-    forks = [fork for fork in carried if fork.fork not in removed]
-    if delta.decision_dossier is None:
-        return forks
-    if not delta.decision_dossier:
-        return []
-    for proposed in delta.decision_dossier:
-        index = next(
-            (i for i, fork in enumerate(forks) if fork.fork == proposed.fork), None
-        )
-        if index is None:
-            forks.append(proposed)
-        else:
-            forks[index] = proposed
-    return forks

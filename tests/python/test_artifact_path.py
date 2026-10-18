@@ -62,9 +62,9 @@ def test_main_prints_resolved_path(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_main_reports_error_on_bad_slug(capsys: pytest.CaptureFixture[str]) -> None:
-    assert ap.main(["cook", "Bad"]) == 1
+    assert ap.main(["cook", "Bad"]) == 2
     envelope = cast(dict[str, object], json.loads(capsys.readouterr().err))
-    assert envelope["exit_code"] == 1
+    assert envelope["exit_code"] == 2
     assert "kebab-case" in str(envelope["error"])
 
 

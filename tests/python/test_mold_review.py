@@ -6,9 +6,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stdout
 from io import StringIO
-import threading
 import subprocess
-import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -179,24 +177,37 @@ def test_publish_creates_nested_state_directory(tmp_path: Path) -> None:
     assert publish_main(["--state-dir", str(state_dir), "--input", str(input_path)]) == 0
     assert (state_dir / "review.json").is_file()
 
-def test_poll_observes_submission_saved_after_poll_starts(tmp_path: Path) -> None:
+def test_poll_observes_submission_saved_after_poll_starts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from easy_cheese.skills.mold import review as review_module
+
     path = tmp_path / "review.json"
     review = MoldReview("r", "goal", state_path=path)
     review.publish({"question": "choose"}, None)
     review.save(path)
     output = StringIO()
-    result: list[int] = []
+    sleeps: list[float] = []
 
-    def poll() -> None:
-        with redirect_stdout(output):
-            from easy_cheese.skills.mold.review import poll_main
-            result.append(poll_main(["--state-dir", str(tmp_path), "--timeout", "1"]))
+    class _Clock:
+        """Poll clock that moves only when poll sleeps, so disk latency cannot expire it."""
 
-    thread = threading.Thread(target=poll)
-    thread.start()
-    time.sleep(0.1)
-    review.submit({"answer": "yes"}, 1, "op-late")
-    thread.join(timeout=2)
-    assert not thread.is_alive()
-    assert result == [0]
+        now: float = 0.0
+
+        def monotonic(self) -> float:
+            return self.now
+
+        def sleep(self, seconds: float) -> None:
+            if not sleeps:
+                review.submit({"answer": "yes"}, 1, "op-late")
+            sleeps.append(seconds)
+            self.now += seconds
+
+    monkeypatch.setattr(review_module, "time", _Clock())
+    with redirect_stdout(output):
+        result = review_module.poll_main(
+            ["--state-dir", str(tmp_path), "--timeout", "1"]
+        )
+    assert result == 0
+    assert len(sleeps) == 1
     assert json.loads(output.getvalue())["operation_id"] == "op-late"

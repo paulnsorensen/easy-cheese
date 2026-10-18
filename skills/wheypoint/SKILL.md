@@ -22,7 +22,7 @@ Workers at a hard limit return observations; the parent, not the worker, runs ch
 ## Inputs
 
 - The conversation is the primary input.
-- The optional argument shapes only the orientation line; the focus never removes a decision, question, blocker, or directive.
+- The optional argument shapes only the orientation line; the focus never removes a decision, question, or directive.
 
 ## Runtime commands
 
@@ -32,27 +32,24 @@ When the consumer repository lacks `skills/`, resolve the installed bundle path 
 ```bash
 python3 skills/wheypoint/scripts/wheypoint.pyz turns [--session <id> | --transcript <path>]
 python3 skills/wheypoint/scripts/wheypoint.pyz show <work-id> [--project <key>]
-python3 skills/wheypoint/scripts/wheypoint.pyz validate [intent.json]
-python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint [--compacted <proof.json>] [intent.json]
-python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint <work-id> --question "<q>" --gates --decision "<d>" --rationale "<why>" --directive "<d>" --quote "<words>" --link <ref> --kind <edge-kind>
+python3 skills/wheypoint/scripts/wheypoint.pyz validate [intent.json] [--base <revision_id>]
+python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint [intent.json] [--base <revision_id>]
+python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint <work-id> [--base <revision_id>] --question "<q>" --gates --rationale "<why>" --decision "<d>" --directive "<d>" --quote "<words>" --operator-directive "<style>" --operator-quote "<words>" [--owner <who> --when <trigger>] --link <ref> --kind <edge-kind> [--covers <id>]...
 python3 skills/wheypoint/scripts/wheypoint.pyz schema checkpoint-intent
 python3 skills/wheypoint/scripts/wheypoint.pyz resolve <absolute-path | work-id | slug> [--project <key>] [--workspace-root <checkout>]
-python3 skills/wheypoint/scripts/wheypoint.pyz lint <projection-path>
-python3 skills/wheypoint/scripts/wheypoint.pyz list [--scope project | machine] [--grep <text>]... [--status <s>]... [--next <move>]... [--project <key>]... [--entry-kind <k>]... [--entry-state <s>]... [--gated | --no-gated] [--edge-kind <k>]... [--linked-to <ref>]... [--forked-from <work-id>]...
+python3 skills/wheypoint/scripts/wheypoint.pyz list [--scope project | machine] [--grep <text>]... [--status <s>]... [--next <move>]... [--project <key>]... [--entry-kind <k>]... [--entry-state <s>]... [--gated | --no-gated] [--edge-kind <k>]... [--linked-to <ref>]... [--forked-from <work-id>]... [--owner <who>]...
 python3 skills/wheypoint/scripts/wheypoint.pyz log <work-id> [--project <key>]
-python3 skills/wheypoint/scripts/wheypoint.pyz fork <parent> <child> --orientation "<child title>" [--move <id>]... [--copy <id>]... [--dossier <fork title>]... [--link <ref>]... [--next <move> [--artifact <a>]]
-python3 skills/wheypoint/scripts/wheypoint.pyz link <work-id> <ref> --kind <edge-kind> [--covers <id>]... [--rationale "<why>"]
-python3 skills/wheypoint/scripts/wheypoint.pyz unlink <work-id> <ref> --kind <edge-kind>
-python3 skills/wheypoint/scripts/wheypoint.pyz shape [<work-id>] [--scope project | machine] [--depth <n>] [--kind <edge-kind>]...
-python3 skills/wheypoint/scripts/wheypoint.pyz backlinks <ref> [--scope project | machine]
+python3 skills/wheypoint/scripts/wheypoint.pyz fork <parent> <child> --orientation "<child title>" [--next <move> [--artifact <a>]]
+python3 skills/wheypoint/scripts/wheypoint.pyz export <slug | work-id | path> [--out <file>] [--include-operator] [--include-local]
+python3 skills/wheypoint/scripts/wheypoint.pyz import <bundle.json> [--as <slug>] [--note-dir <dir> | --no-note]
+python3 skills/wheypoint/scripts/wheypoint.pyz handoff render | parse | dispatch
 ```
 
-Repeat `--grep`, `--status`, `--next`, or `--project` to search several values in one `list` call; a hit matching any value of one flag is kept, and distinct flags combine with AND; never loop over `list` once per term.
-`fork`, `link`, and `unlink` write only the named record; [`references/work-graph.md`](references/work-graph.md) gives refs, edge kinds, pending reconciliation, and the `list` graph filters.
-The counterpart record reports `fork-pending` or `link-pending` until its next `checkpoint` applies the change.
-`resolve`, `lint`, `list`, `log`, `show`, `shape`, `backlinks`, `schema`, and `turns` only read; direct invocations return output, and **STOP** before checkpoint writing.
-`/cheese --continue` uses `resolve` and never invokes another archive; slash commands are host renderings, not the control model.
-Foreign machine hits require the owning checkout; follow [the continuation protocol](../cheese/references/continue-resume.md).
+Repeat `--grep`, `--status`, `--next`, or `--project` to search several values in one `list` call; a hit matching any value of one flag is kept, and distinct flags combine with AND; never loop over `list` once per term; outside a Git checkout, `list` with no `--scope` searches machine scope and reports `scope-fallback: machine`, while an explicit `--scope` keeps its meaning.
+`fork` writes only a child genesis record with one `forked_from` edge; `import` writes only an imported record, and `bundle_digest` covers the canonical bundle with no field of its own; [`references/work-graph.md`](references/work-graph.md) gives refs, edge kinds, the bundle, and the `list` graph filters.
+Create a link with `checkpoint --link`; `resolve` validates artifact links, grounded paths, Git objects, and coverage; a slug with no exact match resolves by unique prefix, then unique substring, and several matches return `ambiguous` with every candidate.
+`resolve`, `list`, `log`, `show`, `schema`, and `turns` only read; direct invocations return output, and **STOP** before checkpoint writing.
+`/cheese --continue` uses `resolve` and never invokes another archive; slash commands are host renderings, not the control model; foreign machine hits require the owning checkout; follow [the continuation protocol](../cheese/references/continue-resume.md).
 The parent delegates persistence to this capability as one structured checkpoint task and runs `validate` before `checkpoint`; workers never invoke either command at a hard limit.
 Phase skills resolve with their own `wheypoint-resolve --ref <slug>` command; follow [`references/delta-contract.md`](references/delta-contract.md) for its outcomes, `working_context`, and findings.
 
@@ -60,17 +57,19 @@ Phase skills resolve with their own `wheypoint-resolve --ref <slug>` command; fo
 
 1. **Read the user's words.** Run `turns` and keep every user turn in view.
 2. Map each turn to an entry, or write one line that says why the turn is not captured.
-3. **Rehydrate.** Run `show` for the work id; a first checkpoint binds the genesis sentinel itself.
-4. After a compaction, rehydrate first and pass a proof with `--compacted`.
+3. **Rehydrate.** Run `show` or `resolve` for the work id and note its `revision_id`; a first checkpoint needs no base.
+4. Every write to an existing record needs that `revision_id` as `--base` (or `base_revision_id`).
+   After a compaction, read again before you write.
 5. **Write the intent.** Follow [`references/intent-contract.md`](references/intent-contract.md).
 6. Put each user-stated constraint or preference in a `directive` entry with its verbatim `quote`.
 7. Put each choice in a `decision` entry with a `rationale`.
-8. Put each open item in a `question` or `blocker` entry.
-9. Record a parked fork in `decision_dossier` with its options, evidence, and prior leaning.
+8. Put each open item in a `question` entry; give a blocking question a `rationale`.
+9. Record a parked fork as a `question` with `--gates` and a `--rationale` that names the options and your prior leaning.
 10. Put the report a cold reader needs in `notes`.
 11. Put paths and URLs in `artifact_links` and `working_context`, not their contents.
-12. **Validate.** Run `validate` and fix every named problem.
-13. **Checkpoint.** Run `checkpoint`.
+12. **Validate.** Run `validate --base <revision_id>` and fix every named problem.
+13. **Checkpoint.** Run `checkpoint --base <revision_id>`.
+    A `base-revision-required` or `stale-parent` refusal means: read again, apply your change again, then write.
 14. **Report.** State the durability the result reports and the resume commands.
 
 ## What the runtime enforces
@@ -80,15 +79,18 @@ The runtime refuses an intent instead of dropping data.
 - It refuses an unknown key and names its path.
 - It refuses a first checkpoint that carries no entry and no notes.
 - It refuses `next: affinage` without a PR reference in `artifact`.
-- It refuses `next: cook` or `next: cut` without an `artifact`.
+- It refuses `next: cook` without an `artifact`.
 - It refuses text that matches a credential pattern and names the field.
 - It refuses an empty `artifact_links` or `remove_artifact_links` list.
 - It derives `status:` from the gating entries per the [handback contract](../cheese/references/handback-contract.md); no author sets it.
 - It refuses a `baseline` key rather than drop it; a Cook baseline stays in the Cook handoff.
-- It requires a dossier fork for each gating entry.
+- It requires a rationale for each blocking question a delta adds.
 - It derives every identifier, digest, and revision.
-- It refuses an agent-authored `fork` transition and a `forked_from` or `forked_to` edge in a delta.
+- It refuses an agent-authored `fork` transition and a `forked_from` edge in a delta.
 - It refuses `notes` over 6000 characters.
+- It pins a bare `path:line` in `working_context` or an artifact link to `path:line@<short HEAD sha>` when `HEAD` holds the file, and otherwise warns with `unpinned-line-ref` (no checkout or commit, or an untracked, ignored, or absent file).
+- It lists each local reference (an `xdg:` ref, an absolute path outside the checkout, or a Git-ignored path) under `## Local references`.
+- It warns with `stale-notes` when a decision changes and `notes` stay as they were, marks that drift at the top of `## Notes`, and lists an entry that `checkpoint --supersede <old> [--by <new>] --rationale <why>` replaced under `## Superseded`.
 
 Fix a refused intent and run `checkpoint` again.
 
@@ -98,23 +100,22 @@ The `checkpoint` command writes the shared preamble at the top of the generated 
 
 ```markdown
 status: <canonical status field>
-next: mold | cut | cook | press | age | cure | affinage | briesearch | culture | hold | tasks | done
+next: mold | cook | press | age | cure | affinage | briesearch | culture | hold | tasks | done
 artifact: <path, or PR#<n> / URL when next is affinage, else empty>
 <one-line orientation: where the session is and what is mid-flight>
 ```
 
 For `next: tasks` the projection adds a `mode: parallel` keyed line after `artifact:`; the keyed block after the orientation holds the Wheypoint pins.
-The projection body shows gates, open entries, decisions, directives, notes, context, artifacts, the dossier, and tasks.
+The projection body shows gates, open entries, decisions, directives, notes, context, artifacts, tasks, and a final `## Identifiers` section.
+The projection title is `# Wheypoint handoff`.
 The projection is never the authority; never edit it and never resume from it by hand.
 
 ## `next:` values
 
 The meaning of each `next:` value is in [`references/intent-contract.md`](references/intent-contract.md); `briesearch` and `culture` are read-only kickoffs, and `tasks` follows [`references/parallel-handoffs.md`](references/parallel-handoffs.md).
 A missing `next:` makes the handoff malformed; use `hold` when no action follows.
-Derive `next:` and `status:` from the open questions and blockers, not from expected success.
-
+Derive `next:` and `status:` from the open questions, not from expected success.
 Use `status: gated:` for every human decision; the resumed agent asks through the shared [handoff gate](../cheese/references/handoff-gate.md) before it dispatches.
-
 Handwritten notes, their legacy values, and their provenance fields are in [`references/legacy-notes.md`](references/legacy-notes.md) and [`references/provenance-fields.md`](references/provenance-fields.md).
 
 ## Rules

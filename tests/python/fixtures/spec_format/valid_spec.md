@@ -6,10 +6,6 @@ created: 2026-08-23
 confidence: high
 gates_overridden: []
 agent_introduced_scope: []
-gate_applicability:
-  disposition: red-required
-  work_class: behavior
-  ui_surface: non-browser
 ---
 
 # Valid spec format fixture

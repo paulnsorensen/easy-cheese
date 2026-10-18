@@ -125,34 +125,6 @@ def _validate(argv: list[str]) -> int:
     return validate_main(argv)
 
 
-@bundle_command("prepare")
-def _prepare(argv: list[str]) -> int:
-    from easy_cheese.skills.cook.contract_handlers import prepare_main
-
-    return prepare_main(argv)
-
-
-@bundle_command("resubmit")
-def _resubmit(argv: list[str]) -> int:
-    from easy_cheese.skills.cook.contract_handlers import resubmit_main
-
-    return resubmit_main(argv)
-
-
-@bundle_command("approve")
-def _approve(argv: list[str]) -> int:
-    from easy_cheese.shared.mold_cook_approve import main
-
-    return main(argv)
-
-
-@bundle_command("accept")
-def _accept(argv: list[str]) -> int:
-    from easy_cheese.skills.cook.contract_handlers import accept_main
-
-    return accept_main(argv)
-
-
 @bundle_command("slugify")
 def _slugify(argv: list[str]) -> int:
     from easy_cheese.shared.slugify import main
@@ -198,6 +170,13 @@ def _paths(argv: list[str]) -> int:
 @bundle_command("handoff")
 def _handoff(argv: list[str]) -> int:
     from easy_cheese.shared.handoff import main
+
+    return main(argv)
+
+
+@bundle_command("validate-result")
+def _validate_result(argv: list[str]) -> int:
+    from easy_cheese.skills.cook.validate_result import main
 
     return main(argv)
 
@@ -258,19 +237,6 @@ COMMANDS = (
         _validate, "Validate a typed contract payload against its registered schema"
     ),
     derive_command(
-        _approve,
-        "Record the user's literal approval response as a retained MoldCookApproval",
-    ),
-    derive_command(_accept, "Validate and accept a canonical Mold handoff pointer"),
-    derive_command(
-        _prepare,
-        "Classify a Cook input and return a closed preparation outcome",
-    ),
-    derive_command(
-        _resubmit,
-        "Recompute a Cook preparation outcome with new evidence",
-    ),
-    derive_command(
         _slugify,
         "Derive a kebab-case slug and durable spec path from task text",
         leaves=slugify.LEAVES,
@@ -305,6 +271,10 @@ COMMANDS = (
     derive_command(
         _render_html,
         "Render a markdown report into one self-contained offline HTML file",
+    ),
+    derive_command(
+        _validate_result,
+        "Validate a ready Mold finalization result before any writer starts",
     ),
 )
 

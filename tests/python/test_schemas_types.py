@@ -27,18 +27,6 @@ from easy_cheese_schemas import contracts as wc
 from easy_cheese_schemas import gates, io, load
 from easy_cheese_schemas.manifest import Phase, RunManifest
 from easy_cheese_schemas.pr_plan import PrPlan
-from easy_cheese_schemas.gates import (
-    BaselineCheck,
-    EvidenceOrigin,
-    GateDisposition,
-    GateMode,
-    GateProducer,
-    GateReceipt,
-    ProtectedFile,
-    RedCase,
-    RedKind,
-    TestContract as GateTestContract,
-)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -191,72 +179,6 @@ PR_PLAN: dict[str, object] = {
     ],
 }
 
-
-GATE_DIGEST = "a" * 64
-
-GATE_RED: dict[str, object] = {
-    "schema_version": 1,
-    "work_id": "work-outer-tdd",
-    "project_key": "easy-cheese",
-    "producer": "cut",
-    "disposition": "red",
-    "spec_ref": ".cheese/specs/outer-tdd-gates.md",
-    "spec_sha256": GATE_DIGEST,
-    "guard_receipt_refs": [],
-    "contracts": [
-        {
-            "acceptance_id": "AC-4",
-            "interface": "GateReceipt",
-            "seam": "red-gate validate --state red",
-            "expected_failure": "the outer tracer assertion fails",
-            "mode": "tracer",
-            "contract_source": "approved",
-        }
-    ],
-    "baseline_checks": [
-        {
-            "id": "baseline",
-            "argv": ["python", "-m", "pytest", "tests/test_outer.py"],
-            "cwd": ".",
-            "observed_exit_code": 0,
-        }
-    ],
-    "cases": [
-        {
-            "id": "AC-4-tracer",
-            "acceptance_ids": ["AC-4"],
-            "curd": "gate-receipt-schema",
-            "seam": "red-gate validate --state red",
-            "argv": ["python", "-m", "pytest", "tests/test_outer.py", "-k", "AC-4"],
-            "cwd": ".",
-            "kind": "behavior",
-            "origin": "generated",
-            "expected_witness": ["assertion failed: expected outer behavior"],
-            "observed_exit_code": 1,
-            "observed_witness": "assertion failed: expected outer behavior",
-        }
-    ],
-    "protected_files": [
-        {
-            "path": "tests/test_outer.py",
-            "sha256": GATE_DIGEST,
-        }
-    ],
-    "phase_token_ref": None,
-    "phase_token_sha256": None,
-    "not_applicable_reason": None,
-}
-
-GATE_NOT_APPLICABLE: dict[str, object] = {
-    **deepcopy(GATE_RED),
-    "disposition": "not-applicable",
-    "guard_receipt_refs": [],
-    "contracts": [],
-    "baseline_checks": [],
-    "cases": [],
-    "protected_files": [],
-    "not_applicable_reason": "appearance-only change",
-}
 
 
 def _without(payload: dict[str, object], key: str) -> dict[str, object]:
@@ -621,220 +543,6 @@ class TestRunManifestPrPlanLayout:
         assert load(payload, RunManifest, strict=True).problems == ()
 
 
-class TestGateReceiptShapes:
-    def test_red_receipt_preserves_per_contract_modes_and_plain_dict_output(self) -> None:
-        payload = deepcopy(GATE_RED)
-        _as_list(payload["contracts"]).append(
-            {
-                "acceptance_id": "AC-4-matrix",
-                "interface": "GateReceipt",
-                "seam": "red-gate validate --state red",
-                "expected_failure": "the contract matrix assertion fails",
-                "mode": "contract-matrix",
-                "contract_source": "approved",
-            }
-        )
-        _as_list(payload["cases"]).append(
-            {
-                "id": "AC-4-matrix",
-                "acceptance_ids": ["AC-4-matrix"],
-                "curd": "gate-receipt-schema",
-                "seam": "red-gate validate --state red",
-                "argv": ["python", "-m", "pytest", "tests/test_outer.py", "-k", "matrix"],
-                "cwd": ".",
-                "kind": "contract",
-                "origin": "generated",
-                "expected_witness": ["assertion failed: contract matrix"],
-                "observed_exit_code": 1,
-                "observed_witness": "assertion failed: contract matrix",
-            }
-        )
-
-        result = load(payload, GateReceipt, strict=True)
-
-        assert result.problems == ()
-        assert result.value is not None
-        assert [contract.mode for contract in result.value.contracts] == [
-            GateMode.TRACER,
-            GateMode.CONTRACT_MATRIX,
-        ]
-        assert not hasattr(result.value, "mode")
-        assert result.value.to_dict() == payload
-
-    def test_not_applicable_receipt_is_a_closed_shape(self) -> None:
-        result = load(deepcopy(GATE_NOT_APPLICABLE), GateReceipt, strict=True)
-
-        assert result.problems == ()
-        assert result.value is not None
-        assert result.value.disposition is GateDisposition.NOT_APPLICABLE
-        assert result.value.not_applicable_reason == "appearance-only change"
-        assert result.value.contracts == []
-        assert result.value.baseline_checks == []
-        assert result.value.cases == []
-        assert result.value.protected_files == []
-        assert result.value.guard_receipt_refs == []
-
-    @pytest.mark.parametrize(
-        ("field_name", "replacement"),
-        [
-            ("guard_receipt_refs", ["prior-receipt"]),
-            ("contracts", [deepcopy(_as_list(GATE_RED["contracts"])[0])]),
-            ("baseline_checks", [deepcopy(_as_list(GATE_RED["baseline_checks"])[0])]),
-            ("cases", [deepcopy(_as_list(GATE_RED["cases"])[0])]),
-            ("protected_files", [deepcopy(_as_list(GATE_RED["protected_files"])[0])]),
-            ("not_applicable_reason", ""),
-        ],
-    )
-    def test_not_applicable_rejects_open_red_evidence(
-        self, field_name: str, replacement: object
-    ) -> None:
-        payload = deepcopy(GATE_NOT_APPLICABLE)
-        payload[field_name] = replacement
-
-        result = load(payload, GateReceipt, strict=True)
-
-        assert result.value is None
-        assert any(field_name in problem for problem in result.problems)
-
-    @pytest.mark.parametrize(
-        ("field_name", "replacement"),
-        [
-            ("phase_token_ref", ".cheese/cut/work.phase.json"),
-            ("phase_token_sha256", GATE_DIGEST),
-        ],
-    )
-    def test_phase_token_ref_and_digest_must_travel_together(
-        self, field_name: str, replacement: str
-    ) -> None:
-        payload = deepcopy(GATE_RED)
-        payload[field_name] = replacement
-
-        result = load(payload, GateReceipt, strict=True)
-
-        assert result.value is None
-        assert any("must be provided together" in problem for problem in result.problems)
-
-
-    @pytest.mark.parametrize(
-        ("field_name", "expected_problem"),
-        [
-            ("contracts", "GateReceipt.contracts must be a non-empty list for RED"),
-            (
-                "baseline_checks",
-                "GateReceipt.baseline_checks must be a non-empty list for RED",
-            ),
-            ("cases", "GateReceipt.cases must be a non-empty list for RED"),
-            (
-                "protected_files",
-                "GateReceipt.protected_files must be a non-empty list for RED",
-            ),
-        ],
-    )
-    def test_red_receipt_requires_each_evidence_collection(
-        self, field_name: str, expected_problem: str
-    ) -> None:
-        payload = deepcopy(GATE_RED)
-        payload[field_name] = []
-
-        result = load(payload, GateReceipt, strict=True)
-
-        assert result.value is None
-        assert result.problems == (expected_problem,)
-
-    @pytest.mark.parametrize(
-        ("mutation", "expected_problem"),
-        [
-            (
-                "schema_version",
-                "GateReceipt.schema_version must be an integer, not bool",
-            ),
-            ("work_id", "GateReceipt.work_id must be a string, not int"),
-            (
-                "baseline_argv",
-                "GateReceipt.baseline_checks[1].argv must be a list, not str",
-            ),
-            (
-                "guard_refs",
-                "GateReceipt.guard_receipt_refs must be a list, not tuple",
-            ),
-            (
-                "case_cwd",
-                "GateReceipt.cases[1].cwd must be a repository-relative path",
-            ),
-            (
-                "protected_digest",
-                "GateReceipt.protected_files[1].sha256 must be a 64-character "
-                + "hexadecimal digest",
-            ),
-            (
-                "receipt_mode",
-                "GateReceipt.mode is not supported; mode belongs to each TestContract",
-            ),
-        ],
-    )
-    def test_strict_loading_rejects_unsafe_shapes_without_coercion(
-        self, mutation: str, expected_problem: str
-    ) -> None:
-        payload = deepcopy(GATE_RED)
-        if mutation == "schema_version":
-            payload["schema_version"] = True
-        elif mutation == "work_id":
-            payload["work_id"] = 7
-        elif mutation == "baseline_argv":
-            _as_dict(_as_list(payload["baseline_checks"])[0])["argv"] = "python -m pytest"
-        elif mutation == "guard_refs":
-            payload["guard_receipt_refs"] = ("prior-receipt",)
-        elif mutation == "case_cwd":
-            _as_dict(_as_list(payload["cases"])[0])["cwd"] = "../outside"
-        elif mutation == "receipt_mode":
-            payload["mode"] = "tracer"
-        else:
-            _as_dict(_as_list(payload["protected_files"])[0])["sha256"] = "not-a-digest"
-
-        result = load(payload, GateReceipt, strict=True)
-
-        assert result.value is None
-        assert expected_problem in result.problems
-
-
-class TestGateReceiptTypes:
-    def test_nested_types_and_enum_values_are_public(self) -> None:
-        contract = GateTestContract(
-            acceptance_id="AC-4",
-            interface="GateReceipt",
-            seam="red-gate validate --state red",
-            expected_failure="outer witness",
-            mode=GateMode.TRACER,
-            contract_source="approved",
-        )
-        baseline = BaselineCheck(
-            id="baseline",
-            argv=["python", "-m", "pytest"],
-            cwd=".",
-            observed_exit_code=0,
-        )
-        case = RedCase(
-            id="case",
-            acceptance_ids=["AC-4"],
-            curd=None,
-            seam="red-gate validate --state red",
-            argv=["python", "-m", "pytest"],
-            cwd=".",
-            kind=RedKind.BEHAVIOR,
-            origin=EvidenceOrigin.ADOPTED,
-            expected_witness=["outer witness"],
-            observed_exit_code=1,
-            observed_witness="outer witness",
-        )
-        protected = ProtectedFile(path="tests/test_outer.py", sha256=GATE_DIGEST)
-
-        assert contract.mode is GateMode.TRACER
-        assert baseline.observed_exit_code == 0
-        assert case.origin is EvidenceOrigin.ADOPTED
-        assert protected.sha256 == GATE_DIGEST
-        assert GateProducer.PRESS.value == "press"
-
-
 class TestReadinessParity:
     """The port must agree with src/easy_cheese/shared/gates.py on all 32 inputs."""
 
@@ -907,16 +615,6 @@ class TestPublicSurface:
         import easy_cheese_schemas
 
         for name in (
-            "BaselineCheck",
-            "EvidenceOrigin",
-            "GateDisposition",
-            "GateMode",
-            "GateProducer",
-            "GateReceipt",
-            "ProtectedFile",
-            "RedCase",
-            "RedKind",
-            "TestContract",
             "CurdRecord",
             "DecomposedCurd",
             "ManifestLoadError",
@@ -929,11 +627,6 @@ class TestPublicSurface:
             "classify_stamp",
             "parse_mapping",
             "AcceptedArtifact",
-            "HandoffPointer",
-            "IngressKind",
-            "NormalizationAction",
-            "NormalizationActionKind",
-            "NormalizationReceipt",
             "PublishedArtifact",
         ):
             assert name in easy_cheese_schemas.__all__
@@ -990,12 +683,11 @@ _WHEYPOINT_DIGEST = "sha256:" + "0" * 64
 def _wheypoint_record(
     *,
     questions: tuple[wc.ProtectedEntry, ...] = (),
-    dossier: tuple[wc.DecisionFork, ...] = (),
     notes: str | None = None,
     edges: tuple[wc.WorkEdge, ...] = (),
 ) -> wc.WheypointRecord:
     return wc.WheypointRecord(
-        schema_version=4,
+        schema_version=5,
         work_id="parent",
         slug="parent",
         title="Parent",
@@ -1009,9 +701,7 @@ def _wheypoint_record(
         next_action=wc.NextAction(move=wc.NextMove.COOK, orientation="Cook it."),
         decisions=[],
         questions=list(questions),
-        blockers=[],
         artifact_links=[],
-        decision_dossier=list(dossier),
         notes=notes,
         edges=edges,
     )
@@ -1025,13 +715,10 @@ def _gating_question(state: wc.EntryState) -> wc.ProtectedEntry:
         state=state,
         blocks_continuation=True,
         rationale=None if state is wc.EntryState.ACTIVE else "Moved to the child.",
-        successor="wheypoint:project/child#q-1"
-        if state is wc.EntryState.FORKED
-        else None,
     )
 
 
-_EDGE_KEY = wc.WorkEdgeKey(to="repo:docs/spec.md", kind=wc.EdgeKind.INFORMS)
+_EDGE_KEY = wc.WorkEdgeKey(to="repo:docs/spec.md", kind=wc.EdgeKind.CHECKPOINTS)
 _INTENT = wc.CheckpointIntent(work_id="parent")
 _DELTA = wc.WheypointDelta(work_id="parent", expected_revision_id="rev-0001")
 
@@ -1043,32 +730,6 @@ def _fork_transition() -> wc.EntryTransition:
         rationale="Moved to the child.",
         successor="wheypoint:project/child#q-1",
     )
-
-
-def _entry(
-    *,
-    state: wc.EntryState = wc.EntryState.ACTIVE,
-    rationale: str | None = None,
-    origin: str | None = None,
-    successor: str | None = None,
-    copies: tuple[str, ...] = (),
-) -> wc.ProtectedEntry:
-    return wc.ProtectedEntry(
-        entry_id="d-1",
-        kind=wc.EntryKind.DECISION,
-        summary="s",
-        state=state,
-        blocks_continuation=False,
-        rationale=rationale,
-        origin=origin,
-        successor=successor,
-        copies=copies,
-    )
-
-
-def _open_fork() -> wc.DecisionFork:
-    option = wc.DossierOption(option="child", evidence=["spec F-2"], breaks="none")
-    return wc.DecisionFork(fork="Which store owns the edge?", options=[option])
 
 
 def _notes_holders(notes: str) -> tuple[object, ...]:
@@ -1083,17 +744,12 @@ def _notes_holders(notes: str) -> tuple[object, ...]:
 
 # Every since-4 reference field, keyed by case id: (field name, builder).
 _REF_HOLDERS: dict[str, tuple[str, Callable[[str], object]]] = {
-    "edge": ("to", lambda ref: wc.WorkEdge(to=ref, kind=wc.EdgeKind.INFORMS)),
-    "edge-key": ("to", lambda ref: wc.WorkEdgeKey(to=ref, kind=wc.EdgeKind.INFORMS)),
-    "artifact": ("ref", lambda ref: wc.ArtifactLink(path="p.md", ref=ref)),
-    "origin": ("origin", lambda ref: _entry(origin=ref)),
-    "copies": ("copies", lambda ref: _entry(copies=(ref,))),
-    "entry": (
-        "successor",
-        lambda ref: _entry(
-            state=wc.EntryState.FORKED, rationale="Moved.", successor=ref
-        ),
+    "edge": ("to", lambda ref: wc.WorkEdge(to=ref, kind=wc.EdgeKind.CHECKPOINTS)),
+    "edge-key": (
+        "to",
+        lambda ref: wc.WorkEdgeKey(to=ref, kind=wc.EdgeKind.CHECKPOINTS),
     ),
+    "artifact": ("ref", lambda ref: wc.ArtifactLink(path="p.md", ref=ref)),
     "transition": (
         "successor",
         lambda ref: wc.EntryTransition(
@@ -1118,7 +774,6 @@ class TestWheypointSchemaFour:
     def test_ac7_same_question_active_still_gates(self) -> None:
         record = _wheypoint_record(
             questions=(_gating_question(wc.EntryState.ACTIVE),),
-            dossier=(_open_fork(),),
         )
 
         assert record.gating_entry_ids == ("q-1",)
@@ -1156,25 +811,12 @@ class TestWheypointSchemaFour:
                 ],
             )
 
-    def test_intent_refuses_a_forked_to_remove_edge(self) -> None:
+    def test_intent_refuses_a_forked_from_remove_edge(self) -> None:
         with pytest.raises(ValueError, match="host derives fork edges"):
             _ = wc.CheckpointIntent(
                 work_id="parent",
                 remove_edges=[
-                    wc.WorkEdgeKey(to="wheypoint:project/child", kind=wc.EdgeKind.FORKED_TO)
-                ],
-            )
-
-    def test_intent_refuses_a_host_reciprocal_rationale(self) -> None:
-        with pytest.raises(ValueError, match="reciprocal rationale is written by the host"):
-            _ = wc.CheckpointIntent(
-                work_id="parent",
-                add_edges=[
-                    wc.WorkEdge(
-                        to="wheypoint:project/child",
-                        kind=wc.EdgeKind.INFORMS,
-                        rationale="reciprocal of informs from parent@rev-0001",
-                    )
+                    wc.WorkEdgeKey(to="wheypoint:project/child", kind=wc.EdgeKind.FORKED_FROM)
                 ],
             )
 
@@ -1185,7 +827,7 @@ class TestWheypointSchemaFour:
                 add_edges=[
                     wc.WorkEdge(
                         to="wheypoint:project/child",
-                        kind=wc.EdgeKind.INFORMS,
+                        kind=wc.EdgeKind.CHECKPOINTS,
                         revision_id="rev-0001",
                     )
                 ],
@@ -1203,28 +845,6 @@ class TestWheypointSchemaFour:
                 entry_id="q-1",
                 action=wc.TransitionAction.RESOLVE,
                 rationale="Done.",
-                successor="wheypoint:project/child#q-1",
-            )
-
-    def test_forked_entry_must_name_its_successor(self) -> None:
-        with pytest.raises(ValueError, match="successor must name the entry"):
-            _ = wc.ProtectedEntry(
-                entry_id="q-1",
-                kind=wc.EntryKind.QUESTION,
-                summary="s",
-                state=wc.EntryState.FORKED,
-                blocks_continuation=True,
-                rationale="Moved.",
-            )
-
-    def test_unforked_entry_refuses_a_successor(self) -> None:
-        with pytest.raises(ValueError, match="successor must be null unless"):
-            _ = wc.ProtectedEntry(
-                entry_id="q-1",
-                kind=wc.EntryKind.QUESTION,
-                summary="s",
-                state=wc.EntryState.ACTIVE,
-                blocks_continuation=True,
                 successor="wheypoint:project/child#q-1",
             )
 
@@ -1263,7 +883,7 @@ class TestWheypointSchemaFour:
     def test_edges_refuse_a_repeated_target_and_kind(self) -> None:
         edge = wc.WorkEdge(
             to="wheypoint:project/child",
-            kind=wc.EdgeKind.FORKED_TO,
+            kind=wc.EdgeKind.SUPERSEDES,
             revision_id="rev-0001",
         )
 
@@ -1273,13 +893,13 @@ class TestWheypointSchemaFour:
     def test_edges_allow_one_target_under_two_kinds(self) -> None:
         edges = tuple(
             wc.WorkEdge(to="repo:docs/spec.md", kind=kind, revision_id="rev-0001")
-            for kind in (wc.EdgeKind.IMPLEMENTS, wc.EdgeKind.INFORMS)
+            for kind in (wc.EdgeKind.SUPERSEDES, wc.EdgeKind.CHECKPOINTS)
         )
 
         assert _wheypoint_record(edges=edges).edges == edges
 
     def test_work_edge_revision_is_host_stamped(self) -> None:
-        edge = wc.WorkEdge(to="repo:docs/spec.md", kind=wc.EdgeKind.INFORMS)
+        edge = wc.WorkEdge(to="repo:docs/spec.md", kind=wc.EdgeKind.CHECKPOINTS)
 
         assert edge.revision_id is None
 
@@ -1287,24 +907,18 @@ class TestWheypointSchemaFour:
         ("build", "message"),
         [
             (
-                lambda: wc.WorkEdgeKey(to="docs/spec.md", kind=wc.EdgeKind.INFORMS),
+                lambda: wc.WorkEdgeKey(
+                    to="docs/spec.md", kind=wc.EdgeKind.CHECKPOINTS
+                ),
                 "to must be an absolute URI",
             ),
             (
-                lambda: wc.WorkEdge(to="docs/spec.md", kind=wc.EdgeKind.INFORMS),
+                lambda: wc.WorkEdge(to="docs/spec.md", kind=wc.EdgeKind.CHECKPOINTS),
                 "to must be an absolute URI",
             ),
             (
                 lambda: wc.ArtifactLink(path="docs/spec.md", ref="docs/spec.md"),
                 "ref must be an absolute URI",
-            ),
-            (lambda: _entry(copies=("child",)), r"copies\[1\] must be an absolute URI"),
-            (lambda: _entry(origin="parent#d-1"), "origin must be an absolute URI"),
-            (
-                lambda: _entry(
-                    state=wc.EntryState.FORKED, rationale="Moved.", successor="child"
-                ),
-                "successor must be an absolute URI",
             ),
             (
                 lambda: wc.EntryTransition(
@@ -1320,9 +934,6 @@ class TestWheypointSchemaFour:
             "edge-key-to",
             "edge-to",
             "link-ref",
-            "copies",
-            "origin",
-            "successor",
             "transition-successor",
         ],
     )
@@ -1337,27 +948,9 @@ class TestWheypointSchemaFour:
         [
             ("add_edges", (), "add_edges must be a non-empty list"),
             ("remove_edges", (), "remove_edges must be a non-empty list"),
-            (
-                "remove_dossier_forks",
-                (),
-                "remove_dossier_forks must be a non-empty list",
-            ),
-            ("remove_dossier_forks", ("f", "f"), "must not contain duplicate 'f'"),
-            (
-                "remove_dossier_forks",
-                ("f" * 2001,),
-                r"remove_dossier_forks\[1\] must be at most 2000",
-            ),
             ("remove_edges", (_EDGE_KEY, _EDGE_KEY), "remove_edges must not repeat"),
         ],
-        ids=[
-            "add-edges-empty",
-            "remove-edges-empty",
-            "forks-empty",
-            "forks-duplicate",
-            "forks-over-bound",
-            "remove-edges-duplicate",
-        ],
+        ids=["add-edges-empty", "remove-edges-empty", "remove-edges-duplicate"],
     )
     def test_intent_refuses_a_bad_edge_or_fork_request(
         self, name: str, value: tuple[object, ...], message: str
@@ -1367,16 +960,8 @@ class TestWheypointSchemaFour:
 
     @pytest.mark.parametrize(
         ("name", "value", "message"),
-        [
-            ("remove_dossier_forks", ("f", "f"), "must not contain duplicate 'f'"),
-            (
-                "remove_dossier_forks",
-                ("f" * 2001,),
-                r"remove_dossier_forks\[1\] must be at most 2000",
-            ),
-            ("remove_edges", (_EDGE_KEY, _EDGE_KEY), "remove_edges must not repeat"),
-        ],
-        ids=["forks-duplicate", "forks-over-bound", "remove-edges-duplicate"],
+        [("remove_edges", (_EDGE_KEY, _EDGE_KEY), "remove_edges must not repeat")],
+        ids=["remove-edges-duplicate"],
     )
     def test_delta_refuses_a_bad_edge_or_fork_request(
         self, name: str, value: tuple[object, ...], message: str
@@ -1384,9 +969,7 @@ class TestWheypointSchemaFour:
         with pytest.raises(ValueError, match=message):
             _ = attrs.evolve(_DELTA, **{name: value})
 
-    @pytest.mark.parametrize(
-        "name", ["add_edges", "remove_edges", "remove_dossier_forks"]
-    )
+    @pytest.mark.parametrize("name", ["add_edges", "remove_edges"])
     def test_delta_accepts_an_explicit_empty_collection(self, name: str) -> None:
         delta = attrs.evolve(_DELTA, **{name: ()})
 
@@ -1395,11 +978,10 @@ class TestWheypointSchemaFour:
     def test_every_schema_four_field_is_marked_and_defaulted(self) -> None:
         added = {
             wc.WheypointRecord: ("edges",),
-            wc.ProtectedEntry: ("origin", "successor", "copies"),
             wc.EntryTransition: ("successor",),
             wc.ArtifactLink: ("ref",),
-            wc.WheypointDelta: ("add_edges", "remove_edges", "remove_dossier_forks"),
-            wc.CheckpointIntent: ("add_edges", "remove_edges", "remove_dossier_forks"),
+            wc.WheypointDelta: ("add_edges", "remove_edges"),
+            wc.CheckpointIntent: ("add_edges", "remove_edges"),
             wc.WheypointRevision: ("applied_edges", "removed_edges"),
         }
         for cls, names in added.items():

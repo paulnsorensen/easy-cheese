@@ -226,6 +226,7 @@ class ReviewDimension(str, Enum):
     TELEMETRY = "telemetry"
     CONVENTIONS = "conventions"
     ALTITUDE = "altitude"
+    REFRAME = "reframe"
 
 
 class ReviewSeverity(str, Enum):
@@ -512,18 +513,6 @@ def _identifier_list(
     )
 
 
-def _uri_list(
-    *,
-    non_empty: bool = False,
-    limit: int = MAX_COLLECTION_ITEMS,
-) -> Validator:
-    return _string_list(
-        non_empty=non_empty,
-        limit=limit,
-        item_validator=_uri,
-    )
-
-
 def _context_string_list(
     *,
     non_empty: bool = False,
@@ -639,101 +628,6 @@ class SourceCurdRef:
     digest: str = field(validator=_digest)
 
 
-class IngressKind(str, Enum):
-    WRITER_VIEW = "writer_view"
-    LEGACY_ARTIFACT = "legacy_artifact"
-
-
-class NormalizationActionKind(str, Enum):
-    TRIM_WHITESPACE = "trim_whitespace"
-    NORMALIZE_QUOTES = "normalize_quotes"
-    REMOVE_TRAILING_COMMA = "remove_trailing_comma"
-
-
-@define(frozen=True)
-class NormalizationAction:
-    field_path: str = field(validator=_bounded_string)
-    action: NormalizationActionKind = field(
-        validator=validators.instance_of(NormalizationActionKind)
-    )
-
-
-def _normalization_receipt_schema_constraints() -> tuple[dict[str, object], ...]:
-    return (
-        _if_equals(
-            "ingress_kind",
-            IngressKind.LEGACY_ARTIFACT.value,
-            {
-                "required": ["source_schema_uri", "source_version"],
-                # Both fields stay nullable for writer-view ingress, so the
-                # conditional must also reject an explicit null here. Without
-                # it a JSON Schema consumer accepts a receipt that the runtime
-                # model refuses.
-                "properties": {
-                    "source_schema_uri": {"type": "string"},
-                    "source_version": {"type": "object"},
-                },
-            },
-        ),
-    )
-
-
-@schema_constraints(*_normalization_receipt_schema_constraints())
-@contract("normalization-receipt")
-@define(frozen=True)
-class NormalizationReceipt:
-    ingress_kind: IngressKind = field(validator=validators.instance_of(IngressKind))
-    normalizer_id: str = field(validator=_identifier)
-    source_digest: str = field(validator=_digest)
-    canonical_digest: str = field(validator=_digest)
-    actions: tuple[NormalizationAction, ...] = field(
-        factory=tuple,
-        converter=_tuple_sequence,
-        validator=_list_of(NormalizationAction),
-    )
-    source_schema_uri: str | None = field(default=None, validator=_optional_uri)
-    source_version: ContractVersion | None = field(
-        default=None,
-        validator=validators.optional(validators.instance_of(ContractVersion)),
-    )
-
-    @source_version.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue, reportOptionalMemberAccess]
-    def _validate_legacy_requires_source(
-        self, _attribute: _NamedAttribute, _value: object
-    ) -> None:  # noqa: V103
-        if self.ingress_kind is not IngressKind.LEGACY_ARTIFACT:
-            return
-        if self.source_schema_uri is None or self.source_version is None:
-            raise ValueError(
-                "legacy_artifact ingress requires source_schema_uri and source_version"
-            )
-        # One receipt names one source. The flat URI and the nested version
-        # URI are two views of the same identity, so a disagreement is a
-        # forged provenance claim, not a redundant field.
-        if self.source_schema_uri != self.source_version.schema_uri:
-            raise ValueError(
-                "legacy_artifact ingress requires source_schema_uri to equal"
-                + " source_version.schema_uri; the receipt declares two legacy"
-                + f" source identities: {self.source_schema_uri!r} and"
-                + f" {self.source_version.schema_uri!r}"
-            )
-
-
-@contract("handoff-pointer")
-@define(frozen=True)
-class HandoffPointer:
-    contract_version: ContractVersion = field(
-        validator=validators.instance_of(ContractVersion)
-    )
-    operation_id: str = field(validator=_identifier)
-    request_digest: str = field(validator=_digest)
-    source_phase: str = field(validator=_identifier)
-    destination_phase: str = field(validator=_identifier)
-    payload: ArtifactRef = field(validator=validators.instance_of(ArtifactRef))
-    normalization_receipt: ArtifactRef | None = field(
-        default=None,
-        validator=validators.optional(validators.instance_of(ArtifactRef)),
-    )
 
 
 @schema_constraints(
@@ -2094,35 +1988,6 @@ class CurdResult:
 
 
 @define(frozen=True)
-class PhaseDestination:
-    destination: str = field(validator=_identifier)
-    payload_schema_uri: str = field(validator=_uri)
-
-
-@contract("phase-contract")
-@define(frozen=True)
-class PhaseContract:
-    contract_version: ContractVersion = field(
-        validator=validators.instance_of(ContractVersion)
-    )
-    source: str = field(validator=_identifier)
-    input_schema_uris: tuple[str, ...] = field(
-        converter=_tuple_sequence, validator=_uri_list(non_empty=True)
-    )
-    outputs: tuple[PhaseDestination, ...] = field(
-        converter=_tuple_sequence, validator=_list_of(PhaseDestination, non_empty=True)
-    )
-
-    @outputs.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_routes(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
-        routes = {
-            (route.destination, route.payload_schema_uri) for route in self.outputs
-        }
-        if len(routes) != len(self.outputs):
-            raise ValueError("outputs must not contain duplicate routes")
-
-
-@define(frozen=True)
 class CriterionWriterView:
     description: str = field(validator=_bounded_string)
     check: str = field(validator=_bounded_string)
@@ -2663,25 +2528,6 @@ class CrossFieldRule:
     description: str
 
 
-class GateApplicabilityDisposition(str, Enum):
-    RED_REQUIRED = "red-required"
-    NOT_APPLICABLE = "not-applicable"
-
-
-class WorkClass(str, Enum):
-    BEHAVIOR = "behavior"
-    DOCS_ONLY = "docs-only"
-    REFACTOR_ONLY = "refactor-only"
-    TEST_ONLY = "test-only"
-    APPEARANCE_ONLY = "appearance-only"
-
-
-class UiSurface(str, Enum):
-    BROWSER = "browser"
-    NON_BROWSER = "non-browser"
-    NOT_APPLICABLE = "not-applicable"
-
-
 class LandingShape(str, Enum):
     """PR landing topology; values mirror ``pr_plan.PrShape`` by design.
 
@@ -2740,45 +2586,6 @@ class GroundingOutcome(str, Enum):
     HIT = "hit"
     MISS = "miss"
     UNAVAILABLE = "unavailable"
-
-
-@define(frozen=True)
-class GateApplicability:
-    disposition: GateApplicabilityDisposition = field(
-        validator=validators.instance_of(GateApplicabilityDisposition)
-    )
-    work_class: WorkClass = field(validator=validators.instance_of(WorkClass))
-    ui_surface: UiSurface = field(validator=validators.instance_of(UiSurface))
-    reason: str | None = field(default=None, validator=_optional_string)
-
-    @ui_surface.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_combination(self, _attribute: _NamedAttribute, value: object) -> None:  # noqa: V103
-        if self.disposition is GateApplicabilityDisposition.RED_REQUIRED:
-            if self.work_class is not WorkClass.BEHAVIOR:
-                raise ValueError("red-required-work-class-must-be-behavior")
-            if value is UiSurface.NOT_APPLICABLE:
-                raise ValueError(
-                    "red-required-ui-surface-must-be-browser-or-non-browser"
-                )
-        else:
-            if self.work_class is WorkClass.BEHAVIOR:
-                raise ValueError(
-                    "not-applicable-work-class-must-be-closed-non-behavior"
-                )
-            if value is not UiSurface.NOT_APPLICABLE:
-                raise ValueError("not-applicable-ui-surface-must-be-not-applicable")
-
-    @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_not_applicable_reason(
-        self, _attribute: _NamedAttribute, value: object
-    ) -> None:  # noqa: V103
-        if (
-            self.disposition is GateApplicabilityDisposition.NOT_APPLICABLE
-            and not value
-        ):
-            raise ValueError(
-                "gate_applicability.reason is required when disposition is not-applicable"
-            )
 
 
 def _landing_layers(
@@ -2931,9 +2738,6 @@ class MoldSpecFrontmatter:
     source: str = field(validator=_bounded_string)
     created: str = field(validator=_bounded_string)
     confidence: SpecConfidence = field(validator=validators.instance_of(SpecConfidence))
-    gate_applicability: GateApplicability = field(
-        validator=validators.instance_of(GateApplicability)
-    )
     gates_overridden: tuple[str, ...] = field(
         factory=tuple, converter=_tuple_sequence, validator=_string_list()
     )
@@ -3043,11 +2847,6 @@ MOLD_SPEC_ENUMS: dict[str, tuple[str, ...]] = {
     "mode": tuple(mode.value for mode in TestContractMode),
     "grounding_probe": tuple(probe.value for probe in GroundingProbe),
     "grounding_outcome": tuple(outcome.value for outcome in GroundingOutcome),
-    "gate_applicability_disposition": tuple(
-        disposition.value for disposition in GateApplicabilityDisposition
-    ),
-    "work_class": tuple(work_class.value for work_class in WorkClass),
-    "ui_surface": tuple(ui_surface.value for ui_surface in UiSurface),
     "landing_shape": tuple(shape.value for shape in LandingShape),
     "per_layer_green": tuple(value.value for value in PerLayerGreen),
     "review_fixes": tuple(value.value for value in ReviewFixes),
@@ -3073,13 +2872,6 @@ MOLD_SPEC_CROSS_FIELD_RULES: tuple[CrossFieldRule, ...] = (
     CrossFieldRule(
         rule_id="delegation-digest-recorded",
         description="The Grounding table must record the explorer probe exactly once with non-empty evidence.",
-    ),
-    CrossFieldRule(
-        rule_id="not-applicable-closed-class",
-        description=(
-            "red-required requires Test Contracts; not-applicable forbids them "
-            "and requires a reason."
-        ),
     ),
     CrossFieldRule(
         rule_id="landing-closed-class",
@@ -3127,14 +2919,7 @@ class MoldSpecDocument:
     def _validate_ac_coverage(self, _attribute: _NamedAttribute, value: object) -> None:  # noqa: V103
         assert isinstance(value, tuple)
         rows = cast(tuple[TestContractRow, ...], value)
-        if (
-            self.frontmatter.gate_applicability.disposition
-            is GateApplicabilityDisposition.NOT_APPLICABLE
-        ):
-            if rows:
-                raise ValueError(
-                    "gate_applicability.disposition=not-applicable requires no Test Contracts rows"
-                )
+        if not rows:
             return
 
         counts: dict[str, int] = {}
@@ -3241,12 +3026,18 @@ class NextMove(str, Enum):
 
 
 class EntryKind(str, Enum):
-    """What a protected entry is. Only a question or a blocker can gate."""
+    """What a protected entry is. Only a question can gate."""
 
     DECISION = "decision"
     QUESTION = "question"
-    BLOCKER = "blocker"
     DIRECTIVE = "directive"
+
+
+class DirectiveScope(str, Enum):
+    """Whom a directive instructs: the work, or the operator's own working style."""
+
+    WORK = "work"
+    OPERATOR = "operator"
 
 
 class EntryState(str, Enum):
@@ -3257,15 +3048,15 @@ class EntryState(str, Enum):
     RESOLVED = "resolved"
     SUPERSEDED = "superseded"
     WITHDRAWN = "withdrawn"
-    # Moved to another record; `successor` names where it went. Never gates.
+    # Legacy, read-only: a pre-v5 entry moved to another record. Never gates.
     FORKED = "forked"
 
 
 class TransitionAction(str, Enum):
     """The only ways a delta may move an entry out of `ACTIVE`.
 
-    `FORK` is host-only: the host applies it when it reconciles a fork, and a
-    `CheckpointIntent` may not carry it."""
+    `FORK` is legacy and read-only: it is kept so pre-v5 receipts still
+    structure, and a `CheckpointIntent` may not carry it."""
 
     RESOLVE = "resolve"
     SUPERSEDE = "supersede"
@@ -3286,14 +3077,8 @@ class EdgeKind(str, Enum):
     """How a record relates to the work item or document an edge names."""
 
     FORKED_FROM = "forked_from"
-    FORKED_TO = "forked_to"
     SUPERSEDES = "supersedes"
-    SUPERSEDED_BY = "superseded_by"
-    IMPLEMENTS = "implements"
-    INFORMS = "informs"
     CHECKPOINTS = "checkpoints"
-    BLOCKED_BY = "blocked_by"
-    RELATES_TO = "relates_to"
 
 
 _SETTLED = {
@@ -3443,15 +3228,6 @@ def _bounded_ledger(
     _list_within(attribute, value, _MAX_LEDGER)
 
 
-@schema_constraints(maxItems=_MAX_ITEMS, minItems=1)
-def _non_empty_bounded_list(
-    instance: object, attribute: _NamedAttribute, value: object
-) -> None:
-    _bounded_list(instance, attribute, value)
-    if not value:
-        raise ValueError(f"{attribute.name} must be a non-empty list")
-
-
 def _gates(entry: ProtectedEntry) -> bool:
     return entry.state is EntryState.ACTIVE and entry.blocks_continuation
 
@@ -3459,26 +3235,6 @@ def _gates(entry: ProtectedEntry) -> bool:
 def _derived_status(gating_entry_ids: Sequence[str]) -> WheypointStatus:
     """The one derivation, read by both the record and its projection."""
     return WheypointStatus.GATED if gating_entry_ids else WheypointStatus.OK
-
-
-@define(frozen=True)
-class DossierOption:
-    """One option on an open fork: what it is, what pins it, what it costs."""
-
-    option: str = field(validator=_bounded_text)
-    evidence: list[str] = field(validator=_bounded_text_list)
-    breaks: str = field(validator=_bounded_text)
-
-
-@define(frozen=True)
-class DecisionFork:
-    """An open fork a resumed session has to re-weigh rather than re-derive."""
-
-    fork: str = field(validator=_bounded_text)
-    options: list[DossierOption] = field(validator=_non_empty_bounded_list)
-    prior_leaning: str | None = field(
-        default=None, validator=validators.optional(_bounded_text)
-    )
 
 
 class WorktreeStrategy(str, Enum):
@@ -3580,19 +3336,6 @@ _successor_rule = _required_when(
 )
 
 
-_fork_successor_rule = schema_constraints(_constraints_of(_ref))(
-    _required_when(
-        lambda instance: cast("ProtectedEntry", instance).state is EntryState.FORKED,
-        lambda attribute: f"{attribute.name} must name the entry this one moved to",
-        lambda instance, attribute, value: (
-            f"{attribute.name} must be null unless the entry is forked, "
-            + f"not {value!r}"
-        ),
-        inner=_optional_ref,
-    )
-)
-
-
 def _rationale_rule(
     instance: ProtectedEntry, attribute: _NamedAttribute, value: object
 ) -> None:
@@ -3612,13 +3355,41 @@ def _gating_kind_rule(
     if value and instance.kind in (EntryKind.DECISION, EntryKind.DIRECTIVE):
         raise ValueError(
             f"{attribute.name} must be false for a {instance.kind.value}: only a "
-            + "question or a blocker gates continuation"
+            + "question gates continuation"
         )
+
+
+@schema_constraints(minLength=1, maxLength=_MAX_TEXT)
+def _question_only(
+    instance: ProtectedEntry | ProposedEntry,
+    attribute: _NamedAttribute,
+    value: object,
+) -> None:
+    if value is not None and instance.kind is not EntryKind.QUESTION:
+        raise ValueError(
+            f"{attribute.name} is only for a question, not a {instance.kind.value}"
+        )
+    if value is not None:
+        _single_line_text(instance, attribute, value)
+
+
+def _operator_directive_only(
+    instance: ProtectedEntry | ProposedEntry,
+    attribute: _NamedAttribute,
+    value: object,
+) -> None:
+    if value is DirectiveScope.OPERATOR and instance.kind is not EntryKind.DIRECTIVE:
+        raise ValueError(
+            f"{attribute.name} operator is only for a directive, "
+            + f"not a {instance.kind.value}"
+        )
+    if not isinstance(value, DirectiveScope):
+        raise ValueError(f"{attribute.name} must be a DirectiveScope")
 
 
 @define(frozen=True)
 class ProtectedEntry:
-    """A decision, question, or blocker the record carries forward until a
+    """A decision, question, or directive the record carries forward until a
     transition moves it. `blocks_continuation` is what makes an open item a gate
     rather than a note."""
 
@@ -3634,19 +3405,16 @@ class ProtectedEntry:
         validator=validators.optional(_bounded_text),
         metadata={"since": 3},
     )
-    # Cross-record lineage: the entry this one was forked from, the entry a
-    # forked entry moved to, and the entries copied from this one.
-    origin: str | None = field(
-        default=None, validator=_optional_ref, metadata={"since": 4}
+    owner: str | None = field(
+        default=None, validator=_question_only, metadata={"since": 5}
     )
-    successor: str | None = field(
-        default=None, validator=_fork_successor_rule, metadata={"since": 4}
+    when: str | None = field(
+        default=None, validator=_question_only, metadata={"since": 5}
     )
-    copies: tuple[str, ...] = field(
-        factory=tuple,
-        converter=_tuple_sequence,
-        validator=_string_list(limit=_MAX_ITEMS, item_validator=_ref),
-        metadata={"since": 4},
+    scope: DirectiveScope = field(
+        default=DirectiveScope.WORK,
+        validator=_operator_directive_only,
+        metadata={"since": 5},
     )
 
 
@@ -3669,8 +3437,27 @@ class ProposedEntry:
         validator=validators.optional(_bounded_text),
         metadata={"since": 3},
     )
+    owner: str | None = field(
+        default=None, validator=_question_only, metadata={"since": 5}
+    )
+    when: str | None = field(
+        default=None, validator=_question_only, metadata={"since": 5}
+    )
+    scope: DirectiveScope = field(
+        default=DirectiveScope.WORK,
+        validator=_operator_directive_only,
+        metadata={"since": 5},
+    )
 
     def __attrs_post_init__(self) -> None:
+        if (
+            self.kind is EntryKind.QUESTION
+            and self.blocks_continuation
+            and self.rationale is None
+        ):
+            raise ValueError(
+                "rationale must say why a blocking question blocks continuation"
+            )
         if self.kind is EntryKind.DIRECTIVE and self.quote is None:
             raise ValueError(
                 "quote must preserve the verbatim instruction for a directive"
@@ -3692,6 +3479,7 @@ _target_rule = _required_when(
 )
 
 
+# Legacy, read-only: kept so pre-v5 receipts that carry a fork transition structure.
 _fork_target_rule = schema_constraints(_constraints_of(_ref))(
     _required_when(
         lambda instance: cast("EntryTransition", instance).action
@@ -3719,6 +3507,7 @@ class EntryTransition:
     action: TransitionAction
     rationale: str = field(validator=_bounded_text)
     target_entry_id: str | None = field(default=None, validator=_target_rule)
+    # Legacy, read-only: names the entry a pre-v5 fork transition moved to.
     successor: str | None = field(
         default=None, validator=_fork_target_rule, metadata={"since": 4}
     )
@@ -3796,12 +3585,8 @@ def _edge_set(
     return validate
 
 
-# The host derives these edges (fork bookkeeping and reciprocal rationale) and
-# stamps `revision_id` itself; edges.py reuses this prefix rather than
-# defining its own, so the kernel and the intent-layer refusal agree on the
-# one spelling that marks a host-written reciprocal.
-RECIPROCAL_RATIONALE_PREFIX = "reciprocal of "
-_HOST_ONLY_EDGE_KINDS = frozenset({EdgeKind.FORKED_FROM, EdgeKind.FORKED_TO})
+# The host derives the fork edge and stamps `revision_id` itself.
+_HOST_ONLY_EDGE_KINDS = frozenset({EdgeKind.FORKED_FROM})
 
 
 def _refuse_host_only_add_edges(
@@ -3812,12 +3597,6 @@ def _refuse_host_only_add_edges(
             raise ValueError(
                 f"{attribute.name} must not carry a {edge.kind.value} edge to "
                 + f"{edge.to!r}: the host derives fork edges"
-            )
-        if (edge.rationale or "").startswith(RECIPROCAL_RATIONALE_PREFIX):
-            raise ValueError(
-                f"{attribute.name} must not carry a rationale for "
-                + f"{edge.to!r} that starts with {RECIPROCAL_RATIONALE_PREFIX!r}: "
-                + "a reciprocal rationale is written by the host, not on request"
             )
         if edge.revision_id is not None:
             raise ValueError(
@@ -3855,15 +3634,20 @@ class SessionProvenance:
 
 @define(frozen=True)
 class CompactionRecord:
-    """What a session did to earn the right to write after a compaction.
+    """Legacy: what a session once proved before writing after a compaction.
+
+    The runtime no longer writes this record. Compaction safety is now the
+    rule that every write to an existing record names the revision the writer
+    read. The type stays so stored receipts that hold one still load.
 
     A compacted session has lost the context it was holding, so the revision it
     remembers is a guess. Naming the revision it re-read is not enough on its
     own -- an id can be copied out of a stale transcript -- so the record also
-    quotes the *digest* of the record it re-read and lists the protected entries
-    it reconciled against. Together those three are a reconciliation report: a
-    claim that can only be made by a session that actually reloaded the durable
-    state, and one a later reader can re-derive rather than take on faith.
+    quotes the *digest* of the record it re-read and lists the entries it
+    reconciled against. `rehydrated_record_digest` and `reconciled_entry_ids`
+    are recorded for provenance only: the runtime writes them and does not
+    re-verify either one on a later read. Only `rehydrated_from_revision_id` is
+    checked against the lineage.
 
     `prior_compaction_revision_id` chains one compaction to the one before it,
     so a lineage that survived several of them reads as a history rather than as
@@ -3902,8 +3686,8 @@ def _protected_entries(
 ) -> Callable[[WheypointRecord, _NamedAttribute, list[ProtectedEntry]], None]:
     """The rules every protected list carries.
 
-    Each list owns one kind, so a reader counting blockers never has to filter a
-    mixed collection first. Entry IDs address protected state across all three
+    Each list owns one kind, so a reader counting questions never has to filter a
+    mixed collection first. Entry IDs address protected state across all
     lists, so a duplicate would make a transition ambiguous -- each list is
     checked against the lists declared before it, which puts the blame on the
     list the repeated id was actually found in.
@@ -3936,41 +3720,6 @@ def _protected_entries(
     return rule
 
 
-def _dossier_rule(
-    attribute: _NamedAttribute, value: list[DecisionFork], gating: Sequence[str]
-) -> None:
-    """A gate must be described; a dossier may describe any active fork.
-
-    A gated record without a dossier hides the options for an open gate, so
-    every gating entry needs a covering fork. The reverse is deliberately not
-    enforced (ADR wheypoint-ergonomics-001): a fork on an active, non-gating
-    question records a parked decision's options without blocking resumption,
-    and it stays until a transition or an explicit `decision_dossier: []`
-    clears it.
-    """
-    if gating and not value:
-        raise ValueError(
-            f"{attribute.name} must describe the open fork for gating entries "
-            + f"{', '.join(gating)}"
-        )
-
-
-def _record_dossier(
-    instance: WheypointRecord, attribute: _NamedAttribute, value: list[DecisionFork]
-) -> None:
-    _bounded_list(instance, attribute, value)
-    _dossier_rule(attribute, value, instance.gating_entry_ids)
-
-
-def _projection_dossier(
-    instance: WheypointProjection,
-    attribute: _NamedAttribute,
-    value: list[DecisionFork],
-) -> None:
-    _bounded_list(instance, attribute, value)
-    _dossier_rule(attribute, value, instance.gating_entry_ids)
-
-
 @contract("wheypoint-record")
 @define(frozen=True)
 class WheypointRecord:
@@ -3997,11 +3746,7 @@ class WheypointRecord:
     questions: list[ProtectedEntry] = field(
         validator=_protected_entries(EntryKind.QUESTION, "decisions")
     )
-    blockers: list[ProtectedEntry] = field(
-        validator=_protected_entries(EntryKind.BLOCKER, "decisions", "questions")
-    )
     artifact_links: list[ArtifactLink] = field(validator=_bounded_list)
-    decision_dossier: list[DecisionFork] = field(validator=_record_dossier)
     notes: str | None = field(
         default=None,
         validator=validators.optional(_notes_text),
@@ -4009,9 +3754,7 @@ class WheypointRecord:
     )
     directives: list[ProtectedEntry] = field(
         factory=list,
-        validator=_protected_entries(
-            EntryKind.DIRECTIVE, "decisions", "questions", "blockers"
-        ),
+        validator=_protected_entries(EntryKind.DIRECTIVE, "decisions", "questions"),
         metadata={"since": 3},
     )
     edges: tuple[WorkEdge, ...] = field(
@@ -4020,15 +3763,24 @@ class WheypointRecord:
         validator=_edge_set(WorkEdge),
         metadata={"since": 4},
     )
+    # The `revision_number` that last replaced `notes`, and the one that last
+    # added or transitioned a decision. Absent on a record written before they
+    # existed; the projection flags drift only when decisions are the newer.
+    notes_revision_number: int | None = field(
+        default=None,
+        validator=validators.optional(validators.ge(1)),
+        metadata={"since": 5},
+    )
+    decisions_revision_number: int | None = field(
+        default=None,
+        validator=validators.optional(validators.ge(1)),
+        metadata={"since": 5},
+    )
 
     @property
     def gating_entry_ids(self) -> tuple[str, ...]:
-        """The active, human-blocking questions and blockers, in record order."""
-        return tuple(
-            entry.entry_id
-            for entry in (*self.questions, *self.blockers)
-            if _gates(entry)
-        )
+        """The active, human-blocking questions, in record order."""
+        return tuple(entry.entry_id for entry in self.questions if _gates(entry))
 
     @property
     def status(self) -> WheypointStatus:
@@ -4113,16 +3865,10 @@ class WheypointDelta:
         metadata={"since": 3},
     )
     next_action: NextAction | None = None
-    decision_dossier: list[DecisionFork] | None = field(
-        default=None, validator=_optional_bounded_list
-    )
     add_decisions: list[ProposedEntry] | None = field(
         default=None, validator=_optional_bounded_list
     )
     add_questions: list[ProposedEntry] | None = field(
-        default=None, validator=_optional_bounded_list
-    )
-    add_blockers: list[ProposedEntry] | None = field(
         default=None, validator=_optional_bounded_list
     )
     add_directives: list[ProposedEntry] | None = field(
@@ -4150,22 +3896,12 @@ class WheypointDelta:
         validator=validators.optional(_edge_set(WorkEdgeKey)),
         metadata={"since": 4},
     )
-    remove_dossier_forks: tuple[str, ...] | None = field(
-        default=None,
-        converter=attrs.converters.optional(_tuple_sequence),
-        validator=validators.optional(
-            _string_list(limit=_MAX_ITEMS, item_validator=_bounded_text)
-        ),
-        metadata={"since": 4},
-    )
     transitions: list[EntryTransition] | None = field(
         default=None, validator=_one_transition_per_entry
     )
     compacted: bool = field(default=False, validator=validators.instance_of(bool))
-    # Declaring compaction is not the same as surviving it: the flag says the
-    # harness detected one, the record is the evidence that durable state was
-    # reloaded and reconciled first. The runtime refuses the flag without the
-    # record, so a compacted session cannot write until it has rehydrated.
+    # Legacy and refused by `commit`: compaction is no longer declared on a
+    # delta. The fields stay so request fingerprints of stored receipts hold.
     compaction: CompactionRecord | None = field(
         default=None, validator=_rehydration_rule
     )
@@ -4178,9 +3914,8 @@ class WheypointRevision:
     """The immutable receipt for one applied delta.
 
     It records what the request was (`request_digest`), what the record became
-    (`record_digest`), what changed, and -- through `preserved_entry_ids` --
-    what was carried forward untouched, so a later reader can prove nothing was
-    dropped rather than take the resulting record on faith.
+    (`record_digest`), and what changed. Receipts stamped below 5 also carried
+    `projection_digest` and `preserved_entry_ids`; a reader ignores them.
     """
 
     schema_version: int = field(validator=validators.ge(1))
@@ -4207,9 +3942,7 @@ class WheypointRevision:
     applied_transitions: list[EntryTransition] = field(
         validator=_one_transition_per_entry
     )
-    preserved_entry_ids: list[str] = field(validator=_identifier_ledger)
     projection_path: str = field(validator=_bounded_text)
-    projection_digest: str = field(validator=_digest)
     repository: RepositoryProvenance
     # What the parent receipt hashed to when this one was written. The parent id
     # names an ancestor; the digest pins *which* ancestor, so a receipt edited
@@ -4218,6 +3951,7 @@ class WheypointRevision:
     parent_revision_digest: str | None = field(
         default=None, validator=validators.optional(_digest)
     )
+    # Legacy, read-only: receipts written before schema 5 may hold one.
     compaction: CompactionRecord | None = None
     session_provenance: SessionProvenance | None = None
     applied_edges: tuple[WorkEdge, ...] = field(
@@ -4247,10 +3981,8 @@ class WheypointProjection:
     work_id: str = field(validator=_lower_identifier)
     revision_id: str = field(validator=_lower_identifier)
     record_digest: str = field(validator=_digest)
-    projection_digest: str = field(validator=_digest)
     next_action: NextAction
     gating_entry_ids: list[str] = field(validator=_identifier_ledger)
-    decision_dossier: list[DecisionFork] = field(validator=_projection_dossier)
     durability: Durability = Durability.CANONICAL_LOCAL
 
     @property
@@ -4333,19 +4065,6 @@ class CheckpointIntent:
         ),
         metadata={"since": 4},
     )
-    remove_dossier_forks: tuple[str, ...] | None = field(
-        default=None,
-        converter=attrs.converters.optional(_tuple_sequence),
-        validator=validators.optional(
-            _string_list(
-                non_empty=True, limit=_MAX_ITEMS, item_validator=_bounded_text
-            )
-        ),
-        metadata={"since": 4},
-    )
-    decision_dossier: list[DecisionFork] | None = field(
-        default=None, validator=_optional_bounded_list
-    )
     transitions: list[EntryTransition] | None = field(
         default=None, validator=_agent_transitions
     )
@@ -4401,8 +4120,6 @@ __all__ = [
     "EvidenceKind",
     "EvidenceRef",
     "FixCostNow",
-    "GateApplicability",
-    "GateApplicabilityDisposition",
     "GroundingOutcome",
     "Landing",
     "LandingShape",
@@ -4418,8 +4135,6 @@ __all__ = [
     "IdentityLineage",
     "MoldSpecDocument",
     "MoldSpecFrontmatter",
-    "PhaseContract",
-    "PhaseDestination",
     "PlannerDisposition",
     "PlannerRequest",
     "PlannerRequestKind",
@@ -4459,16 +4174,12 @@ __all__ = [
     "TableRule",
     "TestContractMode",
     "TestContractRow",
-    "UiSurface",
     "UncertaintyScope",
-    "WorkClass",
     "WriterPayload",
     "WriterViewKind",
     "ArtifactLink",
     "CheckpointIntent",
     "CompactionRecord",
-    "DecisionFork",
-    "DossierOption",
     "Durability",
     "EdgeKind",
     "EntryKind",

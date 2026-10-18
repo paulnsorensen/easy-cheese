@@ -5,11 +5,6 @@ intent: Clarify the Mold documentation.
 blast_radius: low
 inputs: Existing Mold documentation.
 outputs: Updated Mold documentation.
-gate_applicability:
-  disposition: not-applicable
-  work_class: docs-only
-  ui_surface: not-applicable
-  reason: Documentation-only change.
 verification: Run the documentation build.
 ---
 

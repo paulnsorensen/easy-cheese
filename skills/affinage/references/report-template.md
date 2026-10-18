@@ -68,6 +68,11 @@ The `## Needs-investigation` and `## Reviewer-rejected` sections do not use this
   - reason: The change needs six files in two slices. It exceeds this PR scope.
   - draft reply: "This cross-slice refactor exceeds this PR scope. I will record it as follow-up work."
 
+## Already-addressed
+- **[from-comment:<id>]** erin on `src/auth.ts:55` — "Quote this variable."
+  - reason: Commit `abc1234` quotes it. See `src/auth.ts:55`.
+  - action: resolve the thread; post no reply.
+
 ## Confidence
 <certain | speculating | don't know> — <one reason for the confidence>
 
@@ -80,7 +85,7 @@ Show the cure selection gate when `--safe` is active or an ask reason exists.
 ```
 
 Omit empty severity sections.
-Omit `## Needs-investigation` and `## Reviewer-rejected` when they are empty.
+Omit `## Needs-investigation`, `## Reviewer-rejected`, and `## Already-addressed` when they are empty.
 
 Use the confidence scale from `../../age/references/voice.md`.
 Use `certain` when direct evidence confirms the defect.

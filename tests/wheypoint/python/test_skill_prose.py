@@ -53,7 +53,7 @@ def test_ac21_the_lens_no_longer_licenses_dropping_state() -> None:
     text = SKILL.read_text(encoding="utf-8")
     assert "Reduce unrelated state" not in text
     assert "Drop state" not in text and "drop state" not in text
-    assert "never removes a decision, question, blocker, or directive" in text
+    assert "never removes a decision, question, or directive" in text
 
 
 def test_ac21_legacy_note_guidance_lives_in_a_reference() -> None:

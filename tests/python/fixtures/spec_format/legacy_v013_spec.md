@@ -11,9 +11,8 @@ entity_referent_bindings: []
 # Legacy v0.13 spec fixture
 
 A byte-faithful v0.13-era spec: the frontmatter carries no `source` provenance
-marker and no `gate_applicability` block, the Acceptance bullets carry no
-`AC-N:` identifiers, and there is no `## Test Contracts` section — none of them
-existed before the hardened format.
+marker, the Acceptance bullets carry no `AC-N:` identifiers, and there is no
+`## Test Contracts` section — none of them existed before the hardened format.
 
 ## Problem
 

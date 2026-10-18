@@ -41,6 +41,6 @@ A submission carries `answers`, `notes` (the composer text), `pins`, `annotation
 
 Autosave only preserves a working copy. `Send to agent` creates feedback, not approval.
 
-Browser feedback never satisfies the taste gate, typed-plan gate, or two-key handshake.
+Browser feedback never satisfies the taste gate, typed-plan gate, or coherence self-check.
 
-The canvas is optional. It is a local-only review aid, not an approval mechanism. It must not request approval, bypass the taste gate, bypass the typed-plan gate, or bypass the two-key handshake.
+The canvas is optional. It is a local-only review aid, not an approval mechanism. It must not request approval, bypass the taste gate, bypass the typed-plan gate, or bypass the coherence self-check.

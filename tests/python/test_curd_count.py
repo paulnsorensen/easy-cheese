@@ -88,13 +88,9 @@ slug: one-coherent-refactor
 - digest schema unchanged
 """
 
-SPEC_RED_REQUIRED = """\
+SPEC_BEHAVIOR = """\
 ---
 source: mold-handshake
-gate_applicability:
-  disposition: red-required
-  work_class: behavior
-  ui_surface: non-browser
 ---
 
 # Behavior spec
@@ -110,14 +106,9 @@ gate_applicability:
 | --- | --- | --- | --- | --- |
 | AC-1 | public call | existing service boundary | assert result is returned | tracer |
 """
-SPEC_NOT_APPLICABLE = """\
+SPEC_DOCS = """\
 ---
 source: mold-handshake
-gate_applicability:
-  disposition: not-applicable
-  work_class: docs-only
-  ui_surface: not-applicable
-  reason: documentation-only change
 ---
 
 # Documentation spec
@@ -326,10 +317,10 @@ class TestAnalyze:
         digest = curd_count.analyze(spec, None)
         assert digest["recommended_skill"] == "/cook"
 
-    def test_gate_disposition_remains_sizing_only(
+    def test_new_spec_digest_remains_sizing_only(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        spec = _write_spec(tmp_path, "behavior.md", SPEC_RED_REQUIRED)
+        spec = _write_spec(tmp_path, "behavior.md", SPEC_BEHAVIOR)
         digest = curd_count.analyze(spec, "medium")
         assert digest["recommended_skill"] == "/cook"
         assert "handoff" not in digest
@@ -339,9 +330,9 @@ class TestAnalyze:
     def test_declared_landing_shape_is_reported_in_sizing_digest(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        body = SPEC_RED_REQUIRED.replace(
-            "  ui_surface: non-browser\n",
-            "  ui_surface: non-browser\n"
+        body = SPEC_BEHAVIOR.replace(
+            "source: mold-handshake\n",
+            "source: mold-handshake\n"
             + "landing:\n"
             + "  shape: stacked_linear\n"
             + '  layers: [["c1"], ["c2"]]\n'
@@ -358,7 +349,7 @@ class TestAnalyze:
     def test_absent_landing_block_defaults_to_single_in_digest(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        spec = _write_spec(tmp_path, "no-landing.md", SPEC_RED_REQUIRED)
+        spec = _write_spec(tmp_path, "no-landing.md", SPEC_BEHAVIOR)
         digest = curd_count.analyze(spec, "medium")
         assert _dig(digest, "landing") == {
             "shape": "single",
@@ -370,28 +361,27 @@ class TestAnalyze:
     def test_unknown_landing_key_is_a_spec_read_error(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        body = SPEC_RED_REQUIRED.replace(
-            "  ui_surface: non-browser\n",
-            "  ui_surface: non-browser\nlanding:\n  shape: single\n  per_layer_greeen: tip-only\n",
+        body = SPEC_BEHAVIOR.replace(
+            "source: mold-handshake\n",
+            "source: mold-handshake\nlanding:\n  shape: single\n  per_layer_greeen: tip-only\n",
         )
         spec = _write_spec(tmp_path, "typo.md", body)
         with pytest.raises(curd_count.SpecReadError, match="landing-closed-class"):
             _ = curd_count.analyze(spec, "medium")
 
-    def test_unmarked_legacy_spec_without_ui_surface_remains_sizing_only(
+    def test_unmarked_legacy_spec_remains_sizing_only(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        body = SPEC_RED_REQUIRED.replace("source: mold-handshake\n", "")
-        body = body.replace("  ui_surface: non-browser\n", "")
+        body = SPEC_BEHAVIOR.replace("source: mold-handshake\n", "")
         spec = _write_spec(tmp_path, "legacy.md", body)
         digest = curd_count.analyze(spec, "medium")
         assert digest["recommended_skill"] == "/cook"
         assert "handoff" not in digest
 
-    def test_not_applicable_spec_with_acceptance_ids_remains_sizing_only(
+    def test_docs_spec_with_acceptance_ids_remains_sizing_only(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        spec = _write_spec(tmp_path, "docs.md", SPEC_NOT_APPLICABLE)
+        spec = _write_spec(tmp_path, "docs.md", SPEC_DOCS)
         digest = curd_count.analyze(spec, "low")
         assert digest["recommended_skill"] == "/cook"
 
@@ -428,25 +418,37 @@ class TestAnalyze:
         digest = curd_count.analyze(spec, "high")
         assert digest["recommended_skill"] == "/cook"
 
-    def test_malformed_gate_applicability_is_a_non_routing_warning(
+    def test_malformed_test_contracts_is_a_non_routing_warning(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        # A declared red-required spec without its Test Contracts table is
-        # malformed. Curd count sizes work, so the fault is reported as a
-        # warning and changes neither the recommendation nor the curd count.
-        body = SPEC_RED_REQUIRED.split("## Test Contracts")[0]
+        # A Test Contracts table that skips an Acceptance ID is malformed. Curd
+        # count sizes work, so the fault is reported as a warning and changes
+        # neither the recommendation nor the curd count.
+        body = SPEC_BEHAVIOR.replace(
+            "- AC-1: WHEN invoked THE SYSTEM SHALL return the result\n",
+            "- AC-1: WHEN invoked THE SYSTEM SHALL return the result\n"
+            + "- AC-2: WHEN invoked twice THE SYSTEM SHALL return the same result\n",
+        )
         spec = _write_spec(tmp_path, "malformed.md", body)
         digest = curd_count.analyze(spec, "low")
         assert digest["warnings"] == [
-            "gate-applicability:Test Contracts table must cover every Acceptance ID exactly once: missing=['AC-1'] duplicated=[] unexpected=[]"
+            "spec-document:Test Contracts table must cover every Acceptance ID exactly once: missing=['AC-2'] duplicated=[] unexpected=[]"
         ]
         assert digest["recommended_skill"] == "/cook"
         assert digest["candidate_curds"] == 1
 
-    def test_well_formed_gate_applicability_reports_no_warning(
+    def test_spec_without_test_contracts_reports_no_warning(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        spec = _write_spec(tmp_path, "behavior.md", SPEC_RED_REQUIRED)
+        body = SPEC_BEHAVIOR.split("## Test Contracts")[0]
+        spec = _write_spec(tmp_path, "no-contracts.md", body)
+        digest = curd_count.analyze(spec, "low")
+        assert digest["warnings"] == []
+
+    def test_well_formed_spec_reports_no_warning(
+        self, curd_count: _CurdCountModule, tmp_path: Path
+    ) -> None:
+        spec = _write_spec(tmp_path, "behavior.md", SPEC_BEHAVIOR)
         digest = curd_count.analyze(spec, "low")
         assert digest["warnings"] == []
 
@@ -631,9 +633,9 @@ class TestLandingEdgeCases:
     def test_empty_landing_mapping_is_a_spec_read_error(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        body = SPEC_RED_REQUIRED.replace(
-            "  ui_surface: non-browser\n",
-            "  ui_surface: non-browser\nlanding: {}\n",
+        body = SPEC_BEHAVIOR.replace(
+            "source: mold-handshake\n",
+            "source: mold-handshake\nlanding: {}\n",
         )
         spec = _write_spec(tmp_path, "empty-landing.md", body)
         with pytest.raises(
@@ -642,26 +644,26 @@ class TestLandingEdgeCases:
         ):
             _ = curd_count.analyze(spec, "medium")
 
-    def test_not_applicable_spec_with_malformed_landing_is_a_spec_read_error(
+    def test_docs_spec_with_malformed_landing_is_a_spec_read_error(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        body = SPEC_NOT_APPLICABLE.replace(
-            "  reason: documentation-only change\n",
-            "  reason: documentation-only change\nlanding:\n  shape: sideways\n",
+        body = SPEC_DOCS.replace(
+            "source: mold-handshake\n",
+            "source: mold-handshake\nlanding:\n  shape: sideways\n",
         )
-        spec = _write_spec(tmp_path, "na-bad-landing.md", body)
+        spec = _write_spec(tmp_path, "docs-bad-landing.md", body)
         with pytest.raises(curd_count.SpecReadError, match="landing-closed-class"):
             _ = curd_count.analyze(spec, "low")
 
-    def test_not_applicable_spec_with_landing_block_reports_landing(
+    def test_docs_spec_with_landing_block_reports_landing(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        body = SPEC_NOT_APPLICABLE.replace(
-            "  reason: documentation-only change\n",
-            "  reason: documentation-only change\n"
+        body = SPEC_DOCS.replace(
+            "source: mold-handshake\n",
+            "source: mold-handshake\n"
             + 'landing:\n  shape: stacked_linear\n  layers: [["c1"], ["c2"]]\n',
         )
-        spec = _write_spec(tmp_path, "na-landing.md", body)
+        spec = _write_spec(tmp_path, "docs-landing.md", body)
         digest = curd_count.analyze(spec, "low")
         assert "handoff" not in digest
         assert _dig(digest, "landing", "shape") == "stacked_linear"
@@ -670,9 +672,9 @@ class TestLandingEdgeCases:
     def test_layers_list_of_list_shape_survives_json_round_trip(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        body = SPEC_RED_REQUIRED.replace(
-            "  ui_surface: non-browser\n",
-            "  ui_surface: non-browser\n"
+        body = SPEC_BEHAVIOR.replace(
+            "source: mold-handshake\n",
+            "source: mold-handshake\n"
             + "landing:\n"
             + "  shape: stacked_linear\n"
             + '  layers: [["a"], ["b"]]\n',

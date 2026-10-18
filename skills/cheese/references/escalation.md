@@ -9,16 +9,19 @@ A `mold` intent skips these tiers. Dispatch it to `/mold`'s user mode.
 For a `cook` intent, `/cheese` runs Cook's fast-path check and uses three escalation tiers:
 
 **Tier 1: clear.** Run the specification discovery check.
-When one specification matches, dispatch `/cook --auto` against it.
+When one specification matches, route it by the discovery result rules below.
 Otherwise, check the leverage triggers in `routing-policy.md`.
 A fired trigger dispatches `/mold`'s user mode with the trigger ids in the handoff packet; tier 1 never mints a mini-specification for it.
 When zero triggers fire, invoke `/mold`'s agent mode to write a mini-specification.
 `/mold` owns that write target and resolves it through `artifact-path specs <slug>`.
 Never name a literal specification path for `/mold`.
 Return the spec; do not dispatch Cook yet.
-Dispatch Cook only after the user gives Cook consent per [`../../mold/references/handshake.md`](../../mold/references/handshake.md) § User key.
-Dispatch Cook only when finalize returns a ready pointer.
+Dispatch Cook only after the user selects Cook. The coherence self-check in [`../../mold/references/handshake.md`](../../mold/references/handshake.md) is the only execution gate.
+Tier 1 is standalone work: dispatch `/cook --spec <spec-path>` with no finalize step. Cook applies its spec-hold refusal first.
+Add `--auto` only when the user chose it.
+Bound curd work belongs to `/mold`'s Full path.
 Dispatch the exact `command` that finalize prints.
+It has the form `/cook --auto --result <result-path>`.
 Do not rebuild it from the spec path or a bare slug.
 When the input names a specification path, use it directly.
 Do not scan or write another specification.
@@ -58,7 +61,8 @@ Specifications use the durable XDG corpus from `default_root_for_phase("specs")`
 Act on the result, do not guess:
 
 1. **One clear match (high confidence)** — surface the resolved specification path in one line.
-   Then dispatch `/cook --auto <resolved-spec-path>` against it.
+   A Full or planned match goes to `/mold` finalize and its printed `--result` command.
+   Any other match dispatches `/cook --spec <resolved-spec-path>` (Cook applies its spec-hold refusal first); add `--auto` only when the user chose it.
    Do not write a duplicate.
 2. **Multiple plausible matches or one weak match** — under `--safe`, let the user select a candidate.
    Without `--safe`, ignore the weak match and fall through to the tier-1 leverage check above. A fired trigger still dispatches `/mold`'s user mode; only zero fired triggers mint a new mini-specification.

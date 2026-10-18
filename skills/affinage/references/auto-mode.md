@@ -21,6 +21,7 @@ This file defines each step.
 - Name the test, prototype, or evidence that can confirm the claim.
 - Use `Needs <evidence> to confirm — will follow up with the result.`
 - Do not run the investigation in auto mode.
+- Resolve each `## Already-addressed` thread without a reply.
 - Post all replies before terminal `/plate` publishes fixes.
 - Send terminal `/plate --open-pr [--hard]` only when the working tree has a change.
 - Treat a merge conflict that `/melt` resolved as such a change.

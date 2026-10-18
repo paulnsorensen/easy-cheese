@@ -45,15 +45,29 @@ Exit `4` is a kernel failure before the artifact write; nothing is written.
 Exit `5` means the artifact was written but the revision failed; stderr carries `wheypoint: artifact-orphaned <path>` and the next resolve gates on `stale-artifact-link`.
 Every `wheypoint:`-tagged line on stderr is one plain-ASCII line, identical on every host.
 A refusal, exit `2` or exit `4`, is reported as one stderr JSON line, `{"error": <message>, "exit_code": <n>}`, instead.
-A successful write prints `wheypoint: revision work_id=<id> revision_id=<id> revision_number=<n> retried=<bool>`.
-A stale-parent retry prints one `wheypoint: retry ...` line and one `wheypoint: retry outcome=...` line.
+A successful write prints `wheypoint: revision work_id=<id> revision_id=<id> revision_number=<n>`.
+A phase writer over an existing record needs `--base <revision_id>`, the revision from the phase-entry `wheypoint-resolve`.
+A missing base is refused as `base-revision-required` and names the current revision; a superseded base is refused as `stale-parent`; both refuse before any file is written.
+The writer accepts an identical write that a caller retries with its original base after a lost response.
+The retry exits `0`, prints the original revision with `replayed=true`, and writes nothing.
+The retry must repeat the orientation, next move, grounded entries, session, and artifact bytes.
+The record must still pin those bytes, and the file must still hold them; otherwise the retry is `stale-parent`.
+A lost genesis response cannot replay, because a genesis write names no base.
+A first write for a work id needs no base.
+The writer never retries a conflict; a conflict at commit time exits `5` and orphans the artifact.
 An unexpected failure always prints a traceback to stderr; set `EASY_CHEESE_DEBUG` or `CHEESE_DEBUG` to add one to deliberate refusals as well.
 
-## Lint findings
+## Resolve findings
+
+`resolve` validates the record and its links; there is no separate lint command.
 
 `stale-artifact-link` is a gating finding.
 It means a digest-bearing phase-artifact link is missing or no longer matches its recorded digest.
 Stop instead of dispatching when this finding is present.
+
+`schema-version-future` is a gating finding.
+It means a record carries a schema stamp newer than this archive reads.
+Stop and report that the archive is older than the record.
 
 `stale-commit` is advisory.
 It means the recorded repository commit exists but is not an ancestor of the current `HEAD`.
@@ -66,32 +80,21 @@ Display the code and detail with the resolved payload, but do not stop solely fo
 Advisory findings never hide the outcome.
 A gating finding remains a stop even when advisory findings are also present.
 
-`link-pending` is advisory.
-It means a sibling record holds an edge to this record whose reciprocal this record does not hold yet.
-The next `checkpoint` of this record applies the reciprocal edge host-side.
+## Checkpoint warnings
 
-`fork-pending` is advisory.
-It means a child record was forked from this record and this record has not reconciled the fork yet.
-The next `checkpoint` of this record applies the fork host-side; see [`work-graph.md`](work-graph.md).
+A checkpoint result carries a `warnings` list.
+`stale-notes` means a decision was added or transitioned and `notes` stayed as they were. The commit stamps `notes_revision_number` when it replaces `notes` and `decisions_revision_number` when it adds or transitions a decision, so a later projection shows the drift as a marker line at the top of `## Notes`. A `supersede` transition names its successor in `target_entry_id`; that entry may be one the same delta adds. The projection omits a superseded entry from its kind section and lists `- <id> -> <successor id>` under `## Superseded`, before `## Identifiers`.
+Rewrite `notes` and checkpoint again when the notes now contradict the decision.
+`unpinned-line-ref` means a context item or artifact link held a bare `path:line` that the checkpoint could not pin, because no checkout or no commit exists, or because the file is untracked, ignored, or absent. The reference stays as written. When `HEAD` holds the file, the checkpoint stores `path:line@<short HEAD sha>` instead and gives no warning. A `path#symbol` ref and an already pinned ref are stored unchanged. A digest for a `repo:` or `xdg:` link covers the whole file; its locator does not change the digest.
+The projection lists each local reference under `## Local references`, before `## Identifiers`, and only when one exists. A local reference is an `xdg:` ref, an absolute path or a `..` or symlink path that leaves the checkout, or a repository path that `git check-ignore` reports, such as `.cheese/`. When `git check-ignore` fails, every repository path counts as local. Outside a checkout only `xdg:` refs and absolute paths count. The reader sees which references need the author's machine.
 
-`notes-long` is advisory.
-It means `notes` holds more than 4000 characters; the hard limit is 6000.
+## Work-graph key in the resolve payload
 
-## Work-graph keys in the resolve payload
+The resolve payload carries `bridge` beside the outcome.
 
-The resolve payload carries two work-graph keys beside the outcome.
-
-- `pending` lists the pending reciprocal links, then the pending forks; [`work-graph.md`](work-graph.md) gives both shapes.
 - `bridge` is `{state, node_ref, wheypoint_ref}`, or `null` when no record resolved.
 - `bridge.state` is `bound`, `bridge-inactive`, or `unbound`, and it never changes `dispatchable`.
+- `matched_by` is `exact`, `prefix`, or `substring`, or `null` when nothing matched. A unique prefix or substring match still dispatches; callers read `matched_by` to see the guess.
 
-A schema-3 link that holds only `path` reads as `repo:<path>`.
-The kernel lint report records one receipt per such link in `normalizations`.
-These receipts are data, never findings, and the resolve payload does not carry them.
-
-A pending entry never changes the outcome or dispatch.
-When the outcome is `gated` and `pending` holds a fork entry, `/cheese --continue` prints one line beside the gate:
-
-```text
-fork-pending: <child ref> takes <entry ids> at this record's next checkpoint
-```
+A schema-3 link that holds only `path` reads as `repo:<path>` without changing stored bytes.
+The resolve payload does not carry a receipt for this read.

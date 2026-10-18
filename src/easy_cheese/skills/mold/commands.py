@@ -35,13 +35,6 @@ def _gate_graph(argv: list[str]) -> int:
     return main(argv)
 
 
-@bundle_command("approve")
-def _approve(argv: list[str]) -> int:
-    from easy_cheese.shared.mold_cook_approve import main
-
-    return main(argv)
-
-
 @bundle_command("finalize")
 def _finalize(argv: list[str]) -> int:
     from easy_cheese.skills.mold.contract_handlers import main
@@ -95,12 +88,8 @@ COMMANDS = (
         "Resolve the durable or transient artifact path for a phase and slug",
     ),
     derive_command(
-        _approve,
-        "Record the user's literal approval response as a retained MoldCookApproval",
-    ),
-    derive_command(
         _finalize,
-        "Finalize a Mold spec and publish only a consumer-valid handoff",
+        "Finalize a Mold spec and print a ready result for bound Cook execution",
     ),
     derive_command(
         _normalize_planner,

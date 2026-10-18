@@ -231,8 +231,8 @@ def test_fast_path_never_skips_a_gate() -> None:
     text = GROUNDING.read_text(encoding="utf-8").lower()
     _, _, fast_path = text.partition("## prior-evidence fast path")
     fast_path = fast_path.split("\n## ")[0]
-    assert "two-key handshake" in fast_path and "taste test" in fast_path, (
-        "the fast path must state that it skips work, never a gate: the two-key "
-        "handshake and the fresh-context fork taste test stay out of its reach "
+    assert "coherence self-check" in fast_path and "taste test" in fast_path, (
+        "the fast path must state that it skips work, never a gate: the coherence "
+        "self-check and the fresh-context fork taste test stay out of its reach "
         "(#543 non-goals)"
     )

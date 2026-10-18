@@ -1,12 +1,12 @@
 ---
 name: skill-authoring
-description: Codify the Iron Law, Red Flags, and Rationalization-table template that easy-cheese skills follow, plus the CSO description rule and size-budget checklist for authoring or revising a skill. Use when writing a new skill or SKILL.md, adding a discipline section, or reviewing an existing skill against easy-cheese's authoring conventions.
+description: Codify the discipline-section guidance, the CSO description rule, and the size-budget checklist that easy-cheese skills follow when authoring or revising a skill. Use when writing a new skill or SKILL.md, adding a discipline section, or reviewing an existing skill against easy-cheese's authoring conventions.
 ---
 
 # Skill Authoring — easy-cheese conventions
 
 This document codifies the skill-authoring rules for easy-cheese, drawn from
-obra/superpowers (CSO principle, Iron Law template, pressure-test gate) and
+obra/superpowers (CSO principle, pressure-test gate) and
 Matt Pocock's skills repo (size budget, authoring checklist). It is the
 canonical reference for anyone adding or revising a skill.
 
@@ -76,49 +76,16 @@ against this repo's own measured prose density.
 
 ---
 
-## Iron Law / Red Flags / Rationalization-table template
+## Discipline sections
 
 Discipline skills (skills that enforce a process, not just explain a
-technique) follow this three-part structure. Apply it in a
-`## Discipline` section in the SKILL.md body, or in a
-`references/<skill>-discipline.md` satellite file when the body is already
-at budget.
+technique) state their rule in a `## Discipline` section in the SKILL.md
+body, or in a `references/<skill>-discipline.md` satellite file when the body
+is already at budget.
 
-### Iron Law
-
-One sentence. States the gate that must never be skipped. The Iron Law is
-descriptive, not aspirational: it names what the skill *will* refuse to do
-without.
-
-Example shape:
-
-> **Iron Law:** No [output] without [prerequisite step] first.
-
-### Red Flags
-
-A short list of signals that the Iron Law is about to be violated. These are
-the observable pre-rationalizations — the moment before a step gets skipped.
-
-Example shape:
-
-> **Red Flags** — stop if you notice these:
-> - "The tests will obviously pass after this change."
-> - "I'll add the test in the next commit."
-> - [skill-specific patterns]
-
-### Rationalization table
-
-A table enumerating the excuses an agent uses to skip the Iron Law step, with
-an explicit rebuttal for each. The table is adversarial by design: it assumes
-the model will reach for a rationalization under pressure.
-
-| Rationalization | Why it fails | Required action |
-| --- | --- | --- |
-| "The change is obvious, tests would just mirror the code." | A test that mirrors code catches regressions; that is its job. | Write the test. |
-| [skill-specific row] | [rebuttal] | [required action] |
-
-Keep the table to the rationalizations actually observed in practice (5-10
-rows maximum). An exhaustive list defeats the purpose.
+Keep the section short. State the rule in one sentence, list the observable
+signals that the rule is about to be broken, and name the required action.
+Add a rebuttal table only for rationalizations observed in practice.
 
 ---
 
@@ -139,8 +106,9 @@ Before a skill ships, verify:
   silently miss the tail of a hidden second hop. A link to a reference file
   that is itself linked from a SKILL.md is a lateral citation, not a second
   hop, and passes.
-- [ ] **Discipline skills have the Iron Law section.** Any skill that enforces
-  a gate or a loop carries the three-part template above.
+- [ ] **Discipline sections are short.** A skill that enforces a gate or a
+  loop states the rule, the signals that it is about to be broken, and the
+  required action, in a few lines.
 - [ ] **Dual-listed.** The skill's directory appears in the
   `.claude-plugin/plugin.json` `skills` array. The CI check
   `tests/python/test_plugin_manifest.py::test_claude_plugin_manifest_matches_top_level_skills`
@@ -150,7 +118,7 @@ Before a skill ships, verify:
 
 ## Pressure-test-first authoring gate
 
-**Iron Law: no skill ships without a failing-baseline subagent run first.**
+**Rule: no skill ships without a failing-baseline subagent run first.**
 
 Before writing a new skill body:
 

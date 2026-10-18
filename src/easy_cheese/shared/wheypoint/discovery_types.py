@@ -55,7 +55,8 @@ class Candidate:
     """A hit plus the internal data discovery needs but never publishes.
 
     `entries` pairs each entry's kind with its state; `links` holds the
-    normalized effective ref of each artifact link.
+    normalized effective ref of each artifact link; `owners` holds the
+    lowercased owner of each active question.
     """
 
     hit: Hit
@@ -63,3 +64,4 @@ class Candidate:
     haystack: str
     entries: tuple[tuple[str, str], ...] = ()
     links: tuple[str, ...] = ()
+    owners: tuple[str, ...] = ()

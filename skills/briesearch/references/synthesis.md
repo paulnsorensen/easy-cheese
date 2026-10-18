@@ -60,7 +60,7 @@ Skip link verification only for inline `file:line` references and URLs that the 
 | Sources disagree | `don't know` — and surface the disagreement |
 | Single source per claim | cap at `speculating` unless authoritative for that claim |
 
-**Independent means a separate origin, not a separate URL or provider.** Combine pages that have the same root domain or upstream source. Determine criticality from the claim and capability. Documentation is critical for a version-specific API claim. Current web evidence is critical for a freshness claim. Local code is critical for current repository behavior. Repository knowledge is critical for prior decisions and rationale. Git hosting evidence usually supports other evidence. It becomes critical when the question asks about hosted state or precedent. A missing named provider does not reduce confidence when an equivalent source supplies the required evidence.
+**Independent means a separate origin, not a separate URL or provider.** Combine pages that have the same root domain or upstream source. Determine criticality from the claim and capability. Documentation is critical for a version-specific API claim. Current web evidence is critical for a freshness claim. Scholarly evidence is critical for a claim that rests on a paper or citation. Local code is critical for current repository behavior. Repository knowledge is critical for prior decisions and rationale. Git hosting evidence usually supports other evidence. It becomes critical when the question asks about hosted state or precedent. A missing named provider does not reduce confidence when an equivalent source supplies the required evidence.
 
 ## Absence and negative claims
 
@@ -108,6 +108,20 @@ Short form (always returned to the caller):
 [^source-1]: <absolute URL or `.cheese/...` path> (fetched <YYYY-MM-DD>).
 [^source-2]: <absolute URL or `.cheese/...` path> (fetched <YYYY-MM-DD>).
 ```
+
+### Library docs brief
+
+A run that uses the library docs brief method in `routing.md` adds one `### Library brief` section between `### Finding` and `### Evidence`:
+
+```markdown
+### Library brief
+- **Target and freshness:** <library id, docs version found, release marker and its date>
+- **What it offers:** <documented APIs, commands, modules, configuration knobs, or extension points for the use case>
+- **Documented practice:** <what the official docs recommend for the use case, with citations>
+- **Planning constraints:** <documented limits, required integration steps, deprecations, and version risks>
+```
+
+Report documented practice as evidence, not as a design choice. Each decision that the plan must make goes to `### Open questions`. Cite the docs index id and each extracted official URL in `## References`.
 
 Long form (when the question warranted a deep look):
 

@@ -302,13 +302,14 @@ def _mold_high_blast_handoff_menu() -> str:
 
 
 class TestMoldHighBlastHandoff:
-    def test_routes_high_blast_by_gate_disposition(self) -> None:
+    def test_routes_high_blast_by_work_type(self) -> None:
         body = _skill_corpus("mold")
         menu = _mold_high_blast_handoff_menu()
-        assert "/cook --auto <pointer-path>" in body
+        assert '/cook --auto --spec "$SPEC"' in body
         assert "fresh-context isolation" in menu.lower()
-        assert "Red-required behavior continues" in menu
-        assert "closed N/A skips Press" in menu
+        assert "Behavior work continues" in menu
+        assert "non-behavior work skips Press" in menu
+        assert "disposition" not in menu.lower()
 
     def test_offers_continue_flow(self) -> None:
         body = _skill_corpus("mold")
@@ -335,10 +336,11 @@ def _mold_low_medium_handoff_menu() -> str:
 
 
 class TestMoldLowMediumHandoff:
-    def test_routes_low_medium_by_gate_disposition(self) -> None:
+    def test_routes_low_medium_without_disposition(self) -> None:
         body = _skill_corpus("mold")
         menu = _mold_low_medium_handoff_menu()
-        assert "use the disposition-selected auto command" in body
+        assert "use the auto command" in body
+        assert "disposition-selected" not in body
         assert "**Implement the spec**" in menu
         assert "**Implement and auto-review**" in menu
 
@@ -574,21 +576,8 @@ class TestWheypointJoinSplitVerbs:
 
 
 # ---------------------------------------------------------------------------
-# Wiring: install fallback list and README skill table
+# Wiring: README skill table
 # ---------------------------------------------------------------------------
-
-
-class TestInstallFallbackList:
-    def test_includes_ultracook(self) -> None:
-        install_sh = _read(REPO_ROOT / "scripts" / "install.sh")
-        line = next(
-            line
-            for line in install_sh.splitlines()
-            if line.startswith("EC_FALLBACK_SKILLS=")
-        )
-        assert "ultracook" in line, (
-            "EC_FALLBACK_SKILLS must include ultracook so offline installs ship it"
-        )
 
 
 class TestReadmeMentionsUltracook:
@@ -1170,9 +1159,9 @@ class TestWheypointDeriveNextFromBlockers:
         body = _skill("wheypoint")
         body_lower = body.lower()
         # Must instruct reading the blockers section before authoring next:.
-        assert (
-            "open questions and blockers" in body_lower or "blockers" in body_lower
-        ), "wheypoint must tell the author to read the Open-questions/blockers section"
+        assert "open questions" in body_lower, (
+            "wheypoint must tell the author to read the open questions"
+        )
         # The derive-from-blockers-not-optimism rule.
         assert "optimism" in body_lower or "derive" in body_lower, (
             "wheypoint must state next: derives from blockers, not optimism"

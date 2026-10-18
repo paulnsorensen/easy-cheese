@@ -1,0 +1,27 @@
+name: retarget dist prs
+
+# dist is the default branch, so new pull requests default to it. Only the
+# `publish dist` workflow writes dist; move every pull request to main.
+# pull_request_target covers fork pull requests. No step checks out or runs
+# pull request code.
+on:
+  pull_request_target:
+    types: [opened, reopened]
+    branches: [dist]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  retarget:
+    name: retarget to main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Change the base to main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |-
+          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --base main
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body \
+            "Moved the base to \`main\`: \`dist\` is the published tree, and only CI writes it. Branch from \`main\`; a branch cut from \`dist\` carries archives and fails CI."

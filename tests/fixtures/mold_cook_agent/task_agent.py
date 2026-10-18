@@ -1,4 +1,4 @@
-"""Fixture OMP task agent that drives real Mold and Cook bundle calls."""
+"""Fixture task agent that finalizes Mold and executes direct Cook inputs."""
 
 from __future__ import annotations
 
@@ -10,261 +10,159 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
-test_root = Path(os.environ["MOLD_COOK_TEST_ROOT"])
-sys.path.insert(0, str(test_root))
-sys.path.insert(0, str(test_root / "src"))
+import attrs
 
-from easy_cheese_schemas import canonical_bytes  # noqa: E402
-from easy_cheese_schemas.mold_cook import MoldCookApprovalDecision  # noqa: E402
+TEST_ROOT = Path(os.environ["MOLD_COOK_TEST_ROOT"])
+sys.path.insert(0, str(TEST_ROOT))
+sys.path.insert(0, str(TEST_ROOT / "src"))
+
+from easy_cheese.skills.cook import execute_bound_plan  # noqa: E402
+from easy_cheese.shared.mold_cook_handoff import validate_bound_execution  # noqa: E402
+from easy_cheese_schemas import ArtifactRef, MoldCookCoverage, canonical_bytes  # noqa: E402
+from easy_cheese_schemas.schema_runtime import (  # noqa: E402
+    structure_contract_value,
+)
+from easy_cheese_schemas.contracts import (  # noqa: E402
+    Criterion,
+    PlannerDisposition,
+    PlannerUncertainty,
+    UncertaintyScope,
+    CriterionDisposition,
+    CriterionResultWriterView,
+    CurdResultWriterView,
+    DeliverableWriterView,
+    ReviewDisposition,
+    ReviewResultWriterView,
+)
 from tests.python.test_mold_cook_producer import (  # noqa: E402
-    taste_fixture,
     make_planner_result,
     make_spec,
-    response_decision,
 )
 
 
-def _call(
-    bundle: Path,
-    repository: Path,
-    *args: str,
-    check: bool = True,
-) -> tuple[dict[str, object], int]:
+def _call(bundle: Path, repository: Path, *args: str) -> dict[str, object]:
     result = subprocess.run(
-        [sys.executable, str(bundle), *args],
-        cwd=repository,
-        capture_output=True,
-        text=True,
-        check=False,
+        [sys.executable, str(bundle), *args], cwd=repository,
+        capture_output=True, text=True, check=False,
     )
     if result.returncode != 0:
-        if check:
-            raise SystemExit(f"{bundle.name} failed: {result.stderr}")
-        return {}, result.returncode
+        raise SystemExit(f"{bundle.name} failed: {result.stderr}")
     decoded = cast(object, json.loads(result.stdout))
     if not isinstance(decoded, Mapping):
         raise SystemExit(f"{bundle.name} did not return an object")
-    return dict(cast(Mapping[str, object], decoded)), result.returncode
+    return dict(cast(Mapping[str, object], decoded))
 
 
-responses = cast(object, json.loads(os.environ["MOLD_COOK_HARNESS_RESPONSES"]))
-if not isinstance(responses, Mapping):
-    raise SystemExit("missing harness approval responses")
-response_map = cast(Mapping[str, object], responses)
-if not isinstance(response_map.get("plan"), str):
-    raise SystemExit("missing harness plan response")
-scope_response = response_map.get("scope")
-if scope_response is not None and not isinstance(scope_response, str):
-    raise SystemExit("invalid harness scope response")
-plan_response = cast(str, response_map["plan"])
-plan_decision = response_decision(plan_response)
+def _write_feature(repository: Path, context: Mapping[str, object]) -> CurdResultWriterView:
+    criteria = cast(tuple[Criterion, ...], context["criteria"])
+    feature = repository / "src" / "core.py"
+    feature.parent.mkdir(parents=True, exist_ok=True)
+    _ = feature.write_text("FEATURE_READY = True\n", encoding="utf-8")
+    return CurdResultWriterView(
+        criterion_results=tuple(
+            CriterionResultWriterView(
+                criterion_id=item.criterion_id,
+                disposition=CriterionDisposition.PASSED,
+                evidence_keys=("src/core.py",),
+            )
+            for item in criteria
+        ),
+        deliverables=(
+            DeliverableWriterView(
+                role="feature", path="src/core.py", media_type="text/x-python",
+            ),
+        ),
+    )
+
+
+def _clean_review(_request: object) -> ReviewResultWriterView:
+    return ReviewResultWriterView(disposition=ReviewDisposition.CLEAN, findings=())
+
+
+def _unexpected_diagnosis(_request: object) -> object:
+    raise AssertionError("clean feature must not dispatch diagnosis")
+
 
 repository = Path(os.environ["MOLD_COOK_FIXTURE_REPOSITORY"])
 mold = Path(os.environ["MOLD_COOK_MOLD_BUNDLE"])
-cook = Path(os.environ["MOLD_COOK_COOK_BUNDLE"])
 artifacts = repository / "artifacts"
 spec = make_spec(repository)
 planner = make_planner_result()
+if sys.argv[1:] == ["--partial"]:
+    planner = attrs.evolve(
+        planner,
+        disposition=PlannerDisposition.PARTIAL,
+        unresolved_work=(
+            PlannerUncertainty(
+                description="unselected parent work remains",
+                scope=UncertaintyScope.OMITTED_WORK,
+            ),
+        ),
+    )
+elif sys.argv[1:]:
+    raise SystemExit("usage: task_agent.py [--partial]")
+planner_path = repository / "planner.json"
+plan_path = repository / "plan.json"
+_ = planner_path.write_bytes(canonical_bytes(planner))
+_ = plan_path.write_bytes(canonical_bytes(planner.plan))
 
-prepare, prepare_code = _call(
-    cook,
-    repository,
-    "prepare",
-    "--spec",
-    str(spec),
-    "--mode",
-    "full",
-    "--repository-root",
-    str(repository),
-    "--artifact-root",
-    str(artifacts),
+finalized = _call(
+    mold, repository, "finalize", str(spec),
+    "--planner-result", str(planner_path),
+    "--plan", str(plan_path),
+    "--artifact-root", str(artifacts),
+    "--operation-id", "agent",
+    "--request-id", "request-1",
 )
-if prepare.get("outcome") != "needs-planning":
-    raise SystemExit(f"Cook preparation did not reach planning: {prepare}")
-request_id = prepare.get("request_id")
-if not isinstance(request_id, str):
-    raise SystemExit("Cook preparation did not name a request id")
-
+if finalized.get("status") != "ready":
+    raise SystemExit(f"Mold did not return ready direct inputs: {finalized}")
+result_path = Path(cast(str, finalized["result_path"]))
+if not result_path.is_file():
+    raise SystemExit("Mold did not retain its finalization result")
+refs = {
+    name: structure_contract_value(finalized[name], ArtifactRef, name)
+    for name in ("spec_ref", "planner_result_ref", "plan_ref")
+}
+coverage = structure_contract_value(finalized["coverage"], MoldCookCoverage, "coverage")
+_ = validate_bound_execution(
+    spec_ref=refs["spec_ref"], planner_result_ref=refs["planner_result_ref"],
+    plan_ref=refs["plan_ref"], coverage=coverage, artifact_root=artifacts,
+)
+result = execute_bound_plan(
+    request_id=cast(str, finalized["request_id"]),
+    spec_ref=refs["spec_ref"], planner_result_ref=refs["planner_result_ref"],
+    plan_ref=refs["plan_ref"], coverage=coverage, artifact_root=artifacts,
+    repository_root=repository,
+    dispatch_writer=lambda context: _write_feature(repository, context),
+    dispatch_review=_clean_review,
+    dispatch_diagnosis=_unexpected_diagnosis,
+)
+if (
+    result.completed_curds != coverage.curd_ids
+    or result.remainder != planner.unresolved_work
+    or result.whole_task_complete == bool(planner.unresolved_work)
+):
+    raise SystemExit("Cook did not preserve the finalized curd and remainder")
+relative_result = str(result_path.relative_to(repository))
 events: list[dict[str, object]] = [
     {"type": "input_classified", "input_kind": "direct_spec"},
     {
-        "type": "prepare",
-        "mode": "full",
-        "outcome": prepare["outcome"],
-        "tool": "scripts/cook.pyz prepare",
-        "returncode": prepare_code,
+        "type": "plan_materialized",
+        "outcome": planner.disposition.value,
+        "tool": "scripts/mold.pyz finalize",
     },
+    {"type": "bound_inputs", "ready": True, "artifact_ref": relative_result},
 ]
-
-if scope_response is not None:
-    scope_decision = response_decision(scope_response)
-    scope_approval, _ = _call(
-        cook,
-        repository,
-        "approve",
-        str(spec),
-        "--artifact-root",
-        str(artifacts),
-        "--request-id",
-        request_id,
-        "--kind",
-        "scope",
-        "--response",
-        scope_response,
-        "--curd-id",
-        "curd-1",
-    )
-    prepare_path = repository / "prepare.json"
-    _ = prepare_path.write_text(json.dumps(prepare), encoding="utf-8")
-    scope_approval_path = Path(cast(str, scope_approval["approval_path"]))
-    resubmitted, resubmit_code = _call(
-        cook,
-        repository,
-        "resubmit",
-        str(prepare_path),
-        "--source",
-        str(spec),
-        "--repository-root",
-        str(repository),
-        "--artifact-root",
-        str(artifacts),
-        "--scope-approval",
-        str(scope_approval_path),
-        check=False,
-    )
-    resubmit_outcome = str(resubmitted.get("outcome", "refused"))
-    events.extend(
-        [
-            {
-                "type": "approval_recorded",
-                "kind": "scope",
-                "source": "harness",
-                "decision": scope_decision.value,
-                "response": scope_response,
-            },
-            {
-                "type": "prepare",
-                "mode": "full",
-                "outcome": resubmit_outcome,
-                "tool": "scripts/cook.pyz resubmit",
-                "returncode": resubmit_code,
-            },
-        ]
-    )
-    if scope_decision is not MoldCookApprovalDecision.APPROVED:
-        if resubmit_code != 0 or resubmit_outcome not in {"blocked", "invalid"}:
-            raise SystemExit(
-                f"Cook did not hold a refused scope approval: {resubmit_outcome}",
-            )
-        print(json.dumps({"scenario": "fixture-agent", "events": events}))
-        raise SystemExit(0)
-    if resubmit_code != 0:
-        raise SystemExit("Cook refused the approved scope approval")
-
-planner_path = repository / "planner.json"
-plan_path = repository / "plan.json"
-taste_path = repository / "taste.json"
-ledger_path = repository / "ledger.json"
-_ = planner_path.write_bytes(canonical_bytes(planner))
-_ = plan_path.write_bytes(canonical_bytes(planner.plan))
-plan_approval, _ = _call(
-    mold,
-    repository,
-    "approve",
-    str(spec),
-    "--artifact-root",
-    str(artifacts),
-    "--request-id",
-    "request-1",
-    "--kind",
-    "plan",
-    "--response",
-    plan_response,
-    "--planner-result",
-    str(planner_path),
-)
-approval_path = Path(cast(str, plan_approval["approval_path"]))
-taste = taste_fixture(spec)
-_ = taste_path.write_text(
-    json.dumps(
-        {
-            "draft_sha256": taste.draft_sha256,
-            "verdict": taste.verdict,
-            "forks": [],
-            "contradictions": [],
-            "orphaned_decisions": [],
-            "unsupported_assumptions": [],
-            "acceptance_gaps": [],
-        }
-    ),
-    encoding="utf-8",
-)
-_ = ledger_path.write_text("[]\n", encoding="utf-8")
-
-finalized, finalize_code = _call(
-    mold,
-    repository,
-    "finalize",
-    str(spec),
-    "--approval",
-    str(approval_path),
-    "--planner-result",
-    str(planner_path),
-    "--plan",
-    str(plan_path),
-    "--taste-result",
-    str(taste_path),
-    "--ledger",
-    str(ledger_path),
-    "--artifact-root",
-    str(artifacts),
-    "--operation-id",
-    "agent",
-    "--request-id",
-    "request-1",
-)
-if finalized.get("status") != "ready":
-    raise SystemExit(f"Mold finalization did not publish a ready handoff: {finalized}")
-
-pointer = artifacts / "pointers" / "agent.json"
-if not pointer.is_file() or finalized.get("ready") is not True:
-    raise SystemExit("Mold did not publish the accepted pointer")
-accepted, accept_code = _call(
-    cook,
-    repository,
-    "accept",
-    str(pointer),
-    "--artifact-root",
-    str(artifacts),
-)
-
-events.extend(
-    [
-        {"type": "approval_requested", "kind": "plan"},
-        {
-            "type": "approval_recorded",
-            "kind": "plan",
-            "source": "harness",
-            "decision": plan_decision.value,
-            "response": plan_response,
-        },
-        {
-            "type": "plan_materialized",
-            "outcome": finalized.get("status"),
-            "tool": "scripts/mold.pyz finalize",
-            "returncode": finalize_code,
-        },
-        {
-            "type": "handoff_published",
-            "ready": finalized.get("ready"),
-            "artifact_ref": "artifacts/pointers/agent.json",
-        },
-        {
-            "type": "consumer_accept",
-            "ready": accept_code == 0 and bool(accepted),
-            "artifact_ref": "artifacts/pointers/agent.json",
-            "tool": "scripts/cook.pyz accept",
-        },
-    ]
-)
+if result.remainder:
+    events.append({
+        "type": "remainder_preserved",
+        "unresolved_work": [item.description for item in result.remainder],
+    })
+events.append({
+    "type": "feature_write",
+    "path": "src/core.py",
+    "artifact_ref": relative_result,
+    "whole_task_complete": result.whole_task_complete,
+    "remainder": [item.description for item in result.remainder],
+})
 print(json.dumps({"scenario": "fixture-agent", "events": events}))

@@ -3,8 +3,8 @@
 Mold records the non-obvious decisions of a session as Architecture Decision
 Records (ADRs). The approved spec and its ADRs are **durable** project records:
 the spec keeps the implementation contract, while ADRs preserve the rationale a
-future session would otherwise re-derive. Write them at Curdle, after the two-key
-handshake, in phase one's local atomic write.
+future session would otherwise re-derive. Write them at Curdle, after the coherence
+self-check, in phase one's local atomic write.
 
 ## What earns an ADR
 

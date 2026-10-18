@@ -1,4 +1,4 @@
-"""Focused regressions for the Cook preparation-to-execution seam."""
+"""Focused regressions for direct Cook execution."""
 
 from __future__ import annotations
 
@@ -16,29 +16,8 @@ import pytest
 import easy_cheese.shared.workflow as workflow
 from easy_cheese.shared.fanout.press_types import PressGateResult
 from easy_cheese.shared.fanout.run_fan import PressDispatcher
-from easy_cheese.shared.artifacts import ArtifactResolutionError
-from easy_cheese.shared.mold_cook_handoff import (
-    canonical_mold_cook_proposal,
-    publish_mold_cook_handoff,
-)
-from easy_cheese.shared.publication import (
-    PayloadDigestMismatchError,
-    PublicationError,
-    atomic_write,
-    request_digest,
-)
-from easy_cheese.skills.cook import execute_accepted_handoff
-from easy_cheese.skills.cook import contract_handlers
-from easy_cheese.skills.cook.preparation import plan_stages
-from easy_cheese.skills.cook.preparation import (
-    CookEvidenceError,
-    CookHoldClearance,
-    PreparationEvidence,
-    SetupEvidence,
-    prepare,
-    resubmit,
-)
-from easy_cheese.skills.cook.preparation.setup import apply_runner_setup
+from easy_cheese.shared.publication import PublicationError, atomic_write
+from easy_cheese.skills.cook import execute_bound_plan
 from easy_cheese_schemas import (
     ArtifactRef,
     ContractVersion,
@@ -83,31 +62,12 @@ from easy_cheese_schemas.contracts import (
     SemanticCurd,
     UncertaintyScope,
 )
-
-
-from easy_cheese_schemas.mold_cook import (
-    MOLD_COOK_APPROVAL_SCHEMA_URI,
-    MOLD_COOK_HANDOFF_SCHEMA_URI,
-    CookExecutionHold,
-    CookHoldKind,
-    CookPreparationOutcome,
-    CookSetupAuthorization,
-    MoldCookApproval,
-    MoldCookApprovalDecision,
-    MoldCookApprovalKind,
-    MoldCookApprovalSource,
-    MoldCookCoverage,
-    MoldCookHandoff,
-    MoldCookInputKind,
-    MoldCookMode,
-)
+from easy_cheese_schemas.mold_cook import MoldCookCoverage
 from easy_cheese_schemas.schema_runtime import ContractValidationError
 
-from tests.python.mold_cook_helpers import bind_mold_cook_approval
 
-
-class ExecuteAcceptedHandoffKwargs(TypedDict):
-    artifact_root: str | Path | None
+class ExecuteBoundPlanKwargs(TypedDict):
+    artifact_root: str | Path
     repository_root: str | Path
     dispatch_writer: workflow.WriterDispatch
     dispatch_review: workflow.ReviewDispatch
@@ -117,20 +77,12 @@ class ExecuteAcceptedHandoffKwargs(TypedDict):
 
 
 class _FullFixture(TypedDict):
-    pointer: Path
     plan: CurdPlan
     planner: PlannerResult
-    handoff: MoldCookHandoff
-    spec: Path
+    planner_ref: ArtifactRef
+    plan_ref: ArtifactRef
+    coverage: MoldCookCoverage
     spec_ref: ArtifactRef
-    scope_approval_ref: ArtifactRef
-    plan_approval_ref: ArtifactRef
-    proposal_ref: ArtifactRef
-    response_ref: ArtifactRef
-    scope_approval: MoldCookApproval
-    plan_approval: MoldCookApproval
-    taste_verdict_ref: ArtifactRef
-    taste_ledger_ref: ArtifactRef
 
 
 def _version(contract: type) -> ContractVersion:
@@ -174,48 +126,6 @@ def _write_ref(
     )
 
 
-def _runner_approval_ref(
-    root: Path,
-    *,
-    spec_ref: ArtifactRef,
-    response_ref: ArtifactRef,
-    coverage: MoldCookCoverage,
-    authorization: CookSetupAuthorization,
-) -> ArtifactRef:
-    runner_proposal_ref = _write_ref(
-        root,
-        canonical_mold_cook_proposal(
-            request_id="cook-request",
-            kind=MoldCookApprovalKind.RUNNER,
-            spec_digest=spec_ref.digest,
-            coverage=coverage,
-            setup_authorization=authorization,
-        ),
-        artifact_id="runner-proposal",
-        role="proposal",
-        filename="runner-proposal.json",
-    )
-    runner_approval = bind_mold_cook_approval(
-        request_id="cook-request",
-        kind=MoldCookApprovalKind.RUNNER,
-        decision=MoldCookApprovalDecision.APPROVED,
-        source=MoldCookApprovalSource.USER_RESPONSE,
-        spec_digest=spec_ref.digest,
-        proposal_ref=runner_proposal_ref,
-        response_ref=response_ref,
-        response_text="Approve",
-        response_source="response.txt",
-        coverage=coverage,
-        setup_authorization=authorization,
-    )
-    return _write_ref(
-        root,
-        runner_approval,
-        artifact_id="runner-approval",
-        role="runner_approval",
-        filename="runner-approval.json",
-        schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
-    )
 
 
 def _curd(curd_id: str, *, dependencies: tuple[str, ...] = ()) -> SemanticCurd:
@@ -240,10 +150,9 @@ def _curd(curd_id: str, *, dependencies: tuple[str, ...] = ()) -> SemanticCurd:
 def _full_fixture(
     root: Path,
     *,
-    coverage_ids: tuple[str, ...] = ("root",),
+    coverage_ids: tuple[str, ...] | None = None,
     partial: bool = True,
     curds: tuple[SemanticCurd, ...] | None = None,
-    scope_coverage_ids: tuple[str, ...] = ("root",),
 ) -> _FullFixture:
     root.mkdir(parents=True, exist_ok=True)
     spec_content = (
@@ -302,324 +211,194 @@ def _full_fixture(
         schema_uri="https://schemas.easy-cheese.dev/curd-plan",
     )
     coverage = MoldCookCoverage(
-        curd_ids=coverage_ids,
+        curd_ids=(
+            tuple(item.curd_id for item in curds)
+            if coverage_ids is None
+            else coverage_ids
+        ),
         unresolved_work=remainder,
     )
-    scope_coverage = MoldCookCoverage(curd_ids=scope_coverage_ids)
-    scope_proposal_ref = _write_ref(
-        root,
-        canonical_mold_cook_proposal(
-            request_id="cook-request",
-            kind=MoldCookApprovalKind.SCOPE,
-            spec_digest=spec_ref.digest,
-            coverage=scope_coverage,
-        ),
-        artifact_id="scope-proposal",
-        role="proposal",
-        filename="scope-proposal.md",
-        media_type="text/markdown",
-    )
-    proposal_ref = _write_ref(
-        root,
-        canonical_mold_cook_proposal(
-            request_id="cook-request",
-            kind=(
-                MoldCookApprovalKind.PARTIAL_PLAN
-                if partial
-                else MoldCookApprovalKind.PLAN
-            ),
-            spec_digest=spec_ref.digest,
-            coverage=coverage,
-            planner_result=planner,
-            plan_digest=plan.digest,
-        ),
-        artifact_id="plan-proposal",
-        role="proposal",
-        filename="plan-proposal.json",
-    )
-    response_ref = _write_ref(
-        root,
-        b"Approve",
-        artifact_id="response",
-        role="response",
-        filename="response.txt",
-        media_type="text/plain",
-    )
-    scope_approval = bind_mold_cook_approval(
-        request_id="cook-request",
-        kind=MoldCookApprovalKind.SCOPE,
-        decision=MoldCookApprovalDecision.APPROVED,
-        source=MoldCookApprovalSource.USER_RESPONSE,
-        spec_digest=spec_ref.digest,
-        proposal_ref=scope_proposal_ref,
-        response_ref=response_ref,
-        response_text="Approve",
-        response_source="response.txt",
-        coverage=scope_coverage,
-    )
-    approval = bind_mold_cook_approval(
-        request_id="cook-request",
-        kind=(
-            MoldCookApprovalKind.PARTIAL_PLAN if partial else MoldCookApprovalKind.PLAN
-        ),
-        decision=MoldCookApprovalDecision.APPROVED,
-        source=MoldCookApprovalSource.USER_RESPONSE,
-        spec_digest=spec_ref.digest,
-        proposal_ref=proposal_ref,
-        response_ref=response_ref,
-        response_text="Approve",
-        response_source="response.txt",
-        coverage=coverage,
-        plan_digest=plan.digest,
-    )
-    scope_approval_ref = _write_ref(
-        root,
-        scope_approval,
-        artifact_id="scope-approval",
-        role="approval",
-        filename="scope-approval.json",
-        schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
-    )
-    approval_ref = _write_ref(
-        root,
-        approval,
-        artifact_id="approval",
-        role="approval",
-        filename="approval.json",
-        schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
-    )
-    taste_verdict_ref = _write_ref(
-        root,
-        b'{"verdict":"pass"}',
-        artifact_id="taste-verdict",
-        role="taste_verdict",
-        filename="taste-verdict.json",
-        schema_uri="https://schemas.easy-cheese.dev/fork-taste-verdict",
-    )
-    taste_ledger_ref = _write_ref(
-        root,
-        b"[]",
-        artifact_id="taste-ledger",
-        role="taste_ledger",
-        filename="taste-ledger.json",
-        schema_uri="https://schemas.easy-cheese.dev/taste-ledger",
-    )
-    handoff = MoldCookHandoff(
-        contract_version=_version(MoldCookHandoff),
-        request_id="cook-request",
-        input_kind=MoldCookInputKind.DIRECT_SPEC,
-        mode=MoldCookMode.FULL,
-        spec_ref=spec_ref,
-        approval_ref=approval_ref,
-        coverage=coverage,
-        planner_result_ref=planner_ref,
-        plan_ref=plan_ref,
-        taste_verdict_ref=taste_verdict_ref,
-        taste_ledger_ref=taste_ledger_ref,
-    )
-    operation_id = "cook-full-fixture"
-    _ = publish_mold_cook_handoff(
-        handoff,
-        request_digest=request_digest(
-            "raw",
-            {"request_id": handoff.request_id},
-            source_phase="mold",
-            destination_phase="cook",
-            payload_schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI,
-        ),
-        operation_id=operation_id,
-        artifact_root=root,
-    )
     return {
-        "pointer": root / "pointers" / f"{operation_id}.json",
         "plan": plan,
         "planner": planner,
-        "handoff": handoff,
-        "spec": root / "spec.md",
+        "planner_ref": planner_ref,
+        "plan_ref": plan_ref,
+        "coverage": coverage,
         "spec_ref": spec_ref,
-        "scope_approval_ref": scope_approval_ref,
-        "plan_approval_ref": approval_ref,
-        "proposal_ref": proposal_ref,
-        "response_ref": response_ref,
-        "scope_approval": scope_approval,
-        "plan_approval": approval,
-        "taste_verdict_ref": taste_verdict_ref,
-        "taste_ledger_ref": taste_ledger_ref,
     }
 
 
-def test_full_preparation_skips_scope_gate_and_keeps_explicit_approval(
-    tmp_path: Path,
-) -> None:
-    root = tmp_path / "scope-first"
+def _execute(
+    fixture: _FullFixture,
+    *,
+    artifact_root: str | Path,
+    repository_root: str | Path,
+    dispatch_writer: workflow.WriterDispatch,
+    dispatch_review: workflow.ReviewDispatch,
+    dispatch_diagnosis: workflow.DiagnosisDispatch,
+    dispatch_press: PressDispatcher | None = None,
+    evidence: Mapping[str, EvidenceRef] | None = None,
+):
+    return execute_bound_plan(
+        request_id="cook-request",
+        spec_ref=fixture["spec_ref"],
+        planner_result_ref=fixture["planner_ref"],
+        plan_ref=fixture["plan_ref"],
+        coverage=fixture["coverage"],
+        artifact_root=artifact_root,
+        repository_root=repository_root,
+        dispatch_writer=dispatch_writer,
+        dispatch_review=dispatch_review,
+        dispatch_diagnosis=dispatch_diagnosis,
+        dispatch_press=dispatch_press,
+        evidence=evidence,
+    )
+
+
+
+
+def test_direct_execution_inputs_keep_exact_partial_remainder(tmp_path: Path) -> None:
+    from easy_cheese.shared.mold_cook_handoff import validate_bound_execution
+
+    root = tmp_path / "direct"
     fixture = _full_fixture(root)
-    planner = fixture["planner"]
-    scope_approval = fixture["scope_approval_ref"]
-    plan_approval = fixture["plan_approval_ref"]
-    dispatches: list[object] = []
-
-    def forbidden_planner(request: object) -> object:
-        dispatches.append(request)
-        raise AssertionError("planning still needs host planner output")
-
-    before_scope = prepare(
-        fixture["spec"],
-        request_id="cook-request",
-        repository_root=tmp_path,
+    coverage = fixture["coverage"]
+    assert validate_bound_execution(
+        spec_ref=fixture["spec_ref"],
+        planner_result_ref=fixture["planner_ref"],
+        plan_ref=fixture["plan_ref"],
+        coverage=coverage,
         artifact_root=root,
-        evidence=PreparationEvidence(planner_dispatch=forbidden_planner),
-    )
-    assert before_scope.outcome is CookPreparationOutcome.NEEDS_PLANNING
-    assert before_scope.approved_scope_ref is not None
-    assert before_scope.approved_scope_ref.digest == fixture["spec_ref"].digest
-    assert not dispatches
-
-    after_scope = prepare(
-        fixture["spec"],
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=root,
-        evidence=PreparationEvidence(scope_approval=scope_approval),
-    )
-    assert after_scope.outcome is CookPreparationOutcome.NEEDS_PLANNING
-
-    after_plan = prepare(
-        fixture["spec"],
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=root,
-        evidence=PreparationEvidence(
-            scope_approval=scope_approval,
-            planner_result=planner,
-        ),
-    )
-    assert after_plan.outcome is CookPreparationOutcome.NEEDS_APPROVAL
-
-    ready = prepare(
-        fixture["spec"],
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=root,
-        evidence=PreparationEvidence(
-            scope_approval=scope_approval,
-            planner_result=planner,
-            plan_approval=plan_approval,
-        ),
-    )
-    resumed = resubmit(
-        ready,
-        source=fixture["spec"],
-        repository_root=tmp_path,
-        artifact_root=root,
-        evidence=PreparationEvidence(
-            scope_approval=scope_approval,
-            planner_result=planner,
-            plan_approval=plan_approval,
-        ),
-    )
-    assert ready.outcome is CookPreparationOutcome.READY
-    assert resumed.outcome is CookPreparationOutcome.READY
-    assert resumed.coverage == ready.coverage
+    ) == fixture["plan"]
+    with pytest.raises(ContractValidationError, match="partial coverage"):
+        _ = validate_bound_execution(
+            spec_ref=fixture["spec_ref"],
+            planner_result_ref=fixture["planner_ref"],
+            plan_ref=fixture["plan_ref"],
+            coverage=attrs.evolve(coverage, unresolved_work=()),
+            artifact_root=root,
+        )
+    with pytest.raises(ContractValidationError, match="omits dependencies: root"):
+        _ = validate_bound_execution(
+            spec_ref=fixture["spec_ref"],
+            planner_result_ref=fixture["planner_ref"],
+            plan_ref=fixture["plan_ref"],
+            coverage=attrs.evolve(coverage, curd_ids=("leaf",)),
+            artifact_root=root,
+        )
 
 
-def test_full_plan_reaches_accepted_handoff_without_scope_approval(
-    tmp_path: Path,
+@pytest.mark.parametrize("directive", ["do-not-implement", "do-not-proceed"])
+def test_direct_execution_rejects_request_directive_before_dispatch(
+    tmp_path: Path, directive: str
 ) -> None:
-    root = tmp_path / "no-scope-approval"
-    fixture = _full_fixture(root, partial=False, coverage_ids=("root", "leaf"))
-    ready = prepare(
-        fixture["spec"],
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=root,
-        evidence=PreparationEvidence(
-            planner_result=fixture["planner"],
-            plan_approval=fixture["plan_approval_ref"],
-        ),
+    root = tmp_path / "directive"
+    fixture = _full_fixture(root, partial=False, curds=(_curd("root"),))
+    spec = (root / "spec.md").read_bytes().replace(
+        b"gates_overridden: []\n",
+        f"gates_overridden: []\nrequest_directive: {directive}\n".encode(),
+        1,
+    )
+    fixture["spec_ref"] = _write_ref(
+        root, spec, artifact_id="spec", role="spec", filename="spec.md",
+        media_type="text/markdown",
+    )
+    before = {path.relative_to(root) for path in root.rglob("*")}
+
+    with pytest.raises(ContractValidationError, match="request directive"):
+        _ = _execute(
+            fixture, artifact_root=root, repository_root=tmp_path,
+            dispatch_writer=_forbidden_writer, dispatch_review=_review,
+            dispatch_diagnosis=_diagnosis,
+        )
+    new_files = {
+        path for path in root.rglob("*")
+        if path.is_file() and path.relative_to(root) not in before
+    }
+    assert {path.read_bytes() for path in new_files} <= {
+        (root / name).read_bytes() for name in ("spec.md", "planner.json", "plan.json")
+    }
+
+
+def test_execution_rejects_detached_plan_before_dispatch(tmp_path: Path) -> None:
+    root = tmp_path / "detached"
+    fixture = _full_fixture(root, partial=False)
+    detached = CurdPlan.signed(
+        contract_version=_version(CurdPlan),
+        plan_id="other-plan",
+        revision=1,
+        objective=fixture["plan"].objective,
+        curds=fixture["plan"].curds,
+    )
+    fixture["plan_ref"] = _write_ref(
+        root,
+        detached,
+        artifact_id="other-plan",
+        role="curd_plan",
+        filename="other-plan.json",
+        schema_uri="https://schemas.easy-cheese.dev/curd-plan",
     )
 
-    assert ready.outcome is CookPreparationOutcome.READY
-    assert ready.handoff_ref is not None
-    assert any(
-        ref.role == "approved_scope" and ref.digest == fixture["spec_ref"].digest
-        for ref in ready.references
-    )
-    accepted = contract_handlers.accept(
-        urlsplit(ready.handoff_ref.uri).path,
-        spec=str(fixture["spec"]),
-        artifact_root=str(root),
-    )
-    handoff = cast(dict[str, object], accepted["value"])
-    assert handoff["mode"] == "full"
-    assert handoff["coverage"] is not None
+    with pytest.raises(ContractValidationError, match="detached"):
+        _ = _execute(
+            fixture,
+            artifact_root=root,
+            repository_root=tmp_path,
+            dispatch_writer=_forbidden_writer,
+            dispatch_review=_review,
+            dispatch_diagnosis=_diagnosis,
+        )
 
 
-def test_plan_approval_must_match_displayed_plan_proposal(
-    tmp_path: Path,
+def test_execution_rejects_stale_plan_digest_before_dispatch(tmp_path: Path) -> None:
+    root = tmp_path / "stale-plan"
+    fixture = _full_fixture(root, partial=False)
+    plan_path = Path(urlsplit(fixture["plan_ref"].uri).path)
+    _ = plan_path.write_bytes(plan_path.read_bytes().replace(b"cook-plan", b"cook-plAn", 1))
+
+    with pytest.raises(ContractValidationError, match="stale or corrupt"):
+        _ = _execute(
+            fixture,
+            artifact_root=root,
+            repository_root=tmp_path,
+            dispatch_writer=_forbidden_writer,
+            dispatch_review=_review,
+            dispatch_diagnosis=_diagnosis,
+        )
+
+
+@pytest.mark.parametrize("request_id", ["bad id", "x" * 129, "x" * 111])
+def test_execution_rejects_invalid_persisted_ids_before_dispatch(
+    tmp_path: Path, request_id: str
 ) -> None:
-    root = tmp_path / "detached-plan-approval"
-    fixture = _full_fixture(root)
-    scope_approval = fixture["scope_approval_ref"]
-    planner = fixture["planner"]
+    root = tmp_path / "invalid-id"
+    fixture = _full_fixture(root, partial=False, curds=(_curd("root"),))
+    before = {path.relative_to(root) for path in root.rglob("*")}
 
-    proposed = prepare(
-        fixture["spec"],
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=root,
-        evidence=PreparationEvidence(
-            scope_approval=fixture["scope_approval_ref"],
-            planner_result=planner,
-        ),
-    )
-    detached_proposal_ref = _write_ref(
-        root,
-        b'{"proposal":"detached"}',
-        artifact_id="detached-plan-proposal",
-        role="proposal",
-        filename="detached-plan-proposal.json",
-    )
-    approved = fixture["plan_approval"]
-    detached_approval = bind_mold_cook_approval(
-        request_id="cook-request",
-        kind=approved.kind,
-        decision=MoldCookApprovalDecision.APPROVED,
-        source=MoldCookApprovalSource.USER_RESPONSE,
-        spec_digest=fixture["spec_ref"].digest,
-        proposal_ref=detached_proposal_ref,
-        response_ref=fixture["response_ref"],
-        response_text="Approve",
-        response_source="response.txt",
-        coverage=approved.coverage,
-        plan_digest=fixture["plan"].digest,
-    )
-    assert proposed.outcome is CookPreparationOutcome.NEEDS_APPROVAL
-    assert proposed.proposal_digest is not None
-    assert detached_approval.proposal_digest != proposed.proposal_digest
+    with pytest.raises(ValueError, match="opaque identifier"):
+        _ = execute_bound_plan(
+            request_id=request_id,
+            spec_ref=fixture["spec_ref"],
+            planner_result_ref=fixture["planner_ref"],
+            plan_ref=fixture["plan_ref"],
+            coverage=fixture["coverage"],
+            artifact_root=root,
+            repository_root=tmp_path,
+            dispatch_writer=_forbidden_writer,
+            dispatch_review=_review,
+            dispatch_diagnosis=_diagnosis,
+        )
+    new_files = {
+        path for path in root.rglob("*")
+        if path.is_file() and path.relative_to(root) not in before
+    }
+    assert {path.read_bytes() for path in new_files} <= {
+        (root / name).read_bytes() for name in ("spec.md", "planner.json", "plan.json")
+    }
 
-    detached_approval_ref = _write_ref(
-        root,
-        detached_approval,
-        artifact_id="detached-approval",
-        role="approval",
-        filename="detached-approval.json",
-        schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
-    )
-    detached = prepare(
-        fixture["spec"],
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=root,
-        evidence=PreparationEvidence(
-            scope_approval=scope_approval,
-            planner_result=planner,
-            plan_approval=detached_approval_ref,
-        ),
-    )
 
-    assert detached.outcome is CookPreparationOutcome.INVALID
-    assert [item.code for item in detached.findings] == ["invalid-evidence"]
-    assert detached.handoff_ref is None
+def _forbidden_writer(_context: Mapping[str, object]) -> CurdResultWriterView:
+    pytest.fail("invalid execution inputs reached the writer")
 
 
 def _writer(context: Mapping[str, object]) -> CurdResultWriterView:
@@ -644,7 +423,7 @@ def _diagnosis(_request: object):
     raise AssertionError("diagnosis must not run after a passing writer and review")
 
 
-def test_execute_full_handoff_forwards_exact_coverage_and_keeps_remainder(
+def test_execute_bound_plan_keeps_exact_partial_remainder(
     tmp_path: Path,
 ) -> None:
     result_artifact = _write_ref(
@@ -662,8 +441,12 @@ def test_execute_full_handoff_forwards_exact_coverage_and_keeps_remainder(
         summary="Verified Cook execution result",
     )
     fixture = _full_fixture(tmp_path / "full")
-    result = execute_accepted_handoff(
-        fixture["pointer"],
+    result = execute_bound_plan(
+        request_id="cook-request",
+        spec_ref=fixture["spec_ref"],
+        planner_result_ref=fixture["planner_ref"],
+        plan_ref=fixture["plan_ref"],
+        coverage=fixture["coverage"],
         artifact_root=tmp_path / "full",
         repository_root=tmp_path,
         dispatch_writer=_writer,
@@ -672,649 +455,16 @@ def test_execute_full_handoff_forwards_exact_coverage_and_keeps_remainder(
         evidence={"result.txt": evidence},
     )
 
-    assert result.completed_curds == ("root",)
+    assert result.completed_curds == ("root", "leaf")
     branches, curd_results = result.execution_results
     # Fan execution records phase artifacts in durable scope state.
     assert branches == ()
-    assert len(curd_results) == 1
-    assert curd_results[0].source_curd_ref.curd_id == "root"
+    assert [item.source_curd_ref.curd_id for item in curd_results] == ["root", "leaf"]
     planner = fixture["planner"]
     assert result.coverage.unresolved_work == planner.unresolved_work
     assert len(result.coverage.unresolved_work) == 1
 
 
-def test_execute_light_handoff_stops_before_workflow(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    fixture = _full_fixture(tmp_path / "light")
-    light_handoff = MoldCookHandoff(
-        contract_version=_version(MoldCookHandoff),
-        request_id="cook-request",
-        input_kind=MoldCookInputKind.DIRECT_SPEC,
-        mode=MoldCookMode.LIGHT,
-        spec_ref=fixture["spec_ref"],
-        approval_ref=fixture["scope_approval_ref"],
-        coverage=MoldCookCoverage(curd_ids=("root",)),
-        taste_verdict_ref=fixture["taste_verdict_ref"],
-        taste_ledger_ref=fixture["taste_ledger_ref"],
-    )
-    operation_id = "cook-light-fixture"
-    root = tmp_path / "light"
-    _ = publish_mold_cook_handoff(
-        light_handoff,
-        request_digest=request_digest(
-            "raw",
-            {"request_id": light_handoff.request_id},
-            source_phase="mold",
-            destination_phase="cook",
-            payload_schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI,
-        ),
-        operation_id=operation_id,
-        artifact_root=root,
-    )
-
-    def forbidden(*_args: object, **_kwargs: object) -> object:
-        raise AssertionError("Light handoffs must not execute through workflow.cook")
-
-    monkeypatch.setattr(workflow, "cook", forbidden)
-    with pytest.raises(
-        ContractValidationError,
-        match="workflow execution requires a Full handoff with an approved plan",
-    ):
-        _ = execute_accepted_handoff(
-            root / "pointers" / f"{operation_id}.json",
-            artifact_root=root,
-            dispatch_writer=_writer,
-            dispatch_review=_review,
-            dispatch_diagnosis=_diagnosis,
-        )
-
-
-def test_setup_authorization_requires_bounded_passing_evidence(tmp_path: Path) -> None:
-    fixture = _full_fixture(tmp_path / "setup")
-    root = tmp_path / "setup"
-    plan = fixture["plan"]
-    spec_ref = fixture["spec_ref"]
-    response_ref = fixture["response_ref"]
-    coverage = MoldCookCoverage(
-        curd_ids=("root",),
-        unresolved_work=fixture["planner"].unresolved_work,
-    )
-    authorization = CookSetupAuthorization(
-        prerequisite_curd_id="root",
-        allowed_paths=("tests/",),
-        allowed_commands=("python -m pytest tests/setup.py",),
-    )
-    runner_approval_ref = _runner_approval_ref(
-        root,
-        spec_ref=spec_ref,
-        response_ref=response_ref,
-        coverage=coverage,
-        authorization=authorization,
-    )
-    without_evidence = prepare(
-        fixture["spec"],
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=root,
-        evidence=PreparationEvidence(
-            scope_approval=fixture["scope_approval_ref"],
-            planner_result=fixture["planner"],
-            plan_approval=fixture["plan_approval_ref"],
-            runner_approval=runner_approval_ref,
-        ),
-    )
-    assert without_evidence.outcome is CookPreparationOutcome.NEEDS_PREPARATION
-
-    setup_output = b"setup passed\n"
-    setup_output_digest = _digest(setup_output)
-    _ = (root / f"sha256-{setup_output_digest.removeprefix('sha256:')}").write_bytes(
-        setup_output
-    )
-    valid_evidence = SetupEvidence(
-        prerequisite_curd_id="root",
-        plan_digest=plan.digest,
-        authorization_digest=_digest(canonical_bytes(authorization)),
-        runner_command="python -m pytest tests/setup.py",
-        fixture_path="tests/setup.py",
-        environment_id="test-env",
-        exit_code=0,
-        captured_output_digest=setup_output_digest,
-    )
-
-    def retain_setup_evidence(evidence: SetupEvidence, artifact_id: str) -> ArtifactRef:
-        content = canonical_bytes(evidence)
-        digest = _digest(content)
-        path = root / f"sha256-{digest.removeprefix('sha256:')}"
-        _ = path.write_bytes(content)
-        return ArtifactRef(
-            artifact_id=artifact_id,
-            role="setup_evidence",
-            uri=path.as_uri(),
-            digest=digest,
-            size_bytes=len(content),
-            media_type="application/json",
-            schema_uri="https://schemas.easy-cheese.dev/setup-evidence",
-        )
-
-    ready = prepare(
-        fixture["spec"],
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=root,
-        evidence=PreparationEvidence(
-            scope_approval=fixture["scope_approval_ref"],
-            planner_result=fixture["planner"],
-            plan_approval=fixture["plan_approval_ref"],
-            runner_approval=runner_approval_ref,
-            setup_evidence=retain_setup_evidence(
-                valid_evidence,
-                "setup-evidence-passed",
-            ),
-        ),
-    )
-    assert ready.outcome is CookPreparationOutcome.READY
-
-    failed_evidence = attrs.evolve(valid_evidence, exit_code=1)
-    held = prepare(
-        fixture["spec"],
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=root,
-        evidence=PreparationEvidence(
-            scope_approval=fixture["scope_approval_ref"],
-            planner_result=fixture["planner"],
-            plan_approval=fixture["plan_approval_ref"],
-            runner_approval=runner_approval_ref,
-            setup_evidence=retain_setup_evidence(
-                failed_evidence,
-                "setup-evidence-failed",
-            ),
-        ),
-    )
-    assert held.outcome is CookPreparationOutcome.BLOCKED
-
-
-def test_execute_rejects_a_pointer_outside_the_configured_artifact_root(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Finding 41: the configured root contains the pointer, never the reverse."""
-    fixture = _full_fixture(tmp_path / "outside")
-    trusted_root = tmp_path / "trusted"
-    trusted_root.mkdir()
-
-    def fail_workflow(*_args: object, **_kwargs: object) -> Never:
-        pytest.fail("a pointer outside the artifact root executed")
-
-    monkeypatch.setattr(workflow, "cook", fail_workflow)
-
-    with pytest.raises(ContractValidationError, match="outside artifact root"):
-        _ = execute_accepted_handoff(
-            fixture["pointer"],
-            artifact_root=trusted_root,
-            dispatch_writer=_writer,
-            dispatch_review=_review,
-            dispatch_diagnosis=_diagnosis,
-        )
-
-
-def test_execute_rejects_a_pointer_uri_outside_the_configured_artifact_root(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Finding 59: a caller-supplied `file:` URI cannot widen the trusted root."""
-    fixture = _full_fixture(tmp_path / "uri-outside")
-    pointer = fixture["pointer"]
-    content = pointer.read_bytes()
-    pointer_ref = ArtifactRef(
-        artifact_id="pointer",
-        role="handoff_pointer",
-        uri=pointer.as_uri(),
-        digest=_digest(content),
-        size_bytes=len(content),
-        media_type="application/json",
-    )
-    trusted_root = tmp_path / "uri-trusted"
-    trusted_root.mkdir()
-
-    def fail_workflow(*_args: object, **_kwargs: object) -> Never:
-        pytest.fail("a pointer URI outside the artifact root executed")
-
-    monkeypatch.setattr(workflow, "cook", fail_workflow)
-
-    with pytest.raises(ArtifactResolutionError, match="escapes allowed root"):
-        _ = execute_accepted_handoff(
-            pointer_ref,
-            artifact_root=trusted_root,
-            dispatch_writer=_writer,
-            dispatch_review=_review,
-            dispatch_diagnosis=_diagnosis,
-        )
-
-
-def test_execute_rejects_stale_pointer_before_workflow(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    fixture = _full_fixture(tmp_path / "stale")
-    pointer = fixture["pointer"]
-    pointer_payload = cast(object, json.loads(pointer.read_text(encoding="utf-8")))
-    assert isinstance(pointer_payload, dict)
-    payload = cast(dict[str, object], pointer_payload)["payload"]
-    assert isinstance(payload, dict)
-    payload_uri = cast(dict[str, object], payload)["uri"]
-    assert isinstance(payload_uri, str)
-    payload_path = Path(urlsplit(payload_uri).path)
-    _ = payload_path.write_bytes(
-        payload_path.read_bytes().replace(b"cook-request", b"cook-reqXest")
-    )
-
-    def fail_workflow(*_args: object, **_kwargs: object) -> Never:
-        pytest.fail("stale handoff executed")
-
-    monkeypatch.setattr(workflow, "cook", fail_workflow)
-
-    with pytest.raises(PayloadDigestMismatchError, match="digest"):
-        _ = execute_accepted_handoff(
-            pointer,
-            artifact_root=tmp_path / "stale",
-            dispatch_writer=_writer,
-            dispatch_review=_review,
-            dispatch_diagnosis=_diagnosis,
-        )
-
-
-def test_partial_approval_omitting_dependency_returns_replan_request(
-    tmp_path: Path,
-) -> None:
-    fixture = _full_fixture(tmp_path / "partial", coverage_ids=("root",))
-    planner = fixture["planner"]
-    spec_ref = fixture["spec_ref"]
-    coverage = MoldCookCoverage(
-        curd_ids=("leaf",),
-        unresolved_work=planner.unresolved_work,
-    )
-    proposal_ref = _write_ref(
-        tmp_path / "partial",
-        canonical_mold_cook_proposal(
-            request_id="cook-request",
-            kind=MoldCookApprovalKind.PARTIAL_PLAN,
-            spec_digest=spec_ref.digest,
-            coverage=coverage,
-            planner_result=planner,
-            plan_digest=fixture["plan"].digest,
-        ),
-        artifact_id="invalid-partial-proposal",
-        role="proposal",
-        filename="invalid-partial-proposal.json",
-    )
-    response_ref = fixture["response_ref"]
-    bad_approval = bind_mold_cook_approval(
-        request_id="cook-request",
-        kind=MoldCookApprovalKind.PARTIAL_PLAN,
-        decision=MoldCookApprovalDecision.APPROVED,
-        source=MoldCookApprovalSource.USER_RESPONSE,
-        spec_digest=spec_ref.digest,
-        proposal_ref=proposal_ref,
-        response_ref=response_ref,
-        response_text="Approve",
-        response_source="response.txt",
-        coverage=coverage,
-        plan_digest=fixture["plan"].digest,
-    )
-    bad_approval_ref = _write_ref(
-        tmp_path / "partial",
-        bad_approval,
-        artifact_id="invalid-partial-approval",
-        role="approval",
-        filename="invalid-partial-approval.json",
-        schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
-    )
-    result = prepare(
-        fixture["spec"],
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=tmp_path / "partial",
-        evidence=PreparationEvidence(
-            scope_approval=fixture["scope_approval_ref"],
-            planner_result=planner,
-            plan_approval=bad_approval_ref,
-        ),
-    )
-
-    assert result.outcome is CookPreparationOutcome.NEEDS_PLANNING
-    assert result.planner_request is not None
-    assert result.planner_request.kind.value == "replan"
-
-
-def test_resubmit_retains_existing_holds(tmp_path: Path) -> None:
-    hold = CookExecutionHold(
-        hold_id="user-hold",
-        kind=CookHoldKind.USER_INTENT,
-        reason="User requested a pause",
-    )
-    first = prepare(
-        "implement the approved change",
-        request_id="held-request",
-        repository_root=tmp_path,
-        artifact_root=tmp_path / "artifacts",
-        evidence=PreparationEvidence(holds=(hold,)),
-    )
-    second = resubmit(
-        first,
-        source="implement the approved change",
-        repository_root=tmp_path,
-        artifact_root=tmp_path / "artifacts",
-    )
-
-    assert first.outcome is CookPreparationOutcome.BLOCKED
-    assert second.outcome is CookPreparationOutcome.BLOCKED
-    assert second.request_id == first.request_id
-    assert second.holds == (hold,)
-
-
-def test_resubmit_rejects_clearance_without_bound_dialogue(tmp_path: Path) -> None:
-    artifact_root = tmp_path / "artifacts"
-    hold = CookExecutionHold(
-        hold_id="user-hold",
-        kind=CookHoldKind.USER_INTENT,
-        reason="User requested a pause",
-    )
-    first = prepare(
-        "implement the approved change",
-        request_id="held-request",
-        repository_root=tmp_path,
-        artifact_root=artifact_root,
-        evidence=PreparationEvidence(holds=(hold,)),
-    )
-    arbitrary_ref = _write_ref(
-        artifact_root,
-        b"approved",
-        artifact_id="unbound-response",
-        role="response",
-        filename="unbound-response.txt",
-        media_type="text/plain",
-    )
-
-    with pytest.raises(CookEvidenceError, match="local dialogue"):
-        _ = resubmit(
-            first,
-            source="implement the approved change",
-            repository_root=tmp_path,
-            artifact_root=artifact_root,
-            evidence=PreparationEvidence(
-                clearances=(
-                    CookHoldClearance(
-                        hold_id="user-hold",
-                        response_ref=arbitrary_ref,
-                        response_text="approved",
-                    ),
-                ),
-            ),
-        )
-
-
-def test_resubmit_clears_hold_with_named_user_response(tmp_path: Path) -> None:
-    artifact_root = tmp_path / "artifacts"
-    hold = CookExecutionHold(
-        hold_id="user-hold",
-        kind=CookHoldKind.USER_INTENT,
-        reason="User requested a pause",
-    )
-    first = prepare(
-        "implement the approved change",
-        request_id="held-request",
-        repository_root=tmp_path,
-        artifact_root=artifact_root,
-        evidence=PreparationEvidence(holds=(hold,)),
-    )
-    response = "Resume the approved work."
-    dialogue_ref = _write_ref(
-        artifact_root,
-        {
-            "response": response,
-            "clear_holds": ["user-hold"],
-            "execution_authorized": True,
-        },
-        artifact_id="user-hold-dialogue",
-        role="dialogue",
-        filename="user-hold-dialogue.json",
-    )
-
-    second = resubmit(
-        first,
-        source="implement the approved change",
-        repository_root=tmp_path,
-        artifact_root=artifact_root,
-        evidence=PreparationEvidence(
-            clearances=(
-                CookHoldClearance(
-                    hold_id="user-hold",
-                    response_ref=dialogue_ref,
-                    response_text=response,
-                ),
-            ),
-        ),
-    )
-
-    assert "user-hold" in {item.hold_id for item in first.holds}
-    assert tuple(item.hold_id for item in second.holds) == (
-        "missing-spec-held-request",
-    )
-    assert second.outcome is CookPreparationOutcome.BLOCKED
-
-
-def test_resubmit_cli_forwards_approval_evidence(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    captured: dict[str, object] = {}
-    previous = prepare(
-        "implement the approved change",
-        request_id="cli-resubmit",
-        repository_root=tmp_path,
-        artifact_root=tmp_path / "artifacts",
-    )
-
-    def fake_resubmit(value: object, **kwargs: object) -> object:
-        assert value is previous
-        captured.update(kwargs)
-        return previous
-
-    def fake_load(*_args: object, **_kwargs: object) -> object:
-        return previous
-
-    monkeypatch.setattr(
-        contract_handlers,
-        "load_preparation_result",
-        fake_load,
-    )
-    monkeypatch.setattr(contract_handlers, "run_resubmission", fake_resubmit)
-    scope = tmp_path / "scope.json"
-    plan = tmp_path / "plan.json"
-    runner = tmp_path / "runner.json"
-    authorization = tmp_path / "authorization.json"
-
-    status = contract_handlers.resubmit_main(
-        [
-            str(tmp_path / "previous.json"),
-            "--scope-approval",
-            str(scope),
-            "--plan-approval",
-            str(plan),
-            "--runner-approval",
-            str(runner),
-            "--setup-authorization",
-            str(authorization),
-        ]
-    )
-    emitted = cast("dict[str, object]", json.loads(capsys.readouterr().out))
-
-    assert status == 0
-    assert emitted["request_id"] == "cli-resubmit"
-    assert emitted["outcome"] == previous.outcome.value
-    assert emitted["input_kind"] == MoldCookInputKind.TASK.value
-    forwarded = cast(PreparationEvidence, captured["evidence"])
-    assert forwarded.scope_approval == scope
-    assert forwarded.plan_approval == plan
-    assert forwarded.runner_approval == runner
-    assert forwarded.setup_authorization == authorization
-
-
-def test_prepare_cli_emits_validated_preparation_result(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    status = contract_handlers.prepare_main(
-        [
-            "--task",
-            "implement the approved change",
-            "--request-id",
-            "cli-prepare",
-            "--repository-root",
-            str(tmp_path),
-            "--artifact-root",
-            str(tmp_path / "artifacts"),
-        ]
-    )
-    emitted = cast("dict[str, object]", json.loads(capsys.readouterr().out))
-
-    assert status == 0
-    assert emitted["request_id"] == "cli-prepare"
-    assert emitted["input_kind"] == MoldCookInputKind.TASK.value
-    assert emitted["outcome"] == CookPreparationOutcome.BLOCKED.value
-    assert emitted["references"]
-    holds = cast("list[dict[str, object]]", emitted["holds"])
-    assert [item["hold_id"] for item in holds] == ["missing-spec-cli-prepare"]
-
-
-def test_corrupt_historical_pointer_fails_closed(tmp_path: Path) -> None:
-    pointer = tmp_path / "historical.json"
-    _ = pointer.write_text('{"operation_id":"old"}', encoding="utf-8")
-
-    result = prepare(
-        pointer,
-        request_id="historical-request",
-        repository_root=tmp_path,
-        artifact_root=tmp_path / "artifacts",
-    )
-
-    assert result.outcome is CookPreparationOutcome.INVALID
-    assert result.input_kind is MoldCookInputKind.CANONICAL_POINTER
-    assert result.findings
-    assert result.findings[0].code == "invalid-pointer"
-
-
-def test_prepare_routes_runner_setup_through_the_shared_helper(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root = tmp_path / "routed"
-    fixture = _full_fixture(root)
-    coverage = MoldCookCoverage(
-        curd_ids=("root",),
-        unresolved_work=fixture["planner"].unresolved_work,
-    )
-    authorization = CookSetupAuthorization(
-        prerequisite_curd_id="root",
-        allowed_paths=("tests/",),
-        allowed_commands=("python -m pytest tests/setup.py",),
-    )
-    runner_approval_ref = _runner_approval_ref(
-        root,
-        spec_ref=fixture["spec_ref"],
-        response_ref=fixture["response_ref"],
-        coverage=coverage,
-        authorization=authorization,
-    )
-    original = apply_runner_setup
-    plan_refs: list[ArtifactRef] = []
-
-    def spy(*args: object, **kwargs: object) -> object:
-        plan_refs.append(cast(ArtifactRef, kwargs["plan_ref"]))
-        return cast("Callable[..., object]", original)(*args, **kwargs)
-
-    monkeypatch.setattr(plan_stages, "apply_runner_setup", spy)
-
-    result = prepare(
-        fixture["spec"],
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=root,
-        evidence=PreparationEvidence(
-            scope_approval=fixture["scope_approval_ref"],
-            planner_result=fixture["planner"],
-            plan_approval=fixture["plan_approval_ref"],
-            runner_approval=runner_approval_ref,
-        ),
-    )
-
-    assert len(plan_refs) == 1
-    assert result.outcome is CookPreparationOutcome.NEEDS_PREPARATION
-
-
-def test_hold_clearance_ref_uses_the_shared_digest_helper(tmp_path: Path) -> None:
-    dialogue = tmp_path / "hold-dialogue.json"
-    content = canonical_bytes(
-        {
-            "response": "Resume the approved work.",
-            "clear_holds": ["user-hold"],
-            "execution_authorized": True,
-        }
-    )
-    _ = dialogue.write_bytes(content)
-
-    clearances = contract_handlers._hold_clearances(  # pyright: ignore[reportPrivateUsage]
-        [f"user-hold={dialogue}"]
-    )
-
-    digest = contract_handlers._digest_of(content)  # pyright: ignore[reportPrivateUsage]
-    assert len(clearances) == 1
-    ref = clearances[0].response_ref
-    assert ref.digest == digest
-    assert ref.artifact_id == f"hold-clearance-{digest.removeprefix('sha256:')[:16]}"
-
-
-def test_hold_clearance_rejects_a_blank_cleared_hold_id(tmp_path: Path) -> None:
-    artifact_root = tmp_path / "artifacts"
-    hold = CookExecutionHold(
-        hold_id="user-hold",
-        kind=CookHoldKind.USER_INTENT,
-        reason="User requested a pause",
-    )
-    first = prepare(
-        "implement the approved change",
-        request_id="held-request",
-        repository_root=tmp_path,
-        artifact_root=artifact_root,
-        evidence=PreparationEvidence(holds=(hold,)),
-    )
-    response = "Resume the approved work."
-    dialogue_ref = _write_ref(
-        artifact_root,
-        {
-            "response": response,
-            "clear_holds": ["user-hold", "   "],
-            "execution_authorized": True,
-        },
-        artifact_id="user-hold-dialogue",
-        role="dialogue",
-        filename="user-hold-dialogue.json",
-    )
-
-    with pytest.raises(CookEvidenceError, match="does not authorize execution"):
-        _ = resubmit(
-            first,
-            source="implement the approved change",
-            repository_root=tmp_path,
-            artifact_root=artifact_root,
-            evidence=PreparationEvidence(
-                clearances=(
-                    CookHoldClearance(
-                        hold_id="user-hold",
-                        response_ref=dialogue_ref,
-                        response_text=response,
-                    ),
-                ),
-            ),
-        )
 
 
 
@@ -1356,14 +506,14 @@ def _route_fan_setup(
     )
 
 
-def test_execute_full_fan_handoff_routes_through_run_fan(
+def test_execute_bound_fan_plan_routes_through_run_fan(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fixture, evidence, press_evidence, calls, review_subjects, review_evidence, traced_review = (
         _route_fan_setup(tmp_path, monkeypatch)
     )
-    result = execute_accepted_handoff(
-        fixture["pointer"], artifact_root=tmp_path / "fan", repository_root=tmp_path,
+    result = _execute(
+        fixture, artifact_root=tmp_path / "fan", repository_root=tmp_path,
         dispatch_writer=_writer, dispatch_review=traced_review,
         dispatch_diagnosis=_diagnosis,
         dispatch_press=lambda _scope, _round: PressGateResult(
@@ -1431,19 +581,19 @@ def test_execute_fan_rejects_concurrent_resume_before_manifest_write(
             before = manifest.read_bytes()
             before_writes = writes[0]
             with pytest.raises(state_store_error):
-                _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+                _ = _execute(fixture, **kwargs)
             assert writes[0] == before_writes
             assert manifest.read_bytes() == before
         return _writer(context)
 
-    kwargs: ExecuteAcceptedHandoffKwargs = {
+    kwargs: ExecuteBoundPlanKwargs = {
         "artifact_root": root, "repository_root": tmp_path,
         "dispatch_writer": _writer, "dispatch_review": _review,
         "dispatch_diagnosis": _diagnosis, "dispatch_press": _passing_press(evidence),
         "evidence": {"result.txt": evidence},
     }
-    result = execute_accepted_handoff(
-        fixture["pointer"], artifact_root=root, repository_root=tmp_path,
+    result = _execute(
+        fixture, artifact_root=root, repository_root=tmp_path,
         dispatch_writer=writer, dispatch_review=_review,
         dispatch_diagnosis=_diagnosis, dispatch_press=_passing_press(evidence),
         evidence={"result.txt": evidence},
@@ -1489,8 +639,8 @@ def test_execute_fan_stops_closed_when_state_publication_fails(
 
     monkeypatch.setattr(remediation_store, "atomic_write", fail_publish)
     with pytest.raises(remediation_store.StateStoreError, match="state publication failed"):
-        _ = execute_accepted_handoff(
-            fixture["pointer"],
+        _ = _execute(
+            fixture,
             artifact_root=tmp_path / "fan-failure",
             repository_root=tmp_path,
             dispatch_writer=_writer,
@@ -1562,7 +712,7 @@ def _postmerge_diagnosis(
     return diagnosis
 
 
-def test_execute_full_fan_handoff_runs_postmerge_cure_writer(tmp_path: Path) -> None:
+def test_execute_bound_fan_plan_runs_postmerge_cure_writer(tmp_path: Path) -> None:
     result_artifact = _write_ref(
         tmp_path, b"verified\\n", artifact_id="result", role="evidence",
         filename="result.txt", media_type="text/plain",
@@ -1573,8 +723,8 @@ def test_execute_full_fan_handoff_runs_postmerge_cure_writer(tmp_path: Path) -> 
     review_calls = [0]
     review_subjects: list[ArtifactRef] = []
     diagnosis_calls = [0]
-    result = execute_accepted_handoff(
-        fixture["pointer"], artifact_root=tmp_path / "postmerge-cure", repository_root=tmp_path,
+    result = _execute(
+        fixture, artifact_root=tmp_path / "postmerge-cure", repository_root=tmp_path,
         dispatch_writer=_postmerge_writer(writer_calls),
         dispatch_review=_postmerge_review(review_calls, review_subjects),
         dispatch_diagnosis=_postmerge_diagnosis(diagnosis_calls),
@@ -1650,7 +800,7 @@ def test_execute_fan_writer_failure_blocks_without_review_or_diagnosis(tmp_path:
         events.append("diagnosis")
         raise AssertionError("diagnosis must not run")
 
-    result = execute_accepted_handoff(fixture["pointer"], artifact_root=tmp_path / "writer-failure", repository_root=tmp_path, dispatch_writer=fail_writer, dispatch_review=review, dispatch_diagnosis=diagnosis, evidence={"result.txt": evidence})
+    result = _execute(fixture, artifact_root=tmp_path / "writer-failure", repository_root=tmp_path, dispatch_writer=fail_writer, dispatch_review=review, dispatch_diagnosis=diagnosis, evidence={"result.txt": evidence})
     assert result.fan_next_step == "mold"
     assert not result.whole_task_complete
     assert events == []
@@ -1693,7 +843,7 @@ def _fan_recovery_fixture(
     return fixture, EvidenceRef("result.txt", EvidenceKind.SOURCE, result_artifact)
 
 
-def test_execute_accepted_fan_handoff_recovers_writer_budget(
+def test_execute_bound_fan_plan_recovers_writer_budget(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fixture, evidence = _fan_recovery_fixture(tmp_path, monkeypatch)
@@ -1736,8 +886,8 @@ def test_execute_accepted_fan_handoff_recovers_writer_budget(
 
     monkeypatch.setattr(workflow, "execute_curd_writer", traced_execute)
 
-    result = execute_accepted_handoff(
-        fixture["pointer"],
+    result = _execute(
+        fixture,
         artifact_root=tmp_path / "fan-recovery",
         repository_root=tmp_path,
         dispatch_writer=writer,
@@ -1761,7 +911,7 @@ def test_execute_accepted_fan_handoff_recovers_writer_budget(
     assert result.execution_results[1][0].disposition is CurdDisposition.PASSED
 
 
-def test_execute_accepted_fan_handoff_preserves_checkpoint_on_retry_failure(
+def test_execute_bound_fan_plan_preserves_checkpoint_on_retry_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fixture, evidence = _fan_recovery_fixture(tmp_path, monkeypatch)
@@ -1806,8 +956,8 @@ def test_execute_accepted_fan_handoff_preserves_checkpoint_on_retry_failure(
 
     monkeypatch.setattr(workflow, "execute_curd_writer", traced_execute)
 
-    result = execute_accepted_handoff(
-        fixture["pointer"],
+    result = _execute(
+        fixture,
         artifact_root=tmp_path / "fan-recovery",
         repository_root=tmp_path,
         dispatch_writer=writer,
@@ -1840,7 +990,7 @@ def _passing_press(evidence: EvidenceRef) -> PressDispatcher:
     return press
 
 
-def test_execute_accepted_handoff_resumes_from_persisted_results(
+def test_execute_bound_plan_resumes_from_persisted_results(
     tmp_path: Path,
 ) -> None:
     result_artifact = _write_ref(
@@ -1863,15 +1013,15 @@ def test_execute_accepted_handoff_resumes_from_persisted_results(
         counts["press"] += 1
         return _passing_press(evidence)(scope, round_number)
 
-    kwargs: ExecuteAcceptedHandoffKwargs = {
+    kwargs: ExecuteBoundPlanKwargs = {
         "artifact_root": tmp_path / "resume", "repository_root": tmp_path,
         "dispatch_writer": writer, "dispatch_review": review,
         "dispatch_diagnosis": _diagnosis, "dispatch_press": press,
         "evidence": {"result.txt": evidence},
     }
-    first = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    first = _execute(fixture, **kwargs)
     first_counts = counts.copy()
-    second = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    second = _execute(fixture, **kwargs)
 
     assert first.fan_next_step == "done"
     assert second.fan_next_step == "done"
@@ -1879,13 +1029,13 @@ def test_execute_accepted_handoff_resumes_from_persisted_results(
     assert counts == first_counts
 
 
-def _linear_rerun_kwargs(tmp_path: Path, root: Path, writer: object) -> ExecuteAcceptedHandoffKwargs:
+def _linear_rerun_kwargs(tmp_path: Path, root: Path, writer: object) -> ExecuteBoundPlanKwargs:
     result_artifact = _write_ref(
         tmp_path, b"verified\n", artifact_id="result", role="evidence",
         filename="result.txt", media_type="text/plain",
     )
     evidence = EvidenceRef(evidence_id="result.txt", kind=EvidenceKind.SOURCE, artifact=result_artifact)
-    return cast(ExecuteAcceptedHandoffKwargs, cast(object, {
+    return cast(ExecuteBoundPlanKwargs, cast(object, {
         "artifact_root": root, "repository_root": tmp_path,
         "dispatch_writer": writer, "dispatch_review": _review,
         "dispatch_diagnosis": _diagnosis, "evidence": {"result.txt": evidence},
@@ -1913,13 +1063,13 @@ def test_linear_rerun_redispatches_a_cached_blocked_result(tmp_path: Path) -> No
         )
 
     kwargs = _linear_rerun_kwargs(tmp_path, root, writer)
-    first = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    first = _execute(fixture, **kwargs)
     assert first.completed_curds == ()
-    second = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    second = _execute(fixture, **kwargs)
 
     assert len(calls) == 2
     assert second.completed_curds == ("root",)
-    third = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    third = _execute(fixture, **kwargs)
     assert len(calls) == 2
     assert third.completed_curds == ("root",)
     assert [item.source_curd_ref.curd_id for item in third.execution_results[1]] == ["root"]
@@ -1935,7 +1085,7 @@ def test_linear_rerun_ignores_a_cached_result_outside_coverage(tmp_path: Path) -
         return _writer(context)
 
     kwargs = _linear_rerun_kwargs(tmp_path, root, writer)
-    _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    _ = _execute(fixture, **kwargs)
     import easy_cheese.skills.cook.preparation.execute as execute_module
     record_path = cast(Callable[[Path, str], Path], getattr(execute_module, "_execution_record_path"))(
         root, "cook-plan-cook-request"
@@ -1946,7 +1096,7 @@ def test_linear_rerun_ignores_a_cached_result_outside_coverage(tmp_path: Path) -
     payload["results"].append(stranger)
     _ = record_path.write_bytes(canonical_bytes(payload))
 
-    rerun = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    rerun = _execute(fixture, **kwargs)
 
     assert len(calls) == 1
     assert [item.source_curd_ref.curd_id for item in rerun.execution_results[1]] == ["root"]
@@ -1960,8 +1110,8 @@ def test_execute_partial_coverage_routes_to_mold(tmp_path: Path) -> None:
     )
     evidence = EvidenceRef(evidence_id="result.txt", kind=EvidenceKind.SOURCE, artifact=result_artifact)
     fixture = _full_fixture(tmp_path / "partial-execution", coverage_ids=("root",), partial=True)
-    result = execute_accepted_handoff(
-        fixture["pointer"], artifact_root=tmp_path / "partial-execution",
+    result = _execute(
+        fixture, artifact_root=tmp_path / "partial-execution",
         repository_root=tmp_path, dispatch_writer=_writer,
         dispatch_review=_review, dispatch_diagnosis=_diagnosis,
         evidence={"result.txt": evidence},
@@ -1978,8 +1128,8 @@ def test_execute_persisted_stall_exposes_validated_remediation_request(
     def failing_writer(_context: Mapping[str, object]) -> CurdResultWriterView:
         raise RuntimeError("writer unavailable")
 
-    result = execute_accepted_handoff(
-        fixture["pointer"], artifact_root=tmp_path / "stall",
+    result = _execute(
+        fixture, artifact_root=tmp_path / "stall",
         repository_root=tmp_path, dispatch_writer=failing_writer,
         dispatch_review=_review, dispatch_diagnosis=_diagnosis,
     )
@@ -2003,13 +1153,13 @@ def _corrupt_resume_inputs(tmp_path: Path):
     evidence = EvidenceRef(evidence_id="result.txt", kind=EvidenceKind.SOURCE, artifact=result_artifact)
     root = tmp_path / "corrupt"
     fixture = _full_fixture(root, coverage_ids=("root", "leaf"), partial=False)
-    kwargs: ExecuteAcceptedHandoffKwargs = {
+    kwargs: ExecuteBoundPlanKwargs = {
         "artifact_root": root, "repository_root": tmp_path,
         "dispatch_writer": _writer, "dispatch_review": _review,
         "dispatch_diagnosis": _diagnosis, "dispatch_press": _passing_press(evidence),
         "evidence": {"result.txt": evidence},
     }
-    _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    _ = _execute(fixture, **kwargs)
     return fixture, kwargs
 
 
@@ -2023,13 +1173,13 @@ def test_execute_rejects_corrupt_resume_context_and_cross_plan_cache(
     )
     _ = context_path.write_text("not-json")
     with pytest.raises(ContractValidationError, match="checkpoint artifact digest mismatch"):
-        _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+        _ = _execute(fixture, **kwargs)
 
     other_root = tmp_path / "cross-plan"
     other_fixture = _full_fixture(other_root, coverage_ids=("root", "leaf"), partial=False)
-    other_kwargs = cast(ExecuteAcceptedHandoffKwargs, cast(object, dict(kwargs)))
+    other_kwargs = cast(ExecuteBoundPlanKwargs, cast(object, dict(kwargs)))
     other_kwargs["artifact_root"] = other_root
-    _ = execute_accepted_handoff(other_fixture["pointer"], **other_kwargs)
+    _ = _execute(other_fixture, **other_kwargs)
     import easy_cheese.skills.cook.preparation.execute as execute_module
     record_path = cast(Callable[[Path, str], Path], getattr(execute_module, "_execution_record_path"))(
         other_root, "cook-plan-cook-request"
@@ -2049,7 +1199,7 @@ def test_execute_rejects_corrupt_resume_context_and_cross_plan_cache(
     source_plan_ref["plan_id"] = "other-plan"
     _ = record_path.write_bytes(canonical_bytes(payload))
     with pytest.raises(ContractValidationError, match="another plan"):
-        _ = execute_accepted_handoff(other_fixture["pointer"], **other_kwargs)
+        _ = _execute(other_fixture, **other_kwargs)
 
 def test_execute_rejects_missing_checkpoint_commit_marker(tmp_path: Path) -> None:
     result_artifact = _write_ref(
@@ -2059,13 +1209,13 @@ def test_execute_rejects_missing_checkpoint_commit_marker(tmp_path: Path) -> Non
     evidence = EvidenceRef(evidence_id="result.txt", kind=EvidenceKind.SOURCE, artifact=result_artifact)
     root = tmp_path / "missing-marker"
     fixture = _full_fixture(root, coverage_ids=("root", "leaf"), partial=False)
-    kwargs: ExecuteAcceptedHandoffKwargs = {
+    kwargs: ExecuteBoundPlanKwargs = {
         "artifact_root": root, "repository_root": tmp_path,
         "dispatch_writer": _writer, "dispatch_review": _review,
         "dispatch_diagnosis": _diagnosis, "dispatch_press": _passing_press(evidence),
         "evidence": {"result.txt": evidence},
     }
-    _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    _ = _execute(fixture, **kwargs)
     import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
     manifest_path = cast(Callable[[Path, str], Path], getattr(fan_execute, "_manifest_path"))(
         root, "cook-plan-cook-request"
@@ -2074,7 +1224,7 @@ def test_execute_rejects_missing_checkpoint_commit_marker(tmp_path: Path) -> Non
     _ = payload.pop("commit_marker")
     atomic_write(manifest_path, canonical_bytes(payload))
     with pytest.raises(ContractValidationError, match="commit marker mismatch"):
-        _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+        _ = _execute(fixture, **kwargs)
 
 
 def test_execute_rejects_invalid_checkpoint_commit_marker(tmp_path: Path) -> None:
@@ -2085,13 +1235,13 @@ def test_execute_rejects_invalid_checkpoint_commit_marker(tmp_path: Path) -> Non
     evidence = EvidenceRef(evidence_id="result.txt", kind=EvidenceKind.SOURCE, artifact=result_artifact)
     root = tmp_path / "invalid-marker"
     fixture = _full_fixture(root, coverage_ids=("root", "leaf"), partial=False)
-    kwargs: ExecuteAcceptedHandoffKwargs = {
+    kwargs: ExecuteBoundPlanKwargs = {
         "artifact_root": root, "repository_root": tmp_path,
         "dispatch_writer": _writer, "dispatch_review": _review,
         "dispatch_diagnosis": _diagnosis, "dispatch_press": _passing_press(evidence),
         "evidence": {"result.txt": evidence},
     }
-    _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    _ = _execute(fixture, **kwargs)
     import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
     manifest_path = cast(Callable[[Path, str], Path], getattr(fan_execute, "_manifest_path"))(
         root, "cook-plan-cook-request"
@@ -2100,7 +1250,7 @@ def test_execute_rejects_invalid_checkpoint_commit_marker(tmp_path: Path) -> Non
     payload["commit_marker"] = "invalid"
     atomic_write(manifest_path, canonical_bytes(payload))
     with pytest.raises(ContractValidationError, match="commit marker mismatch"):
-        _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+        _ = _execute(fixture, **kwargs)
 
 
 
@@ -2123,7 +1273,7 @@ def _productive_cure_fixture(tmp_path: Path):
         counts["age"] += 1
         return _review(request)
 
-    kwargs: ExecuteAcceptedHandoffKwargs = {
+    kwargs: ExecuteBoundPlanKwargs = {
         "artifact_root": tmp_path / "awaiting", "repository_root": tmp_path,
         "dispatch_writer": writer, "dispatch_review": review,
         "dispatch_diagnosis": _diagnosis,
@@ -2132,7 +1282,7 @@ def _productive_cure_fixture(tmp_path: Path):
         ),
         "evidence": {"result.txt": evidence},
     }
-    first = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    first = _execute(fixture, **kwargs)
     assert first.fan_next_step == "done"
     return fixture, evidence, counts, kwargs
 
@@ -2214,7 +1364,7 @@ def test_execute_resume_from_productive_cure_skips_cure(
     fixture, evidence, counts, kwargs = _productive_cure_fixture(tmp_path)
     _ = _prepare_productive_cure_resume(tmp_path, fixture, evidence)
     before = counts.copy()
-    second = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    second = _execute(fixture, **kwargs)
     assert second.fan_next_step == "done"
     assert counts["cook"] == before["cook"]
     assert counts["cure"] == before["cure"]
@@ -2266,26 +1416,24 @@ def test_manifest_reload_separates_curd_named_postmerge_from_postmerge(
     root = tmp_path / "manifest"
     fixture = _full_fixture(
         root,
-        coverage_ids=("postmerge", "leaf"),
-        scope_coverage_ids=("root",),
         partial=False,
         curds=(_curd("postmerge"), _curd("leaf", dependencies=("postmerge",))),
     )
-    kwargs: ExecuteAcceptedHandoffKwargs = {
+    kwargs: ExecuteBoundPlanKwargs = {
         "artifact_root": root, "repository_root": tmp_path,
         "dispatch_writer": _writer, "dispatch_review": _review,
         "dispatch_diagnosis": _diagnosis, "dispatch_press": _passing_press(evidence),
         "evidence": {"result.txt": evidence},
     }
-    _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    _ = _execute(fixture, **kwargs)
     run_id = "cook-plan-cook-request"
     ids = _manifest_artifact_ids(root, run_id)
     assert f"{run_id}/curd/postmerge/state" in ids
     assert f"{run_id}/postmerge/postmerge/state" in ids
     assert "postmerge-press-1" in ids
-    assert execute_accepted_handoff(fixture["pointer"], **kwargs).fan_next_step == "done"
+    assert _execute(fixture, **kwargs).fan_next_step == "done"
     assert "postmerge-press-1" in _manifest_artifact_ids(root, run_id)
-    assert execute_accepted_handoff(fixture["pointer"], **kwargs).fan_next_step == "done"
+    assert _execute(fixture, **kwargs).fan_next_step == "done"
     assert "postmerge-press-1" in _manifest_artifact_ids(root, run_id)
 
 
@@ -2324,19 +1472,19 @@ def test_resume_accepts_writer_snapshot_then_rejects_external_edit(
         _ = tracked.write_text(f"writer-{calls}\n")
         return _writer(context)
 
-    kwargs: ExecuteAcceptedHandoffKwargs = {
+    kwargs: ExecuteBoundPlanKwargs = {
         "artifact_root": artifact_root, "repository_root": root,
         "dispatch_writer": writer, "dispatch_review": _review,
         "dispatch_diagnosis": _diagnosis, "dispatch_press": _passing_press(evidence),
         "evidence": {"result.txt": evidence},
     }
-    _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    _ = _execute(fixture, **kwargs)
     before = calls
-    _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    _ = _execute(fixture, **kwargs)
     assert calls == before
     _ = tracked.write_text("external-edit\n")
     with pytest.raises(ContractValidationError, match="repository identity mismatch"):
-        _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+        _ = _execute(fixture, **kwargs)
     assert calls == before
 
 

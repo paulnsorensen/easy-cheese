@@ -53,5 +53,5 @@ digraph mold_gates {
   spec_format_valid -> handshake;
   typed_planner_stage -> handshake;
   grill -> handshake;
-  handshake -> curdle [label="both keys"];
+  handshake -> curdle [label="coherence check"];
 }

@@ -60,7 +60,7 @@ Vendor signals (not peer-reviewed): LinearB 2026 reported ~32.7% acceptance for 
 
 ## Where this touches easy-cheese
 
-- Diff-size ceiling and author annotation land in `/plate`: `skills/plate/references/topology.md` step 2 (size gates the layout question), `ordinary-pr.md` § Body contract and `.github/PULL_REQUEST_TEMPLATE.md` (non-obvious changes section).
+- Diff-size ceiling and author annotation land in `/plate`: `skills/plate/references/topology.md` step 5 (size triggers a second boundary search but never decides the shape alone; see [[plate-publication-boundary-002]]), `ordinary-pr.md` § Body contract and `.github/PULL_REQUEST_TEMPLATE.md` (non-obvious changes section).
 - The comprehension ceiling for reviewers lands in `/age`: `skills/age/SKILL.md` § Output (coverage flag) and `references/fan-out.md` (the router sizes by weighted review surface, which is line-derived but not a raw line count).
 - Identifier and exhaustiveness evidence lands in `/age` deslop: `references/dimensions.md` § deslop, `deslop-python.md` § 15, `deslop-typescript.md` § 16.
 - Build-for-the-reviewer rules land in `/cook`: `skills/cook/references/tdd-loop.md` § Reviewable by construction and the taste-test Readability lens.

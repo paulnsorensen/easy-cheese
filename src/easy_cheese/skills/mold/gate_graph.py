@@ -2,7 +2,7 @@
 """Render mold's gate state machine from one in-memory model.
 
 `GATE_MODEL` models Mold's runnable handoff gate: the six modes,
-the Cook handoff terminal, and the coherence-checklist gates that guard the two-key
+the Cook handoff terminal, and the coherence-checklist gates that guard the
 execution handshake. Draft spec writes can occur before this gate. Both render targets derive from it, so they cannot drift:
 
   - `to_dot()` emits a canonical Graphviz `.dot` document.
@@ -131,7 +131,7 @@ def _build_model() -> GateModel:
         ),
         Edge(TYPED_PLANNER.id, HANDSHAKE.id),
         Edge("grill", "handshake"),
-        Edge("handshake", "curdle", "both keys"),
+        Edge("handshake", "curdle", "coherence check"),
     )
     return GateModel(nodes=nodes, edges=edges)
 

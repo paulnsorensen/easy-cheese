@@ -1,0 +1,14 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/routines. No PR exists for this branch.
+Quality gate: `just check` passed at HEAD (exit 0).
+PR template: .github/PULL_REQUEST_TEMPLATE.md with sections What changed / Why / How to verify / Non-obvious changes / Risk / rollout notes / Checklist.
+
+$ git log --oneline --reverse main..HEAD
+aa01b2c feat(routines): add stale-docs watcher routine
+bb02c3d feat(routines): add flaky-test triage routine
+
+$ git diff --stat per commit
+aa01b2c  routines/stale-docs/{routine.yaml,prompt.md,README.md}, tests/python/test_stale_docs_routine.py   +611
+bb02c3d  routines/flaky-test/{routine.yaml,prompt.md,README.md}, tests/python/test_flaky_routine.py     +637
+
+The two routines share no file, import, or config. Either one can merge, revert, or be rejected alone.
+Each commit cherry-picks onto main alone and passes the gate there.

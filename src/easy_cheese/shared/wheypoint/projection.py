@@ -2,34 +2,26 @@
 
 The document opens with the shared handoff preamble -- `status:`, `next:`,
 `artifact:`, then the orientation -- so `parse_handoff_slug()` reads a
-projection like any other handoff. The Wheypoint pins follow the orientation
-as a keyed metadata block, and the gating entries and the decision dossier
-close the file.
+projection like any other handoff. The gating entries and the body follow,
+and the work and revision identifiers close the file.
 
-Two rules make the file safe to hand back to a human:
+`status:` is written, never read. Parsing derives the status from the gating
+entry list, exactly as the schema types do. Editing the word `gated` to `ok`
+changes nothing.
 
-* **`status:` is written, never read.** Parsing derives the status from the
-  gating entry list, exactly as the schema types do. Editing the word `gated`
-  to `ok` changes nothing except the digest. `declared_status` hands the
-  written word back separately so lint can report the disagreement instead of
-  quietly discarding it.
-* **The digest covers the document.** `projection_digest` is a hash of the
-  rendered text with its own value blanked, so every other byte -- preamble,
-  orientation, gates, dossier -- is pinned, and the digest line is the only
-  thing that cannot hash itself.
+Projections written at schema 4 or older opened with a pins block that held a
+`projection_digest`; `parse` still reads them and ignores that digest.
 """
 
 from __future__ import annotations
 
-import json
 import re
+import subprocess
 from collections.abc import Sequence
+from pathlib import Path
 from typing import cast
 
-from attrs import evolve
 from easy_cheese_schemas import (
-    DecisionFork,
-    DossierOption,
     Durability,
     EntryKind,
     EntryState,
@@ -43,22 +35,28 @@ from easy_cheese_schemas import (
     WheypointStatus,
     WorktreeStrategy,
 )
+from easy_cheese_schemas.contracts import DirectiveScope
 from easy_cheese_schemas.handback_status import (
     MAX_REASON_LENGTH,
-    StatusError,
-    parse_status_field,
     render_status_field,
 )
-from easy_cheese_schemas.contracts import EdgeKind
 
 from . import canonical, records
-from .ref_grammar import Scheme
+from .ref_grammar import Scheme, locator_path
 
 # The shared handoff preamble: three keyed lines, then the orientation.
 _HEAD_KEYS = ("status", "next", "artifact")
 _ORIENTATION_LINE = len(_HEAD_KEYS)
-# The Wheypoint pins, in the keyed block that follows the orientation.
+# The identifier block that closes a projection.
 _META_KEYS = (
+    "work_id",
+    "revision_id",
+    "record_digest",
+    "durability",
+    "schema_version",
+)
+# Schema 4 and older opened with the pins and carried a projection digest.
+_LEGACY_META_KEYS = (
     "work_id",
     "revision_id",
     "record_digest",
@@ -70,34 +68,25 @@ _META_LINE = _ORIENTATION_LINE + 2
 _MODE_PREFIX = "mode: "
 _MODE_PARALLEL = "parallel"
 _TITLE_PREFIX = "# Wheypoint "
+_TITLE = "# Wheypoint handoff"
+_IDENTIFIERS_HEADING = "## Identifiers"
 _GATES_HEADING = "## Gates"
 _LEGACY_GATES_HEADING = "## Gating entries"
 _OPEN_HEADING = "## Open entries"
 _DECISIONS_HEADING = "## Decisions"
 _DIRECTIVES_HEADING = "## Directives"
+_OPERATOR_HEADING = "## Operator preferences"
 _NOTES_HEADING = "## Notes"
+_SUPERSEDED_HEADING = "## Superseded"
+_LOCAL_HEADING = "## Local references"
+_SCHEME_RE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
+_TOKEN_OPEN = "`'\"([<"
+_TOKEN_CLOSE = "`'\")]>,;.:"
 _CONTEXT_HEADING = "## Context"
 _ARTIFACTS_HEADING = "## Artifacts"
 _LINKS_HEADING = "## Links"
-_LINEAGE_HEADING = "## Lineage"
-_LINEAGE_KINDS = frozenset(
-    {
-        EdgeKind.FORKED_FROM,
-        EdgeKind.FORKED_TO,
-        EdgeKind.SUPERSEDES,
-        EdgeKind.SUPERSEDED_BY,
-    }
-)
-_DOSSIER_HEADING = "## Decision dossier"
 _TASKS_HEADING = "## Tasks"
-_FENCE = "```json"
 _NONE = "none"
-_FORK_PREFIX = "### Fork: "
-_LEANING_PREFIX = "Prior leaning: "
-_OPTION_PREFIX = "- Option: "
-_EVIDENCE_PREFIX = "  Evidence: "
-_BREAKS_PREFIX = "  Breaks: "
-_UNPINNED_DIGEST = f"{canonical.DIGEST_PREFIX}{'0' * 64}"
 _DIGEST_LINE_RE = re.compile(r"^projection_digest:.*$", re.MULTILINE)
 
 
@@ -106,7 +95,7 @@ class ProjectionParseError(ValueError):
 
 
 def projection_digest_of_text(text: str) -> str:
-    """The digest the document's own `projection_digest:` line should carry."""
+    """The digest a schema-4-or-older projection's `projection_digest:` line carried."""
     blanked = _DIGEST_LINE_RE.sub("projection_digest:", text, count=1)
     return canonical.digest_text(blanked)
 
@@ -177,39 +166,205 @@ def _field_text(value: str | WorktreeStrategy) -> str:
     return escape(value.value if isinstance(value, WorktreeStrategy) else value)
 
 
-def _render_dossier(forks: Sequence[DecisionFork]) -> list[str]:
-    """The dossier as Markdown a human reads and `parse` reads back."""
-    if not forks:
-        return [_NONE]
+def _entry_line(entry: ProtectedEntry) -> str:
+    line = f"- {entry.entry_id} ({entry.kind.value}) — {escape(entry.summary)}"
+    return f"{line} (when: {escape(entry.when)})" if entry.when else line
+
+
+_UNASSIGNED = "unassigned"
+
+
+def _open_lines(open_entries: list[ProtectedEntry]) -> list[str]:
+    """Open questions, one subheading per owner once any question has one.
+
+    Owners match case-insensitively and show as first spelled; unowned
+    questions go last under `unassigned`. With no owner anywhere the list stays
+    flat, so a record written before owners existed renders as it did.
+    """
+    if not any(e.owner for e in open_entries):
+        return [_entry_line(e) for e in open_entries] or [_NONE]
+    groups: dict[str | None, tuple[str, list[ProtectedEntry]]] = {}
+    for entry in open_entries:
+        key = entry.owner.lower() if entry.owner else None
+        groups.setdefault(key, (entry.owner or _UNASSIGNED, []))[1].append(entry)
+    ordered = sorted(groups, key=lambda key: (key is None, key or ""))
     lines: list[str] = []
-    for index, fork in enumerate(forks):
-        if index:
-            lines.append("")
-        lines.append(f"{_FORK_PREFIX}{escape(fork.fork)}")
-        if fork.prior_leaning is not None:
-            lines.append(f"{_LEANING_PREFIX}{escape(fork.prior_leaning)}")
-        for option in fork.options:
-            lines.append(f"{_OPTION_PREFIX}{escape(option.option)}")
-            # One line per evidence item: no separator to escape, nothing to split.
-            lines.extend(f"{_EVIDENCE_PREFIX}{escape(item)}" for item in option.evidence)
-            lines.append(f"{_BREAKS_PREFIX}{escape(option.breaks)}")
+    for key in ordered:
+        name, members = groups[key]
+        lines += [f"### {escape(name)}", "", *(_entry_line(e) for e in members), ""]
+    return lines[:-1]
+
+
+def _quoted(entries: list[ProtectedEntry]) -> list[str]:
+    lines: list[str] = []
+    for entry in entries:
+        lines.append(_entry_line(entry))
+        if entry.quote:
+            lines.extend(f"  > {part}" for part in entry.quote.splitlines() or [""])
     return lines
 
 
-def _entry_line(entry: ProtectedEntry) -> str:
-    return f"- {entry.entry_id} ({entry.kind.value}) — {escape(entry.summary)}"
+def _drift_marker(record: WheypointRecord) -> list[str]:
+    """One line saying the notes predate the latest decision change, else nothing.
+
+    A record without stamps renders no marker: it cannot say which is newer.
+    """
+    decided = record.decisions_revision_number
+    written = record.notes_revision_number
+    if not record.notes or decided is None or (written is not None and decided <= written):
+        return []
+    notes_at = "unstamped" if written is None else f"revision {written}"
+    return [
+        f"> notes may be stale: decisions changed at revision {decided}, "
+        + f"notes written at {notes_at}"
+    ]
 
 
-def _body(record: WheypointRecord) -> list[str]:
+def _superseded(record: WheypointRecord) -> list[str]:
+    """The `## Superseded` section, or nothing when no entry was superseded."""
+    moved = [
+        e for e in records.entries(record)
+        if e.state is EntryState.SUPERSEDED and e.superseded_by
+    ]
+    if not moved:
+        return []
+    return ["", _SUPERSEDED_HEADING, "", *(f"- {e.entry_id} -> {e.superseded_by}" for e in moved)]
+
+
+def local_references(record: WheypointRecord, checkout: Path | None) -> list[str]:
+    """The references that need the author's machine, in record order.
+
+    A reference is local when it needs the author's machine: an `xdg:` ref, an
+    absolute path outside `checkout`, or a repository path Git ignores.
+    Without a checkout only the first two classify. The result depends on
+    `checkout`, never on the working directory.
+    """
+    candidates: list[tuple[str, bool]] = []
+    for link in record.artifact_links:
+        ref = link.ref
+        candidates.append((link.path if ref is None or ref.startswith("repo:") else ref, False))
+    candidates += [(edge.to, False) for edge in record.edges]
+    candidates += [(token, True) for item in record.working_context for token in tokens(item)]
+    return _local_among(candidates, checkout)
+
+
+def tokens(text: str) -> list[str]:
+    """The path-like words of free text: those holding a `/` or a `.`."""
+    found = (word.strip(_TOKEN_OPEN).rstrip(_TOKEN_CLOSE) for word in text.split())
+    return [token for token in found if "/" in token or "." in token]
+
+
+def local_tokens(texts: list[str], checkout: Path | None) -> set[str]:
+    """The path-like words of `texts` that name a local file, as `local_references` decides."""
+    return set(_local_among([(t, True) for text in texts for t in tokens(text)], checkout))
+
+
+def _local_among(candidates: list[tuple[str, bool]], checkout: Path | None) -> list[str]:
+    verdicts: dict[str, bool | str] = {}
+    for text, must_exist in candidates:
+        if text not in verdicts:
+            verdicts[text] = _classify(text, checkout, must_exist=must_exist)
+    to_check = sorted({v for v in verdicts.values() if isinstance(v, str)})
+    ignored: set[str] = set()
+    if checkout is not None:
+        try:
+            ignored = _ignored(to_check, checkout)
+        except CheckIgnoreError:
+            # Fail closed: when Git cannot say what it ignores, hide nothing.
+            ignored = set(to_check)
+    return [
+        text
+        for text, verdict in verdicts.items()
+        if verdict is True or (isinstance(verdict, str) and verdict in ignored)
+    ]
+
+
+def _local_references(record: WheypointRecord, checkout: Path | None) -> list[str]:
+    """The `## Local references` section, or nothing when no reference is local."""
+    found = local_references(record, checkout)
+    if not found:
+        return []
+    return ["", _LOCAL_HEADING, "", *(f"- {escape(text)}" for text in found)]
+
+
+def _classify(text: str, checkout: Path | None, *, must_exist: bool) -> bool | str:
+    """True when `text` is local, False when it is not, or the checkout-relative
+    path whose Git-ignored state decides it."""
+    if text.lower().startswith(f"{Scheme.XDG.value}:"):
+        return True
+    path = locator_path(text)
+    path = path.removeprefix(f"{Scheme.REPO.value}:")
+    try:
+        if path.startswith("/"):
+            absolute = Path(path).resolve()
+            if must_exist and not absolute.exists():
+                return False
+            if checkout is None:
+                return True
+            root = checkout.resolve()
+            if not absolute.is_relative_to(root):
+                return True
+            path = absolute.relative_to(root).as_posix()
+        if checkout is None or _SCHEME_RE.match(path) or path in {"", "."}:
+            return False
+        if must_exist and not (checkout / path).exists():
+            return False
+        # Resolve `..` and symlinks: Git refuses a path that leaves the
+        # checkout or passes through a link, so those never reach check-ignore.
+        root = checkout.resolve()
+        resolved = (root / path).resolve()
+        if not resolved.is_relative_to(root):
+            return True
+        path = resolved.relative_to(root).as_posix()
+        if path == ".":
+            return False
+    except (OSError, RuntimeError):
+        return False
+    return path
+
+
+class CheckIgnoreError(RuntimeError):
+    """`git check-ignore` could not answer: bad exit, timeout, or no git."""
+
+
+def _ignored(candidates: list[str], checkout: Path) -> set[str]:
+    """The members of `candidates` Git ignores in `checkout`, in one call.
+
+    Raises `CheckIgnoreError` when Git cannot answer. A caller must not read
+    that as "nothing is ignored".
+    """
+    if not candidates:
+        return set()
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "--stdin", "-z"],
+            cwd=checkout,
+            input="\0".join(candidates) + "\0",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise CheckIgnoreError(f"git check-ignore did not run: {error}") from error
+    if result.returncode not in (0, 1):
+        raise CheckIgnoreError(
+            f"git check-ignore exited {result.returncode}: {result.stderr.strip()}"
+        )
+    return {item for item in result.stdout.split("\0") if item}
+
+
+def _body(record: WheypointRecord, checkout: Path | None) -> list[str]:
     """The human sections: everything the record holds that the pins do not."""
     lines: list[str] = []
     active = [e for e in records.entries(record) if e.state is EntryState.ACTIVE]
     open_entries = [
         e for e in active
-        if e.kind in (EntryKind.QUESTION, EntryKind.BLOCKER) and not e.blocks_continuation
+        if e.kind is EntryKind.QUESTION and not e.blocks_continuation
     ]
     lines += [_OPEN_HEADING, ""]
-    lines += [_entry_line(e) for e in open_entries] or [_NONE]
+    lines += _open_lines(open_entries)
     lines += ["", _DECISIONS_HEADING, ""]
     decisions = [e for e in active if e.kind is EntryKind.DECISION]
     for entry in decisions:
@@ -219,14 +374,18 @@ def _body(record: WheypointRecord) -> list[str]:
     if not decisions:
         lines.append(_NONE)
     lines += ["", _DIRECTIVES_HEADING, ""]
-    directives = [e for e in active if e.kind is EntryKind.DIRECTIVE]
-    for entry in directives:
-        lines.append(_entry_line(entry))
-        if entry.quote:
-            lines.extend(f"  > {part}" for part in entry.quote.splitlines() or [""])
-    if not directives:
-        lines.append(_NONE)
-    lines += ["", _NOTES_HEADING, ""]
+    directives = [
+        e for e in active
+        if e.kind is EntryKind.DIRECTIVE and e.scope is DirectiveScope.WORK
+    ]
+    lines += _quoted(directives) or [_NONE]
+    operator = [
+        e for e in active
+        if e.kind is EntryKind.DIRECTIVE and e.scope is DirectiveScope.OPERATOR
+    ]
+    if operator:
+        lines += ["", _OPERATOR_HEADING, "", *_quoted(operator)]
+    lines += ["", _NOTES_HEADING, "", *_drift_marker(record)]
     # A notes line that looks like a heading would split the parsed sections.
     lines += (
         [("\\" + line) if line.startswith("#") else line for line in record.notes.splitlines()]
@@ -255,24 +414,7 @@ def _body(record: WheypointRecord) -> list[str]:
             lines.append(f"  rationale: {escape(edge.rationale)}")
     if not record.edges:
         lines.append(_NONE)
-    lines += ["", _LINEAGE_HEADING, "", *(_lineage(record) or [_NONE])]
-    return lines
-
-
-def _lineage(record: WheypointRecord) -> list[str]:
-    """Fork and supersession edges, then each entry's cross-record lineage."""
-    lines = [
-        f"- {edge.kind.value} {escape(edge.to)}"
-        for edge in record.edges
-        if edge.kind in _LINEAGE_KINDS
-    ]
-    for entry in records.entries(record):
-        if entry.origin:
-            lines.append(f"- {entry.entry_id} origin {escape(entry.origin)}")
-        if entry.successor:
-            lines.append(f"- {entry.entry_id} successor {escape(entry.successor)}")
-        lines.extend(f"- {entry.entry_id} copies {escape(ref)}" for ref in entry.copies)
-    return lines
+    return lines + _superseded(record) + _local_references(record, checkout)
 
 
 def _tasks(action: NextAction) -> list[str]:
@@ -296,13 +438,20 @@ def _tasks(action: NextAction) -> list[str]:
     return lines
 
 
-def render(projection: WheypointProjection, record: WheypointRecord) -> str:
+def render(
+    projection: WheypointProjection,
+    record: WheypointRecord,
+    *,
+    checkout: Path | None = None,
+) -> str:
     """Render the projection with the human body sections from `record`.
 
-    The pins, the gates, the dossier and the tasks come from the projection and
-    are parsed back; the body is derived from the record and is never parsed
-    back. The digest covers the whole text, so the pair is what it pins and a
-    projection alone cannot reproduce it (ADR wheypoint-continuity-kernel-004).
+    `checkout` is the repository root that classifies local references; None
+    means no checkout. The output never depends on the working directory.
+
+    The gates, the tasks and the identifiers come from the
+    projection and are parsed back; the body is derived from the record and is
+    never parsed back. The identifiers close the file so the content leads.
     """
     action = projection.next_action
     lines = [
@@ -314,60 +463,56 @@ def render(projection: WheypointProjection, record: WheypointRecord) -> str:
     lines += [f"artifact: {action.artifact or ''}", action.orientation]
     lines += [
         "",
-        f"work_id: {projection.work_id}",
-        f"revision_id: {projection.revision_id}",
-        f"record_digest: {projection.record_digest}",
-        f"projection_digest: {projection.projection_digest}",
-        f"durability: {projection.durability.value}",
-        f"schema_version: {projection.schema_version}",
-        "",
-        f"# Wheypoint {projection.work_id} @ {projection.revision_id}",
+        _TITLE,
         "",
         _GATES_HEADING,
         "",
     ]
-    summaries = {e.entry_id: e.summary for e in records.entries(record)}
+    by_id = {e.entry_id: e for e in records.entries(record)}
     if projection.gating_entry_ids:
         for entry_id in projection.gating_entry_ids:
-            summary = summaries.get(entry_id)
-            lines.append(f"- {entry_id}" + (f" — {escape(summary)}" if summary else ""))
+            entry = by_id.get(entry_id)
+            line = f"- {entry_id}" + (f" — {escape(entry.summary)}" if entry else "")
+            if entry and entry.owner:
+                line += f" (owner: {escape(entry.owner)})"
+            if entry and entry.when:
+                line += f" (when: {escape(entry.when)})"
+            lines.append(line)
     else:
         lines.append(_NONE)
-    lines += ["", *_body(record)]
-    lines += ["", _DOSSIER_HEADING, "", *_render_dossier(projection.decision_dossier)]
+    lines += ["", *_body(record, checkout)]
     lines += _tasks(action)
-    lines.append("")
+    lines += [
+        "",
+        _IDENTIFIERS_HEADING,
+        "",
+        f"work_id: {projection.work_id}",
+        f"revision_id: {projection.revision_id}",
+        f"record_digest: {projection.record_digest}",
+        f"durability: {projection.durability.value}",
+        f"schema_version: {projection.schema_version}",
+        "",
+    ]
     return "\n".join(lines)
 
 
 def build_projection(
-    record: WheypointRecord, *, durability: Durability
+    record: WheypointRecord,
+    *,
+    durability: Durability,
+    checkout: Path | None = None,
 ) -> tuple[WheypointProjection, str]:
-    """Derive the projection for `record` and render it, in one step.
-
-    Returning both is the point: the digest inside the document is a hash of
-    the document, so a caller that could build one without the other could hold
-    a projection whose digest belongs to text nobody has.
-    """
-    draft = WheypointProjection(
+    """Derive the projection for `record` and render it, in one step."""
+    projection = WheypointProjection(
         schema_version=record.schema_version,
         work_id=record.work_id,
         revision_id=record.revision_id,
         record_digest=records.record_digest(record),
-        projection_digest=_UNPINNED_DIGEST,
         next_action=record.next_action,
         gating_entry_ids=list(record.gating_entry_ids),
-        decision_dossier=list(record.decision_dossier),
         durability=durability,
     )
-    unpinned = render(draft, record)
-    digest = projection_digest_of_text(unpinned)
-    pinned = evolve(draft, projection_digest=digest)
-    # The real pins line is always the last match: any earlier one is a
-    # decoy the orientation's free text injected before the title.
-    match = list(_DIGEST_LINE_RE.finditer(unpinned))[-1]
-    text = f"{unpinned[: match.start()]}projection_digest: {digest}{unpinned[match.end() :]}"
-    return pinned, text
+    return projection, render(projection, record, checkout=checkout)
 
 
 def _keyed(lines: list[str], keys: Sequence[str], start: int) -> dict[str, str]:
@@ -385,7 +530,6 @@ def _keyed(lines: list[str], keys: Sequence[str], start: int) -> dict[str, str]:
 
 
 _MIN_LINES = _META_LINE + len(_META_KEYS)
-_FIRST_META_PREFIX = f"{_META_KEYS[0]}: "
 
 
 def _meta_start(lines: list[str], body_start: int) -> int:
@@ -398,14 +542,22 @@ def _meta_start(lines: list[str], body_start: int) -> int:
     # The pins are the keyed block directly above the `# Wheypoint` title: a
     # look-alike block inside the orientation text is text, not pins.
     title = body_start - 1
-    start = title - 1 - len(_META_KEYS)
+    start = title - 1 - len(_LEGACY_META_KEYS)
     if start < _META_LINE or lines[title - 1].strip():
         raise ProjectionParseError("the pins must sit directly above the title, ending in a blank line")
-    if not lines[start].startswith(_FIRST_META_PREFIX):
-        raise ProjectionParseError(f"missing {_META_KEYS[0]!r} line")
+    if not lines[start].startswith(f"{_LEGACY_META_KEYS[0]}: "):
+        raise ProjectionParseError(f"missing {_LEGACY_META_KEYS[0]!r} line")
     if lines[start - 1].strip():
         raise ProjectionParseError("the orientation must end with a blank line")
     return start
+
+
+def _identifiers_start(lines: list[str], body_start: int) -> int | None:
+    """The index of the closing identifiers heading, or None in a legacy layout."""
+    for index in range(len(lines) - 1, body_start - 1, -1):
+        if lines[index] == _IDENTIFIERS_HEADING:
+            return index
+    return None
 
 
 def _preamble(lines: list[str], body_start: int) -> dict[str, str]:
@@ -423,12 +575,37 @@ def _preamble(lines: list[str], body_start: int) -> dict[str, str]:
         artifact_line += 1
     values.update(_keyed(lines, ("artifact",), artifact_line))
     orientation_line = artifact_line + 1
-    start = _meta_start(lines, body_start)
-    orientation = "\n".join(lines[orientation_line : start - 1]).strip()
+    identifiers = _identifiers_start(lines, body_start)
+    orientation_start = orientation_line
+    if identifiers is None:
+        # Schema 4 and older: the pins sit above the title.
+        keys = _LEGACY_META_KEYS
+        try:
+            start = _meta_start(lines, body_start)
+            orientation_end = start - 1
+        except ProjectionParseError:
+            # Schema 1 stored the pins right after the artifact line, with the
+            # orientation below them.
+            if not lines[orientation_line].startswith(f"{keys[0]}: "):
+                raise
+            start = orientation_line
+            orientation_start = start + len(keys)
+            orientation_end = body_start - 2
+            if orientation_end < orientation_start or lines[orientation_end].strip():
+                raise ProjectionParseError("the orientation must end with a blank line") from None
+    else:
+        start = identifiers + 2
+        orientation_end = body_start - 2
+        keys = _META_KEYS
+        if orientation_end < orientation_line or lines[orientation_end].strip():
+            raise ProjectionParseError("the orientation must end with a blank line")
+        if lines[identifiers + 1].strip():
+            raise ProjectionParseError(f"{_IDENTIFIERS_HEADING!r} must be followed by a blank line")
+    orientation = "\n".join(lines[orientation_start:orientation_end]).strip()
     if not orientation:
         raise ProjectionParseError("orientation line must be non-empty")
     values["orientation"] = orientation
-    values.update(_keyed(lines, _META_KEYS, start))
+    values.update(_keyed(lines, keys, start))
     return values
 
 
@@ -472,67 +649,6 @@ def _gating_entry_ids(lines: list[str], body_start: int) -> list[str]:
         )
     # `- <id>` (legacy) or `- <id> — <summary>`: the id is the first token.
     return [line[2:].strip().split(" ", 1)[0] for line in body]
-
-
-def _parse_dossier_markdown(body: list[str]) -> list[DecisionFork]:
-    forks: list[dict[str, object]] = []
-    options: list[dict[str, object]] = []
-    for line in body:
-        if line.startswith(_FORK_PREFIX):
-            options = []
-            forks.append({"fork": unescape(line[len(_FORK_PREFIX) :]), "options": options, "prior_leaning": None})
-        elif line.startswith(_LEANING_PREFIX) and forks:
-            forks[-1]["prior_leaning"] = unescape(line[len(_LEANING_PREFIX) :])
-        elif line.startswith(_OPTION_PREFIX) and forks:
-            options.append({"option": unescape(line[len(_OPTION_PREFIX) :]), "evidence": [], "breaks": ""})
-        elif line.startswith(_EVIDENCE_PREFIX) and options:
-            cast(list[str], options[-1]["evidence"]).append(unescape(line[len(_EVIDENCE_PREFIX) :]))
-        elif line.startswith(_BREAKS_PREFIX) and options:
-            options[-1]["breaks"] = unescape(line[len(_BREAKS_PREFIX) :])
-        else:
-            raise ProjectionParseError(f"unreadable dossier line {line!r}")
-    try:
-        return [
-            DecisionFork(
-                fork=cast(str, fork["fork"]),
-                options=[
-                    DossierOption(
-                        option=cast(str, o["option"]),
-                        evidence=cast(list[str], o["evidence"]),
-                        breaks=cast(str, o["breaks"]),
-                    )
-                    for o in cast(list[dict[str, object]], fork["options"])
-                ],
-                prior_leaning=cast("str | None", fork["prior_leaning"]),
-            )
-            for fork in forks
-        ]
-    except ValueError as exc:
-        raise ProjectionParseError(str(exc)) from exc
-
-
-def _dossier(lines: list[str], body_start: int) -> list[DecisionFork]:
-    body = _section(lines, body_start, _DOSSIER_HEADING)
-    if body == [_NONE]:
-        return []
-    if not body or body[0] != _FENCE:
-        return _parse_dossier_markdown(body)
-    # Legacy-only: `_render_dossier` never emits this JSON-fence grammar; it is
-    # read back solely so older projections written before the Markdown
-    # dossier still parse.
-    if len(body) < 3 or body[-1] != "```":
-        raise ProjectionParseError(f"{_DOSSIER_HEADING!r} must hold one json block")
-    try:
-        payload = cast(object, json.loads("\n".join(body[1:-1])))
-    except ValueError as exc:
-        raise ProjectionParseError(f"decision dossier is not JSON: {exc}") from exc
-    if not isinstance(payload, list):
-        raise ProjectionParseError("decision dossier must be a JSON array")
-    forks = cast("list[object]", payload)
-    try:
-        return [records.structure(fork, DecisionFork) for fork in forks]
-    except records.RecordError as exc:
-        raise ProjectionParseError(str(exc)) from exc
 
 
 def _require_fields(fields: dict[str, str], table: tuple[tuple[str, bool], ...]) -> None:
@@ -594,26 +710,6 @@ def _parse_tasks(
     return handoff_tasks, parallel
 
 
-def declared_status(text: str) -> str:
-    """The word the document's own `status:` line claims.
-
-    `parse` derives the status instead of reading it, which is what keeps an
-    edited header harmless. Handing the written word back separately lets a
-    caller hold the two against each other and report the lie rather than
-    silently discard it.
-    """
-    lines = text.splitlines()
-    field_value = _preamble(lines, _body_start(lines))["status"]
-    # Only the name is read back. A forged `ok` that still carries the gated
-    # reason must be reported as the lie it is, not rejected as unreadable.
-    written_name, _, _ = field_value.partition(":")
-    try:
-        name, _ = parse_status_field(written_name, require_reason=False)
-    except StatusError as exc:
-        raise ProjectionParseError(str(exc)) from exc
-    return name
-
-
 def parse(text: str) -> WheypointProjection:
     """Read a projection document back. The written `status:` is ignored."""
     lines = text.splitlines()
@@ -640,7 +736,6 @@ def parse(text: str) -> WheypointProjection:
             work_id=values["work_id"],
             revision_id=values["revision_id"],
             record_digest=values["record_digest"],
-            projection_digest=values["projection_digest"],
             next_action=NextAction(
                 move=move,
                 orientation=values["orientation"],
@@ -649,7 +744,6 @@ def parse(text: str) -> WheypointProjection:
                 parallel=parallel,
             ),
             gating_entry_ids=_gating_entry_ids(lines, body_start),
-            decision_dossier=_dossier(lines, body_start),
             durability=durability,
         )
     except ValueError as exc:

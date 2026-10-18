@@ -47,7 +47,7 @@ Keep each round small enough for the user to check in one read.
    Prefer the simplest working path and existing project patterns.
    Run the cheapest check that shows the step works.
    Use an existing test, the app, a command, or a script.
-   The Iron Law RED step does not apply to spike code; stabilize closes that gap.
+   Spike code needs no test first; stabilize adds the tests.
 3. **Check** — Report what changed, the evidence that it works, and each open question.
    Append one entry to the prototype log: the plan, the files, and the evidence.
    Then offer this menu and wait:
@@ -85,9 +85,8 @@ Stabilize converts the prototype into normal Cook work.
      Mold confirms each consequential fork before Cook continues.
 3. Run the normal Cook Flow from **Contract** against the spec, with the prototype tree as the start state.
 4. Write a test for each criterion.
-   Prove each test fails without the prototype behavior before it counts as RED.
-   Run it against the base commit, or disable the behavior and restore it after the RED run.
-   A test that never fails does not satisfy the Iron Law.
+   Check that each test fails without the prototype behavior where that is cheap.
+   Run it against the base commit, or disable the behavior and restore it afterward.
 5. Remove spike debris that no criterion needs, such as debug output and unused paths.
 6. Continue with **Validate**, **Taste-test**, and **Hand off** as the Flow defines.
    The handoff slug `artifact:` names the minted spec.

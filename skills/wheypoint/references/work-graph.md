@@ -1,9 +1,8 @@
 # The Wheypoint work graph
 
 A record names other work and documents through typed refs and typed edges.
-`fork`, `link`, and `unlink` write edges; `shape`, `backlinks`, and the `list` filters read them.
+`fork`, `import`, and `checkpoint --link` write edges; the `list` filters read them.
 Each write changes only the record that starts it.
-The counterpart record learns of the change on read and applies it at its own next `checkpoint`.
 
 ## Refs
 
@@ -22,7 +21,8 @@ The runtime parses, normalizes, resolves, and digests it by scheme.
 - `milknado:` and `https:` refs carry no digest, and the runtime does not check that the target exists.
 - A `--covers` or `covers_entry_ids` on a `milknado:` or `https:` ref is refused as `unpinnable-scheme`.
 - An unpinned `wheypoint:` link is pinned to the target's current revision at commit.
-- A schema-3 link that holds only `path` reads as `repo:<path>` with a normalization receipt.
+- A schema-3 link that holds only `path` reads as `repo:<path>` without changing stored bytes.
+- A pre-v5 record loads as it is and normalizes on read; the runtime rewrites nothing.
 
 ## Edge kinds
 
@@ -30,122 +30,96 @@ An edge is `{to, kind, rationale?, revision_id}`, held by the record it starts f
 A record holds its edges as a set keyed by `(to, kind)`.
 The host stamps `revision_id` at commit.
 
-| Kind | Reciprocal | Meaning |
-| --- | --- | --- |
-| `forked_from` | `forked_to` | this record is a fork child of the target |
-| `forked_to` | `forked_from` | the target is a fork child of this record |
-| `supersedes` | `superseded_by` | this record replaces the target |
-| `superseded_by` | `supersedes` | the target replaces this record |
-| `implements` | none | this record implements the target |
-| `informs` | none | this record informs the target |
-| `checkpoints` | none | this record checkpoints a Mikado goal or task |
-| `blocked_by` | none | the target blocks this record |
-| `relates_to` | `relates_to` | the records relate |
+| Kind | Meaning |
+| --- | --- |
+| `forked_from` | this record is a fork child of the target |
+| `supersedes` | this record replaces the target |
+| `checkpoints` | this record checkpoints a Mikado goal or task |
 
-- `forked_from` and `forked_to` are host-only.
-- An intent, `link`, or `unlink` that names a host-only kind is refused at intent validation as `invalid-intent`.
-- An added edge whose rationale copies the host's reciprocal marker is also refused at intent validation as `invalid-intent`.
-- A `link` to a `wheypoint:` target owes the target a reciprocal edge when the kind has one.
+- `forked_from` is host-only; only `fork` and `import` write it.
+- An intent or `checkpoint --link` that names `forked_from` is refused at intent validation as `invalid-intent`.
+- No edge has a reciprocal; a read of the target record never shows the edge.
+- Use `list --linked-to <ref>` or `list --forked-from <work-id>` to find the records on the other side.
+
+## Links
+
+Create a link with `checkpoint <work-id> --link <ref> --kind <edge-kind> [--covers <id>]...`.
+An intent does the same with `add_edges`.
+For a pinnable ref, the checkpoint also adds or refreshes the artifact link with the current digest and revision pin.
+`--covers` names entry ids that the pinned link covers.
+Omitting `--covers` keeps the stored coverage; `--covers` replaces it.
+An intent removes an edge with `remove_edges`.
 
 ## `fork`
 
 ```bash
-python3 skills/wheypoint/scripts/wheypoint.pyz fork <parent> <child> --orientation "<child title>" [--move <id>]... [--copy <id>]... [--dossier <fork title>]... [--link <ref>]... [--context <path>]... [--notes-file <file>] [--next <move>] [--artifact <artifact>] [--project <key>]
+python3 skills/wheypoint/scripts/wheypoint.pyz fork <parent> <child> --orientation "<child title>" [--link <ref>]... [--context <path>]... [--notes-file <file>] [--next <move>] [--artifact <artifact>] [--project <key>]
 ```
 
-- `fork` writes exactly one revision: the child genesis.
+- `fork` writes exactly one revision: the child genesis, with one `forked_from` edge.
+- The edge is pinned to the parent's current revision.
 - The parent record is never written by `fork`.
+- The child carries no entry from the parent; copy a decision into the child notes or a link instead.
 - The first line of `--orientation` becomes the child title.
-- `--move` names a parent entry the child takes over.
-- `--copy` names a parent entry the child copies.
-- When no `--move` and no `--copy` is given, active questions and blockers move, and active decisions and directives copy.
-- Each child entry carries `origin = wheypoint:<project_key>/<parent>@<rev>#<entry_id>`.
-- `--dossier` names a parent dossier fork, and `--link` names a parent artifact link, for the child to take.
-- A moved gating entry needs a `--dossier` fork that describes it.
-- The child holds a `forked_from` edge pinned to the parent's current revision.
-- The reply adds `origins` (child entry id to origin ref) and `edges` to the checkpoint result.
-- `--next` follows the same artifact rule as `checkpoint`; a missing `--artifact` for `cook`, `cut`, or `affinage` is refused as `invalid-intent`.
+- `--next` follows the same artifact rule as `checkpoint`; a missing `--artifact` for `cook` or `affinage` is refused as `invalid-intent`.
 - `fork` mirrors the child projection to `.cheese/notes` and reports `repo-snapshot`, like `checkpoint`; under `--project` it writes no mirror and reports `canonical-local`.
-
-### `fork-pending` and host-side reconciliation
-
-`show`, `resolve`, `lint`, and `shape` scan the project corpus for children whose `forked_from` names the parent without a matching `forked_to`.
-Each hit is reported as `fork-pending`, with the child ref and the affected entry ids.
-The parent's next `checkpoint` applies the pending fork host-side, with no agent input:
-
-- each moved entry becomes `forked`, with `successor` set to the child entry ref;
-- each copied entry gains `copies`;
-- the selected dossier forks and links leave the parent; and
-- the parent gains a `forked_to` edge.
-
-The receipt lists these changes in `applied_transitions` and `applied_edges`.
-A `forked` entry never gates.
-A moved gating question keeps the parent gated until that checkpoint.
-An agent-authored `fork` transition is refused.
 
 ### `fork` refusal codes
 
 - `fork-exists`: the child work id already has a record or history.
 - `unknown-parent`: the parent has no record.
-- `unknown-entry`: the parent holds no entry with that id.
-- `already-forked`: the entry is `forked`, or a pending fork already moves it.
-- `inactive-entry`: the entry is not active.
-- `fork-empty`: the parent has no entry to move or copy.
-- `fork-overlap`: one entry id is named twice.
-- `fork-too-large`: the selection does not fit in the edge rationale.
-- `fork-title`: a dossier title or link ref holds a separator the fork rationale uses.
-- `unknown-dossier`: the parent has no dossier fork with that title.
-- `unknown-link`: the parent carries no link with that ref.
-- `dossier-required`: a moved gating entry has no `--dossier` fork.
 - `record-unreadable`: the parent record could not be read.
 - `invalid-intent`: an empty `--orientation`, a bad `--next`, or an `--artifact` that `--next` cannot use.
 - `note-unwritable`: the child projection mirror could not be written.
 
-## `link` and `unlink`
+## `export` and `import`
 
 ```bash
-python3 skills/wheypoint/scripts/wheypoint.pyz link <work-id> <ref> --kind <edge-kind> [--covers <id>]... [--rationale "<why>"]
-python3 skills/wheypoint/scripts/wheypoint.pyz unlink <work-id> <ref> --kind <edge-kind>
+python3 skills/wheypoint/scripts/wheypoint.pyz export <slug | work-id | path> [--out <file>] [--include-operator] [--include-local] [--workspace-root <dir>]
+python3 skills/wheypoint/scripts/wheypoint.pyz import <bundle.json> [--as <slug>] [--note-dir <dir> | --no-note] [--workspace-root <dir>]
 ```
 
-- `link` adds one edge on `<work-id>` and commits one revision.
-- For a pinnable ref, `link` also adds or refreshes the artifact link with the current digest and revision pin.
-- `--covers` names entry ids that the pinned link covers.
-- Omitting `--covers` keeps the stored coverage; `--covers` replaces it.
-- The reply is the checkpoint result plus `link: {to, kind}`.
-- `link` writes only the source record.
-- A `wheypoint:` target reports `link-pending` on read and applies the reciprocal edge at its next `checkpoint`.
-- `unlink` removes the edge keyed by `(ref, kind)` and lists it in `removed_edges`.
-- An `unlink` of an edge the record does not hold is refused as `unknown-edge`.
-- An explicit `unlink` sticks: reconciliation does not add the edge again until the source links again at a new revision.
+A bundle is one canonical JSON file with these fields: `bundle_version`, `origin`, `included`, `record`, `record_digest`, `projection`, `projection_digest`, and `bundle_digest`.
+Without `--out`, `export` returns the bundle in the JSON reply.
+A digest proves integrity, not authorship; anyone can build a bundle with matching digests.
 
-## `shape`
+- `record_digest` covers the exported, filtered record.
+- `origin` carries the source `revision_id` and the `record_digest` of the unfiltered record.
+- `bundle_digest` covers the canonical bundle without its own field.
+- `export` omits operator directives and local refs by default; `--include-operator` and `--include-local` keep them, and `included` records the choice.
+- `export` replaces a local path in free text (`notes`, `orientation`, `next_action`, entry summary, rationale, and quote) with `<local reference omitted>`; `--include-local` keeps it.
+- An absolute path under a machine root such as `/home` or `/Users` is local when it is outside the checkout, whether or not it exists.
+- `export` drops `next_action.tasks` and `next_action.parallel` by default and changes a `tasks` move to `hold`; `--include-local` keeps them.
+- When `git check-ignore` fails, `export` treats every candidate path as local and omits it.
+- A path is local by the checkout named by `--workspace-root`, else the Git toplevel, never by the working directory.
+- `export` refuses with `export-checkout-required` when no checkout exists and the record links a repository path.
+- `export` accepts an authoritative or gated record.
+- `import` checks in this order: bundle digest, record structure, record digest, projection digest, projection identifiers, origin against record.
+- Any digest mismatch, including an origin that does not name the record, is refused as `bundle-digest-mismatch`, and nothing is written.
+- `import` also checks that `bundle_version`, `included`, and `origin` have the right types and agree with the record.
+- `import` bounds the bundle at 4 MiB and validates every key and value strictly.
+- `import` refuses a record that matches a credential pattern with `secret-pattern`, and nothing is written.
+- `import` writes one genesis revision with one `forked_from` edge to the origin record.
+- `--as` names the new work id; the default is the origin work id.
+- Only active entries import, as fresh derived entry ids; artifact-link digests and `covers` are derived again.
+- A local artifact link is skipped and reported as `skipped-local-link`; on import any absolute path is local.
+- A link this machine cannot digest, such as a `wheypoint:` record or a repository path it lacks, is skipped and reported as `skipped-unresolvable-link`.
+- A source with notes drift imports with decisions stamped at revision 1 and notes unstamped, so the drift marker renders again on import with the importer's revision numbers.
 
-```bash
-python3 skills/wheypoint/scripts/wheypoint.pyz shape [<work-id>] [--scope project | machine] [--project <key>]... [--depth <n>] [--kind <edge-kind>]...
-```
+### `export` and `import` refusal codes
 
-`shape` returns one JSON document; it never picks a record and never dispatches.
+- `export-unresolved`: the ref did not resolve to one current record.
+- `bundle-unwritable`: the `--out` file could not be written.
+- `bundle-unreadable`: the bundle file could not be read.
+- `export-checkout-required`: the record links a repository path and no Git checkout is known.
+- `bundle-invalid`: the bundle is oversized, malformed, too deeply nested, or fails schema validation.
+- `bundle-digest-mismatch`: a digest or the origin does not match the record.
+- `invalid-slug`: the `--as` value is not a lower-case identifier.
+- `import-exists`: the target work id already has a record.
+- `note-unwritable`: the projection mirror could not be written.
 
-- `nodes`: one entry per record, with `ref`, `project`, `work_id`, `title`, `status`, `next`, `revision_number`, `updated`, and `gates`.
-- `edges`: every held edge, as `{from, to, kind, revision_id, pending}`.
-- `pending`: the reciprocal edges that `fork-pending` and `link-pending` owe; they have no `revision_id`.
-- `documents`: each non-`wheypoint:` ref that two or more records name, with those records.
-- `roots`: the node refs with no `forked_from` or `superseded_by` edge.
-- `dangling`: each edge whose `wheypoint:` target has no record.
-- `dot`: a deterministic Graphviz string, with nodes sorted by ref and edges by from, to, and kind.
+## `list` filters
 
-A `<work-id>` keeps only the component around that record.
-`--depth <n>` keeps records within `n` hops of `<work-id>`.
-`--kind` keeps only edges of the named kinds.
-
-## `backlinks` and the `list` filters
-
-```bash
-python3 skills/wheypoint/scripts/wheypoint.pyz backlinks <ref> [--scope project | machine] [--project <key>]...
-```
-
-`backlinks` returns `ref` and `items`: every record in scope whose edges or links name the normalized ref.
 `list` adds these repeatable filters:
 
 - `--entry-kind` and `--entry-state` keep records with a matching entry; one entry must match both.
@@ -153,28 +127,15 @@ python3 skills/wheypoint/scripts/wheypoint.pyz backlinks <ref> [--scope project 
 - `--edge-kind` keeps records that hold an edge of that kind.
 - `--linked-to <ref>` keeps records whose edges or links name the ref.
 - `--forked-from <work-id>` keeps the fork children of that parent.
+- `--owner <who>` keeps records with an active question owned by that person; the match ignores case.
 
-`list --linked-to <ref>` and `backlinks <ref>` return the same set of records.
 Each `list` item adds `edges_out`, `edges_in`, `forked_from`, and `gates`.
 `edges_out` items are `{kind, to}`, and `edges_in` items are `{kind, source}`.
-A bad `--kind` or `--edge-kind` refuses `flag-kind`, a bad `--entry-kind` or `--entry-state` refuses `flag-entry`, and an unparseable `backlinks` ref refuses `flag-link`.
+A bad `--edge-kind` refuses `flag-kind`, and a bad `--entry-kind` or `--entry-state` refuses `flag-entry`.
 
-## The `pending` and `bridge` payloads
+## The `bridge` payload
 
-`show` and `resolve` add `pending` and `bridge` to their replies.
-
-`pending` lists link entries first, then fork entries:
-
-```json
-[
-  {"source": "wheypoint:<project_key>/<work_id>", "kind": "relates_to", "to": "wheypoint:<project_key>/<this work_id>", "revision_id": "<source revision>"},
-  {"kind": "fork", "child": "wheypoint:<project_key>/<child>", "revision_id": "<child revision>",
-   "moved": [{"entry_id": "<parent id>", "child_entry_id": "<child id>"}],
-   "copied": [{"entry_id": "<parent id>", "child_entry_id": "<child id>"}],
-   "dossier": ["<fork title>"], "links": ["<ref>"]}
-]
-```
-
+`show` and `resolve` add `bridge` to their replies.
 `bridge` is `{state, node_ref, wheypoint_ref}`.
 `resolve` reports `bridge: null` when no record resolved.
 
@@ -195,11 +156,9 @@ The gate mapping is data for a future milknado call:
 | --- | --- |
 | gated question | pending goal review |
 | resolve | accepted review |
-| active blocker | blocked node |
 | checkpoint | snapshot receipt |
 
 ## Known costs
 
-- Every `show`, `resolve`, `lint`, and parent `checkpoint` scans the project corpus for pending forks and links.
-- `shape`, `backlinks`, and the `list` filters scan `record.json` files; no index by decision or by ref exists.
-- An `xdg:` document digest changes when the document is edited, so coverage fails at the next `lint`.
+- The `list` filters scan `record.json` files; no index by decision or by ref exists.
+- An `xdg:` document digest changes when the document is edited, so coverage fails at the next `resolve`.

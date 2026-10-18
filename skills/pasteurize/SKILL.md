@@ -17,7 +17,7 @@ Use this process for hard bugs.
 
 ## Discipline
 
-**Iron Law:** Build a reliable feedback loop before you form one hypothesis.
+**Rule:** Build a reliable feedback loop before you form one hypothesis.
 
 Stop at each red flag:
 

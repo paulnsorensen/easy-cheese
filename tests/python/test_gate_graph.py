@@ -92,7 +92,7 @@ class TestToDot:
 
     def test_contains_the_curdle_edge_with_label(self, gate_graph: _GateGraphModule) -> None:
         dot = gate_graph.to_dot()
-        assert 'handshake -> curdle [label="both keys"]' in dot
+        assert 'handshake -> curdle [label="coherence check"]' in dot
 
     def test_is_deterministic(self, gate_graph: _GateGraphModule) -> None:
         assert gate_graph.to_dot() == gate_graph.to_dot()
@@ -691,7 +691,7 @@ class TestSpecFormatValidGatePresence:
             i for i, line in enumerate(lines) if line.strip() == f"{self.SPEC_FORMAT_DOT_ID} -> handshake;"
         )
         curdle_edge_idx = next(
-            i for i, line in enumerate(lines) if 'handshake -> curdle [label="both keys"];' in line
+            i for i, line in enumerate(lines) if 'handshake -> curdle [label="coherence check"];' in line
         )
         assert gate_edge_idx < curdle_edge_idx, (
             "the spec-format-valid gate's edge must be ordered before the handshake -> curdle edge"

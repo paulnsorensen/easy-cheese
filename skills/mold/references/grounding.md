@@ -66,7 +66,7 @@ An item **covers** a decision only when all three conditions apply:
 - **Fresh.** The citation resolves at the current HEAD. Probe the evidence again when a referent moved, changed its name, or no longer exists.
 - **Decisive.** The item names the decision that it settles. A topic alone does not settle a decision.
 
-Put covered items under `Decided`. Include the source artifact and citation, such as `via: .cheese/notes/<slug>.md`. Run the normal pass for each uncovered item. The fast path skips work. It never skips a gate. It cannot skip the two-key handshake or fresh-context taste test. It also cannot skip a consequential fork that the user did not select.
+Put covered items under `Decided`. Include the source artifact and citation, such as `via: .cheese/notes/<slug>.md`. Run the normal pass for each uncovered item. The fast path skips work. It never skips a gate. It cannot skip the coherence self-check or fresh-context taste test. It also cannot skip a consequential fork that the user did not select.
 
 Record the intake result for each session. Record `prior evidence: none` when the session starts with no prior evidence. This intake record is not a probe outcome. It does not satisfy `grounding-recorded`. Run the wiki probe and record its outcome separately.
 

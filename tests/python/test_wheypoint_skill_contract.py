@@ -26,24 +26,23 @@ WORK_GRAPH = SKILLS_DIR / "wheypoint" / "references" / "work-graph.md"
 
 # `checkpoint` is the only intent write path (the wheypoint-ergonomics spec made
 # the kernel's `commit` host-internal); `validate` is its dry run, `schema`
-# prints a contract, and `fork`, `link`, and `unlink` each write one record of
-# the work graph. The rest are read-only. Genesis is a parent the runtime binds,
-# so neither a `create` nor a `commit` command may appear.
+# prints a contract, `fork` and `import` write one child genesis, and `export`
+# writes a bundle file. The rest are
+# read-only. Genesis is a parent the runtime binds, so neither a `create` nor
+# a `commit` command may appear.
 COMMANDS = (
     "checkpoint",
     "validate",
     "schema",
     "resolve",
     "show",
-    "lint",
     "list",
     "log",
     "turns",
     "fork",
-    "link",
-    "unlink",
-    "shape",
-    "backlinks",
+    "export",
+    "import",
+    "handoff",
 )
 REF_SCHEMES = ("repo:", "xdg:", "wheypoint:", "milknado:", "https:")
 
@@ -115,18 +114,21 @@ def test_legacy_runtime_gates_cannot_be_waived_by_manual_resume() -> None:
     assert "never this halt gate or any other runtime integrity gate" in body
     assert "explicit permission to dispatch the next phase" not in body
 
-def test_the_documented_command_set_is_exactly_the_fourteen_the_spec_fixes() -> None:
+def test_the_documented_command_set_is_exactly_the_twelve_the_spec_fixes() -> None:
     """Documented across the continuity docs as a whole: /wheypoint owns the
-    write path (checkpoint, validate, fork, link, unlink) and the read path
-    (schema, show, list, log, turns, shape, backlinks), the resume flow owns
-    resolve and lint. All fourteen are reachable and neither `create` nor the
-    retired `commit` exists."""
-    assert len(COMMANDS) == 14
+    write path (checkpoint, validate, fork, import) and the read path (schema,
+    show, list, log, turns, export, handoff), the resume flow owns resolve. All
+    twelve are reachable; neither `create` nor the retired `commit`, `lint`,
+    `link`, `unlink`, `shape`, or `backlinks` exists."""
+    assert len(COMMANDS) == 12
     corpus = "\n".join(_read(path) for path in (WHEYPOINT, CHEESE, CONTINUE_RESUME))
     for command in COMMANDS:
         marker = f"scripts/wheypoint.pyz {command}"
         portable_marker = f"/wheypoint {command}"
         assert marker in corpus or portable_marker in corpus, f"undocumented command: {command}"
+    for removed in ("lint", "link", "unlink", "shape", "backlinks"):
+        assert f"scripts/wheypoint.pyz {removed}" not in corpus, f"removed verb documented: {removed}"
+        assert f"/wheypoint {removed}" not in corpus, f"removed verb documented: {removed}"
     assert "scripts/wheypoint.pyz create" not in corpus, (
         "genesis is an intent the runtime binds, not a separate command"
     )
@@ -207,7 +209,7 @@ def test_split_and_join_are_marked_outside_the_continuity_contract() -> None:
     assert "commit no delta" in body
 
 def test_the_move_vocabulary_matches_the_schema_and_resume_preserves_flags() -> None:
-    """`NextMove` declares `cut`, so an authoritative record can carry it.
+    """Every `NextMove` the schema declares appears in the wheypoint prose.
 
     A record the schema accepts and the prose omits is a handoff no reader is
     told how to take. The behaviour side of this contract lives in
@@ -225,5 +227,5 @@ def test_the_move_vocabulary_matches_the_schema_and_resume_preserves_flags() -> 
     assert "GateReceipt" not in corpus
     for flag in ("mode:", "--auto", "--hard", "--open-pr", "--safe"):
         assert flag in corpus
-    assert "continue: press-corrective-cook" in corpus
-    assert "not a global Press-to-Cook dispatch" in corpus
+    assert "press-corrective-cook" not in corpus
+    assert "A Press finding hands off as a Cook correction" in corpus

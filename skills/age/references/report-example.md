@@ -20,7 +20,7 @@ A finding that drops the list marker or the location backticks is invisible to `
   - recommendation: <action>
   - invariants: must-hold: <X>; must-not: <Y>
 ```
-For a `conventions` finding, state the exact rule, source, offending code, and correction. For an `altitude` finding, state the symptom, owner, better placement, and concrete cost; architecture preference alone is not a finding.
+For a `conventions` finding, state the exact rule, source, offending code, and correction. For an `altitude` finding, state the symptom, owner, better placement, and concrete cost; architecture preference alone is not a finding. For a `reframe` finding, state the incidental complexity, new model, deleted concepts, and preserved behavior; a change that only moves complexity is not a finding.
 The `invariants:` line is optional.
 Add it to a `blocker` or `high` finding when the fix could break a neighbour.
 `/cure` implements `recommendation:` as the locked fix decision and keeps every `invariants:` clause true.
@@ -57,6 +57,10 @@ When ten or more `low` findings exist, collapse the `## Low` section to one line
 - **[conventions:medium]** `src/config.py:12` — `os.environ["PORT"]` bypasses the repository rule: “Parse environment values with `ConfigValue` before use.”
   - location: module · fix-cost-now: contained · fix-cost-later: spreading · confidence: certain
   - recommendation: parse the value with `ConfigValue` before use, as `docs/configuration.md:18` requires.
+
+- **[reframe:medium]** `src/export/csv.ts:30-88` — Incidental complexity: the new `isLegacy` flag adds four branches to `writeRow`; new model: map legacy rows to the current `Row` shape at load; deleted: the flag and its four branches; behavior preserved: the legacy fixtures in `tests/export/csv.test.ts` keep the same output.
+  - location: module · fix-cost-now: moderate · fix-cost-later: spreading · confidence: speculating
+  - recommendation: map legacy input to `Row` in `loadRows` so the `isLegacy` branches in `writeRow` disappear, after confirming no approved design requires the flag.
 
 ## Low
 - **[deslop:low]** `src/utils/format.ts:18` — variable `data` shadows outer `data`.

@@ -36,7 +36,7 @@ This file defines only how the report shows that policy.
 - <suite>/<test_id>: <signature> — identical to baseline, outside the cooked contract, not fixed (see [`quality-gates.md`](quality-gates.md))
 
 ### Self-eval
-- [x] A failing test existed before production changes.
+- [x] Tests cover the changed behavior.
 - [x] Cook made tests pass without speculative behavior.
 - [x] Taste-test passed.
 - [x] Quality gates pass, or all remaining red is recorded baseline failure (see Baseline section).

@@ -1,26 +1,22 @@
-"""Execution of one accepted canonical Mold-to-Cook handoff."""
+"""Execution of one bound spec and plan."""
 
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import cast
 
 import attrs
 
 from easy_cheese_schemas import ArtifactRef, CurdDisposition, CurdPlan, CurdResult, EvidenceRef, RemediationState, validate_contract, supported_version_for, SourcePlanRef, canonical_bytes
-from easy_cheese_schemas.mold_cook import (
-    CookPreparationOutcome,
-    CookPreparationResult,
-    MoldCookHandoff,
-    MoldCookInputKind,
-    MoldCookMode,
-)
+from easy_cheese_schemas.mold_cook import MoldCookCoverage
 from easy_cheese_schemas.schema_runtime import ContractValidationError
 from easy_cheese.shared import workflow
+from easy_cheese.shared.artifacts import resolve_verified_bytes
+from easy_cheese.shared.wheypoint.canonical import digest_bytes
 from easy_cheese.shared.fanout.mode import select_mode
-from easy_cheese.shared.mold_cook_handoff import accept_mold_cook_handoff
+from easy_cheese.shared.mold_cook_handoff import validate_bound_execution
 from easy_cheese.shared.remediation_artifacts import (
     REMEDIATION_STATE_ROLE,
     build_artifact_ref,
@@ -31,96 +27,56 @@ from easy_cheese.shared.fanout.remediation_store import scope_state_path
 from easy_cheese.shared.fanout.run_fan import PressDispatcher
 
 from .fan_execute import execute_fan
-
-from ._types import (
-    ClassifiedCookInput,
-    CookExecutionOutcome,
-    CookPreparationRequest,
-)
-from .evidence import load_contract, local_path_for, persist_value
-from .legacy import pointer_artifact_root
-from .outcomes import build_pointer_ref
-from .results import validate_preparation_result
-from .setup import validate_handoff_authority
+from ._types import CookExecutionOutcome
 
 
-def execute_accepted_handoff(
-    pointer_source: CookPreparationResult | ArtifactRef | str | Path,
+def _require_valid_artifact_ids(template: ArtifactRef, artifact_ids: Sequence[str]) -> None:
+    """Raise when ArtifactRef validation rejects any derived artifact id."""
+    for artifact_id in artifact_ids:
+        _ = attrs.evolve(template, artifact_id=artifact_id)
+
+
+def execute_bound_plan(
     *,
-    artifact_root: str | Path | None = None,
+    request_id: str,
+    spec_ref: ArtifactRef,
+    planner_result_ref: ArtifactRef,
+    plan_ref: ArtifactRef,
+    coverage: MoldCookCoverage,
+    artifact_root: str | Path,
     repository_root: str | Path = ".",
     dispatch_writer: workflow.WriterDispatch,
     dispatch_review: workflow.ReviewDispatch,
     dispatch_diagnosis: workflow.DiagnosisDispatch,
     dispatch_press: PressDispatcher | None = None,
     evidence: Mapping[str, EvidenceRef] | None = None,
+    runner_authorization_ref: ArtifactRef | None = None,
+    runner_response_ref: ArtifactRef | None = None,
+    setup_evidence_refs: Sequence[ArtifactRef] = (),
 ) -> CookExecutionOutcome:
-    """Accept one canonical pointer and execute its exact approved coverage."""
-
-    # The configured root is the containment root: a caller-supplied pointer
-    # URI names a path inside it and never defines it.
-    supplied_root = Path(artifact_root).resolve() if artifact_root is not None else None
-    if isinstance(pointer_source, CookPreparationResult):
-        prepared = validate_preparation_result(pointer_source)
-        if prepared.outcome is not CookPreparationOutcome.READY:
-            raise ContractValidationError(
-                "execution requires a READY preparation result"
-            )
-        if prepared.handoff_ref is None:
-            raise ContractValidationError("READY preparation has no handoff pointer")
-        handoff_ref = prepared.handoff_ref
-        pointer_path = local_path_for(handoff_ref.uri, supplied_root)
-    elif isinstance(pointer_source, ArtifactRef):
-        handoff_ref = pointer_source
-        pointer_path = local_path_for(pointer_source.uri, supplied_root)
-    else:
-        pointer_path = Path(pointer_source)
-        handoff_ref = None
-    resolved_artifact_root = (
-        supplied_root
-        if supplied_root is not None
-        else pointer_artifact_root(pointer_path)
-    )
-    if not pointer_path.resolve().is_relative_to(resolved_artifact_root):
-        raise ContractValidationError(
-            "canonical pointer is outside artifact root "
-            + repr(str(resolved_artifact_root))
-        )
-    accepted = accept_mold_cook_handoff(
-        pointer_path,
+    """Execute the selected, validated plan without a handoff envelope."""
+    resolved_artifact_root = Path(artifact_root).resolve()
+    plan = validate_bound_execution(
+        spec_ref=spec_ref,
+        planner_result_ref=planner_result_ref,
+        plan_ref=plan_ref,
+        coverage=coverage,
         artifact_root=resolved_artifact_root,
+        runner_authorization_ref=runner_authorization_ref,
+        runner_response_ref=runner_response_ref,
+        setup_evidence_refs=setup_evidence_refs,
     )
-    handoff = cast(MoldCookHandoff, accepted.canonical.value)
-    request = CookPreparationRequest(
-        request_id=handoff.request_id,
-        source=ClassifiedCookInput(
-            MoldCookInputKind.CANONICAL_POINTER,
-            str(pointer_path),
-            pointer_path,
+    selected = tuple(coverage.curd_ids)
+    execution_id = f"{plan.plan_id}-{request_id}"
+    _require_valid_artifact_ids(
+        plan_ref,
+        (
+            request_id,
+            execution_id,
+            f"{request_id}/execution-outcome",
+            *(f"{request_id}/result/{curd_id}" for curd_id in selected),
         ),
-        repository_root=Path(repository_root).resolve(),
-        artifact_root=resolved_artifact_root,
-        mode=handoff.mode,
     )
-    validate_handoff_authority(handoff, request=request)
-    if handoff.mode is not MoldCookMode.FULL:
-        raise ContractValidationError(
-            "workflow execution requires a Full handoff with an approved plan"
-        )
-    if handoff.planner_result_ref is None or handoff.plan_ref is None:
-        raise ContractValidationError(
-            "Full handoff is missing its canonical planner result or plan"
-        )
-    plan_value = load_contract(
-        handoff.plan_ref,
-        CurdPlan,
-        resolved_artifact_root,
-    )
-    plan = cast(CurdPlan, plan_value)
-    # `accept_mold_cook_handoff` already proved the planner result and the plan
-    # are attached and that the coverage is a dependency-closed plan subset.
-    selected = tuple(handoff.coverage.curd_ids)
-    execution_id = f"{plan.plan_id}-{handoff.request_id}"
     # Only a passed result for a selected curd is reusable. Every other
     # selected curd dispatches again.
     recorded = _load_execution_results(resolved_artifact_root, execution_id, plan)
@@ -179,25 +135,19 @@ def execute_accepted_handoff(
     )
     whole_task_complete = (
         fan_outcome is None or fan_outcome.next_step == "done"
-    ) and not handoff.coverage.unresolved_work and set(completed) == set(selected)
-    resumable_ref = handoff_ref or build_pointer_ref(
-        pointer_path,
-        request_id=handoff.request_id,
-    )
+    ) and not coverage.unresolved_work and set(completed) == set(selected)
     result_refs = tuple(
-        persist_value(resolved_artifact_root, result, artifact_id=f"{handoff.request_id}/result/{result.source_curd_ref.curd_id}", role="curd-result", schema_uri=result.contract_version.schema_uri)
+        persist_value(resolved_artifact_root, result, artifact_id=f"{request_id}/result/{result.source_curd_ref.curd_id}", role="curd-result", schema_uri=result.contract_version.schema_uri)
         for result in execution_results[1]
     )
     outcome = CookExecutionOutcome(
-        request_id=handoff.request_id,
-        handoff_ref=resumable_ref,
-        planner_result_ref=handoff.planner_result_ref,
-        plan_ref=handoff.plan_ref,
-        coverage=handoff.coverage,
+        request_id=request_id,
+        planner_result_ref=planner_result_ref,
+        plan_ref=plan_ref,
+        coverage=coverage,
         completed_curds=completed,
-        remainder=handoff.coverage.unresolved_work,
+        remainder=coverage.unresolved_work,
         whole_task_complete=whole_task_complete,
-        resumable_ref=resumable_ref,
         execution_results=execution_results,
         fan_next_step=fan_outcome.next_step if fan_outcome else None,
         remediation_state_refs=remediation_state_refs,
@@ -209,25 +159,46 @@ def execute_accepted_handoff(
     outcome_ref = persist_value(
         resolved_artifact_root,
         _outcome_payload(outcome),
-        artifact_id=f"{handoff.request_id}/execution-outcome",
+        artifact_id=f"{request_id}/execution-outcome",
         role="execution_outcome",
         schema_uri=None,
     )
     return attrs.evolve(outcome, outcome_ref=outcome_ref)
 
 
+def persist_value(
+    root: Path,
+    value: object,
+    *,
+    artifact_id: str,
+    role: str,
+    schema_uri: str | None,
+) -> ArtifactRef:
+    content = canonical_bytes(value)
+    digest = digest_bytes(content)
+    reference = ArtifactRef(
+        artifact_id=artifact_id,
+        role=role,
+        uri=root.as_uri(),
+        digest=digest,
+        size_bytes=len(content),
+        media_type="application/json",
+        schema_uri=schema_uri,
+    )
+    retained = resolve_verified_bytes(reference, content, "application/json", root)
+    return attrs.evolve(reference, uri=Path(retained.path).as_uri())
+
+
 def _outcome_payload(outcome: CookExecutionOutcome) -> dict[str, object]:
     """Project the persisted execution outcome from the returned outcome."""
     return {
         "request_id": outcome.request_id,
-        "handoff_ref": outcome.handoff_ref,
         "planner_result_ref": outcome.planner_result_ref,
         "plan_ref": outcome.plan_ref,
         "coverage": outcome.coverage,
         "completed_curds": outcome.completed_curds,
         "remainder": outcome.remainder,
         "whole_task_complete": outcome.whole_task_complete,
-        "resumable_ref": outcome.resumable_ref,
         "fan_next_step": outcome.fan_next_step,
         "remediation_state_refs": outcome.remediation_state_refs,
         "stop_evidence_refs": outcome.stop_evidence_refs,
