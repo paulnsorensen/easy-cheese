@@ -635,16 +635,52 @@ def test_stack_tools_reports_missing_providers(
     }
 
 
+def _git_town_report(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    files: dict[str, str],
+    tools: frozenset[str] = frozenset({"git", "git-town"}),
+) -> tuple[dict[str, object], object]:
+    """Detect Git Town in a clone that has `files` and no local trunk key."""
+    for name, content in files.items():
+        _ = (tmp_path / name).write_text(content)
+
+    def which(name: str) -> str | None:
+        return f"/bin/{name}" if name in tools else None
+
+    monkeypatch.setattr(shutil, "which", which)
+
+    def run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args == ["git", "rev-parse", "--git-dir"]:
+            return completed(args, stdout=".git\n")
+        if args == ["git", "config", "--get", "git-town.main-branch"]:
+            return completed(args, returncode=1)
+        if args == ["git", "rev-parse", "--show-toplevel"]:
+            return completed(args, stdout=f"{tmp_path}\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(subprocess, "run", run)
+
+    result = stack_tools.detect_stack_tools(tmp_path)
+    providers = cast(dict[str, dict[str, object]], result["providers"])
+    return providers["git-town"], result["recommended"]
+
+
+GIT_TOWN_TRUNK = '[branches]\nmain = "trunk"\n'
+GIT_TOWN_NO_TRUNK = '[branches]\nperennials = ["qa"]\n'
+GIT_TOWN_INVALID = "[branches\n"
+
+
 @pytest.mark.parametrize(
     ("filename", "content", "status"),
     [
-        ("git-town.toml", '[branches]\nmain = "trunk"\n', "available"),
-        (".git-town.toml", '[branches]\nmain = "trunk"\n', "available"),
-        (".git-branches.toml", '[branches]\nmain = "trunk"\n', "available"),
-        ("git-town.toml", '[branches]\nperennials = ["qa"]\n', "not-configured"),
+        ("git-town.toml", GIT_TOWN_TRUNK, "available"),
+        (".git-town.toml", GIT_TOWN_TRUNK, "available"),
+        (".git-branches.toml", GIT_TOWN_TRUNK, "available"),
+        ("git-town.toml", GIT_TOWN_NO_TRUNK, "not-configured"),
         ("git-town.toml", '[branches]\nmain = ""\n', "not-configured"),
-        ("git-town.toml", "[branches\n", "not-configured"),
-        ("other.toml", '[branches]\nmain = "trunk"\n', "not-configured"),
+        ("git-town.toml", GIT_TOWN_INVALID, "not-configured"),
+        ("other.toml", GIT_TOWN_TRUNK, "not-configured"),
     ],
 )
 def test_git_town_detects_a_committed_config_file_without_local_git_config(
@@ -658,30 +694,34 @@ def test_git_town_detects_a_committed_config_file_without_local_git_config(
 
     Git Town reads the trunk from the committed file, so detection must too.
     """
-    _ = (tmp_path / filename).write_text(content)
+    git_town, recommended = _git_town_report(monkeypatch, tmp_path, {filename: content})
 
-    def which(name: str) -> str | None:
-        return f"/bin/{name}" if name in {"git", "git-town"} else None
+    assert git_town["status"] == status
+    assert git_town["repository_signal"] is (status == "available")
+    assert recommended == ("git-town" if status == "available" else None)
 
-    monkeypatch.setattr(shutil, "which", which)
 
-    def run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        if args == ["git", "rev-parse", "--git-dir"]:
-            return completed(args, stdout=".git\n")
-        if args == ["git", "config", "--get", "git-town.main-branch"]:
-            return completed(args, returncode=1)
-        if args == ["git", "rev-parse", "--show-toplevel"]:
-            return completed(args, stdout=f"{tmp_path}\n")
-        raise AssertionError(args)
+@pytest.mark.parametrize(
+    ("files", "status"),
+    [
+        ({"git-town.toml": GIT_TOWN_NO_TRUNK, ".git-branches.toml": GIT_TOWN_TRUNK}, "not-configured"),
+        ({"git-town.toml": GIT_TOWN_INVALID, ".git-town.toml": GIT_TOWN_TRUNK}, "not-configured"),
+        ({".git-town.toml": GIT_TOWN_TRUNK, ".git-branches.toml": GIT_TOWN_INVALID}, "available"),
+    ],
+)
+def test_git_town_reads_only_the_first_config_file_that_exists(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    files: dict[str, str],
+    status: str,
+) -> None:
+    """Git Town loads the first existing file and fails on its invalid content.
 
-    monkeypatch.setattr(subprocess, "run", run)
+    A lower-priority file must not report a trunk that Git Town never reads.
+    """
+    git_town, _ = _git_town_report(monkeypatch, tmp_path, files)
 
-    result = stack_tools.detect_stack_tools(tmp_path)
-
-    providers = cast(dict[str, dict[str, object]], result["providers"])
-    assert providers["git-town"]["status"] == status
-    assert providers["git-town"]["repository_signal"] is (status == "available")
-    assert result["recommended"] == ("git-town" if status == "available" else None)
+    assert git_town["status"] == status
 
 
 def test_git_town_reports_a_committed_config_when_the_binary_is_missing(
@@ -692,33 +732,16 @@ def test_git_town_reports_a_committed_config_when_the_binary_is_missing(
     The provider stays `not-installed` and is never recommended, but the report
     no longer claims that the repository has no Git Town configuration.
     """
-    _ = (tmp_path / "git-town.toml").write_text('[branches]\nmain = "trunk"\n')
+    git_town, recommended = _git_town_report(
+        monkeypatch, tmp_path, {"git-town.toml": GIT_TOWN_TRUNK}, tools=frozenset({"git"})
+    )
 
-    def which(name: str) -> str | None:
-        return "/bin/git" if name == "git" else None
-
-    monkeypatch.setattr(shutil, "which", which)
-
-    def run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        if args == ["git", "rev-parse", "--git-dir"]:
-            return completed(args, stdout=".git\n")
-        if args == ["git", "config", "--get", "git-town.main-branch"]:
-            return completed(args, returncode=1)
-        if args == ["git", "rev-parse", "--show-toplevel"]:
-            return completed(args, stdout=f"{tmp_path}\n")
-        raise AssertionError(args)
-
-    monkeypatch.setattr(subprocess, "run", run)
-
-    result = stack_tools.detect_stack_tools(tmp_path)
-
-    providers = cast(dict[str, dict[str, object]], result["providers"])
-    assert providers["git-town"] == {
+    assert git_town == {
         "installed": False,
         "repository_signal": True,
         "status": "not-installed",
     }
-    assert result["recommended"] is None
+    assert recommended is None
 
 
 def test_validate_publication_commit_only_landing_with_na_topology_is_valid() -> None:

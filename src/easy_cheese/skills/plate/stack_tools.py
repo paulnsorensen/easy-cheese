@@ -15,7 +15,8 @@ _TIMEOUT_SECONDS = 5
 _REMOTE_TIMEOUT_SECONDS = 10
 _STATUS_LINE = re.compile(r"^HTTP/[\d.]+\s+(\d{3})\b")
 _STDERR_LIMIT = 2000
-# File names Git Town accepts for its committed, team-shared configuration.
+# File names Git Town accepts for its committed, team-shared configuration, in
+# the order Git Town tries them.
 _GIT_TOWN_CONFIG_FILES = ("git-town.toml", ".git-town.toml", ".git-branches.toml")
 
 
@@ -50,6 +51,8 @@ def _git_town_file_trunk(cwd: Path) -> bool:
 
     A teammate who clones a repository with a committed `git-town.toml` has no
     local `git-town.main-branch` key, but Git Town reads the trunk from the file.
+    Git Town reads only the first file that opens and fails on invalid content,
+    so a lower-priority file never rescues an invalid or trunk-less one.
     """
     result = _run(["git", "rev-parse", "--show-toplevel"], cwd)
     if result is None or result.returncode != 0 or not result.stdout.strip():
@@ -57,17 +60,22 @@ def _git_town_file_trunk(cwd: Path) -> bool:
     root = Path(result.stdout.strip())
     for name in _GIT_TOWN_CONFIG_FILES:
         try:
-            config = tomllib.loads((root / name).read_text())
-        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+            text = (root / name).read_text(encoding="utf-8")
+        except OSError:
             continue
+        except UnicodeDecodeError:
+            return False
+        try:
+            config = tomllib.loads(text)
+        except tomllib.TOMLDecodeError:
+            return False
         branches = config.get("branches")
         trunk = (
             cast(dict[str, object], branches).get("main")
             if isinstance(branches, dict)
             else None
         )
-        if isinstance(trunk, str) and trunk.strip():
-            return True
+        return isinstance(trunk, str) and bool(trunk.strip())
     return False
 
 
