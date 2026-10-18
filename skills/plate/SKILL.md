@@ -53,9 +53,9 @@ Inspect a stack only as a step of a requested stack change. Route a stack inspec
 
 New-PR work loads its references in this sequence. Load each reference alone. Close it before you load the next one.
 
-1. Load `references/topology.md`. Resolve the topology.
-2. Load `references/ordinary-pr.md` for single topology. Load `references/stacks.md` for stacked topology.
-3. Load exactly one provider reference from `references/stacks.md` for stacked topology.
+1. Load `references/topology.md`. Resolve the topology. Plate decides it and does not ask the user.
+2. Load `references/ordinary-pr.md` for the `single` or `orthogonal_flat` shape. Load `references/stacks.md` for a stacked shape.
+3. Load exactly one provider reference from `references/stacks.md` for a stacked shape.
    The provider references are [`gt.md`](references/gt.md), [`git-town.md`](references/git-town.md), and [`gh-stack.md`](references/gh-stack.md).
    When no provider is usable, `references/stacks.md` routes to [`setup.md`](references/setup.md).
 

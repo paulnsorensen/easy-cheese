@@ -211,7 +211,7 @@ def detect_cmd(*, cwd: str = ".") -> dict[str, object]:
     """
     path = Path(cwd)
     if not path.is_dir():
-        raise fromargs.CliError(f"not a directory: {path}", exit_code=1)
+        raise fromargs.CliError(f"not a directory: {path}", exit_code=2)
     return detect_stack_tools(path.resolve())
 
 

@@ -653,23 +653,8 @@ def test_https_integrity_failure_is_not_materialized(
 def test_resolves_registered_versioned_json_with_default_schema_validation(
     tmp_path: Path,
 ) -> None:
-    schema_uri = "https://schemas.easy-cheese.dev/phase-contract"
-    document = {
-        "contract_version": {
-            "schema_uri": schema_uri,
-            "major": "1",
-            "minor": "0",
-        },
-        "source": "cook",
-        "input_schema_uris": ["https://schemas.easy-cheese.dev/curd-plan"],
-        "outputs": [
-            {
-                "destination": "cure",
-                "payload_schema_uri": "https://schemas.easy-cheese.dev/curd-result",
-            }
-        ],
-    }
-    content = json.dumps(document).encode()
+    schema_uri = REGISTERED_SCHEMA_URI
+    content = registered_contract_bytes()
     source = tmp_path / "input.json"
     _ = source.write_bytes(content)
     artifact_directory = tmp_path / "resolved"

@@ -15,6 +15,8 @@ These prompts must invoke /briesearch (or its router parent /cheese must hand of
 - "before I implement, what's the right approach for retry-with-backoff"
 - "look up the FastAPI streaming response API"
 - "what version of Tailwind do most production projects use"
+- "ground this plan in the current chezmoi docs before we design it"
+- "prepare a docs brief for using Prisma in this service"
 
 ## Should-not-trigger queries
 
@@ -43,6 +45,11 @@ For each completed /briesearch run, verify:
 9. **Output capped.** The chat reply contains the short form only. A deep look also returns the report path.
 10. **A route does not authorize the next skill.** A research-only run can recommend `/mold` or `/cook` in `### Next step`. That run must then stop. Enter the next skill only when the current prompt explicitly requests that work.
 11. **A sidechain run declares itself.** A run that another skill starts records `invocation: sidechain` in the manifest. That run does not ask the user a question. It reports the open question in the result.
+12. **Routes come from detection.** The run executes `providers` before the routing block. Each selected route is the first working route for its capability, or the provider that the user named.
+13. **A CLI wins over an MCP for one provider.** When both routes are usable, the manifest `tool` names the CLI subcommand. Exception: `git-host` uses the host GitHub MCP before `gh`.
+14. **No quote rests on a model summary.** Each quoted claim cites a raw body from a retrieval route, not native fetch summary text.
+15. **The tier matches the question.** The routing block names the tier. The declared budget matches the tier in `budgets.md`, or an extension explains the difference.
+16. **A library docs brief checks freshness.** The run sends topic-scoped docs queries, not one whole-library query. It extracts at least one official release marker. The reply contains the `### Library brief` section.
 
 ## Failure modes to watch for
 
@@ -54,6 +61,8 @@ For each completed /briesearch run, verify:
 - **A recommended next skill runs without authorization** — a scope regression. The report advises the route. The user authorizes it.
 - **A sidechain run records `top-level`** — a provenance regression. The caller must set the invocation field.
 - **Untrusted content honored as instructions** — a security regression. Fix it immediately.
+- **A vendor is hard-coded** — the run selects one provider without `providers` output or a user request. Log this failure as a routing regression.
+- **A configured MCP server is assumed loaded** — the run selects an MCP route whose tools are absent from the tool list.
 
 ## How to run
 

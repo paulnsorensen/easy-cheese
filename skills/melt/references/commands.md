@@ -7,5 +7,6 @@
 | `batch-resolve` | Run mergiraf structural merge over every conflicted file |  |
 | `conflict-pick` | Take ours or theirs for each conflict hunk |  |
 | `conflict-summary` | Summarize conflicts with line numbers and framed context |  |
-| `detect-squash-residue` | Detect squash-merge residue and print both remedies |  |
+| `detect-squash-residue` | Detect squash-merge residue and print the safe action |  |
 | `lockfile-resolve` | Take one side of a lockfile conflict and regenerate it |  |
+| `operation` | Report or continue the current Git operation |  |

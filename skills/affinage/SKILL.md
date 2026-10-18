@@ -99,16 +99,18 @@ Read `references/flow-details.md` for exact commands, exit codes, and grading re
    Fetch review bodies from `pulls/<pr>/reviews`.
    Keep each nonempty body.
    Remove duplicates by `pull_request_review_id`.
-5. **Skip answered threads.** Skip a thread when the resolved GitHub handle wrote its latest comment.
-   Render the footer as `agent on behalf of <handle>`.
+5. **Skip answered threads.** Read thread resolution state from GraphQL `reviewThreads`.
+   Skip a thread that GitHub marks resolved.
+   Skip a thread when the resolved GitHub handle replied after its root comment.
 6. **Grade claims.** Classify each claim by the `/age` dimension and severity rules.
    Do not increase severity because a reviewer selected `CHANGES_REQUESTED`.
    Put contained fixes in severity sections.
    Put claims that need outside evidence in `## Needs-investigation`.
    Put wrong, unsupported, or large claims in `## Reviewer-rejected`.
+   Put claims that the current head already fixes in `## Already-addressed`.
 7. **Write report.** Write `.cheese/affinage/pr-<n>.md`.
    Start with the four-line handoff slug.
-   Add the `/age` report body and two affinage sections.
+   Add the `/age` report body and the affinage sections.
    See `## Output`.
 8. **Act or ask.** Follow `## Handoff`.
 9. **Draft non-cure replies.** Draft replies for rejected and investigation claims.
@@ -117,9 +119,10 @@ Read `references/flow-details.md` for exact commands, exit codes, and grading re
     Read `### Applied` and `### Deferred` from `.cheese/cure/pr-<n>.md`.
     Draft `Fixed — <applied summary>.` for applied comment findings.
     Draft `Attempted fix reverted — <reason>.` for deferred comment findings.
-11. **Post replies.** Show one reply gate for every drafted reply.
+11. **Post replies.** Show one reply gate that lists every drafted reply and every already-addressed thread.
     Skip the gate only when `--auto` is active.
     Post approved replies with `python3 skills/affinage/scripts/affinage.pyz post-reply`.
+    Resolve each approved already-addressed thread without a reply.
 12. **Publish.** Run this step only after all approved replies post.
     Publish when `/cure` applies at least one fix.
     Also publish when `/melt` resolved a merge conflict.
@@ -139,6 +142,7 @@ Do not post GitHub replies for these findings.
 Run the fresh review before you grade external claims.
 This order lets you remove duplicate findings.
 Use the same agent gate as the grading step.
+Start each `reviewer` worker prompt with the line `Review mode: severity-report`.
 
 ## Merge-conflict resolution
 
@@ -163,6 +167,8 @@ Use a fresh read-only `reviewer` when any limit below is true:
 - Threads cover more than 5 files.
 
 Resolve the reviewer through the shared agent resolver.
+Start the reviewer prompt with the line `Review mode: severity-report`.
+Without that line, the `reviewer` agent returns `blocked: missing-contract`.
 Use a general worker only with `degraded: true`.
 The reviewer returns a compact digest of graded findings.
 Each finding includes its dimension, severity, confidence, evidence, and draft push-back.
@@ -266,25 +272,24 @@ The gate therefore runs once at the publication boundary.
 - Reserve `## Reviewer-rejected` for wrong, unsupported, or large claims.
 - Never apply code fixes in affinage.
 - Send code fixes to `/cure` and merge conflicts to `/melt`.
-- Never post a reply without approval, unless `--auto` is active.
+- Never post a reply or resolve a thread without approval, unless `--auto` is active.
 - Post replies only through `python3 skills/affinage/scripts/affinage.pyz post-reply`.
 - End every reply with `agent on behalf of <handle>`.
 - Resolve `<handle>` from `RESPOND_GH_HANDLE`, `gh api user --jq .login`, or `git config user.name`.
-- Skip a thread when the resolved handle wrote its latest comment.
-- Use GraphQL `reviewThreads` only when cross-session resolution state is necessary.
+- Use GraphQL only to read `reviewThreads` state and to resolve already-addressed threads.
 - Apply the voice rules in `../age/references/voice.md`.
 - Use `certain`, `speculating`, or `don't know` for confidence.
 - State that no findings exist when no claim needs grading.
 
 ## References
 
-Use these affinage references:
+Read each affinage reference when its trigger applies:
 
-- `references/flow-details.md`
-- `references/merge-conflict.md`
-- `references/report-template.md`
-- `references/handoff-templates.md`
-- `references/auto-mode.md`
+- `references/flow-details.md` — Flow steps 2, 3, 5, 6, 9, and 11.
+- `references/merge-conflict.md` — `pr-status` reports a conflicting or dirty merge state.
+- `references/report-template.md` — Flow step 7.
+- `references/handoff-templates.md` — you render the cure selection gate or the reply gate.
+- `references/auto-mode.md` — `--auto` or `--plate` is active.
 
 Use `../age/references/sub-agent-gate.md` for the shared agent gate.
 See the generated command inventory in [`references/commands.md`](references/commands.md).

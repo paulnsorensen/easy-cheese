@@ -31,7 +31,6 @@ BASE_SPEC = (SPEC_FIXTURES / "valid_spec.md").read_text(encoding="utf-8")
 LEGACY_SPEC = (SPEC_FIXTURES / "legacy_v013_spec.md").read_text(encoding="utf-8")
 MINI_SPEC = (SPEC_FIXTURES / "valid_mini_spec.md").read_text(encoding="utf-8")
 MOLD_ARCHIVE = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
-COOK_ARCHIVE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 
 class _RunFn(Protocol):
@@ -56,17 +55,9 @@ def _run_pyz(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _run_cook(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
-    cook_pyz = COOK_ARCHIVE
+def _run_finalize(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [
-            sys.executable,
-            str(cook_pyz),
-            "prepare",
-            "--spec",
-            str(path),
-            *flags,
-        ],
+        [sys.executable, str(MOLD_ARCHIVE), "finalize", str(path), *flags],
         capture_output=True,
         text=True,
     )
@@ -283,7 +274,7 @@ def test_fenced_fake_heading_and_table_rows_are_invisible_to_detection(
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert any("Risks" in line for line in errors)
 
 
@@ -297,7 +288,7 @@ def test_missing_required_section_is_rejected(tmp_path: Path, _run: _RunFn) -> N
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert len(errors) == 1
     assert "Risks" in errors[0]
 
@@ -314,7 +305,7 @@ def test_acceptance_id_absent_from_table_is_rejected(
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert len(errors) == 1
     assert "AC-2" in errors[0]
     assert "absent" in errors[0]
@@ -349,7 +340,7 @@ def test_acceptance_id_duplicated_in_table_is_rejected(
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert len(errors) == 1
     assert "AC-1" in errors[0]
     assert "duplicated=['AC-1']" in errors[0]
@@ -382,7 +373,7 @@ def test_matrix_metadata_on_tracer_row_is_rejected(
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert len(errors) == 1
     assert "AC-1" in errors[0]
     assert "tracer" in errors[0]
@@ -416,7 +407,7 @@ def test_contract_matrix_row_missing_interface_version_is_rejected(
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert len(errors) == 1
     assert "AC-2" in errors[0]
     assert "contract-matrix" in errors[0]
@@ -433,7 +424,7 @@ def test_unknown_mode_value_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert any("AC-1" in line and "Mode" in line for line in errors)
 
 
@@ -448,7 +439,7 @@ def test_six_cell_row_is_a_shape_error(tmp_path: Path, _run: _RunFn) -> None:
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert any("test-contracts-table-shape" in line for line in errors)
 
 
@@ -464,7 +455,7 @@ def test_missing_delimiter_row_is_a_shape_error(tmp_path: Path, _run: _RunFn) ->
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert any("test-contracts-table-shape" in line for line in errors)
 
 
@@ -477,7 +468,7 @@ def test_duplicate_acceptance_heading_is_rejected(tmp_path: Path, _run: _RunFn) 
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert any("duplicate-heading" in line and "acceptance" in line for line in errors)
 
 
@@ -487,7 +478,7 @@ def test_missing_frontmatter_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     path = _write(tmp_path, "spec.md", text)
     result = _run(path, "--strict")
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert any("spec-provenance-required" in line for line in errors)
 
 
@@ -538,7 +529,7 @@ def test_present_test_contracts_table_is_still_validated(
     path = _write(tmp_path, "spec.md", BASE_SPEC.replace(row, "", 1))
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert any("AC-2" in line for line in errors)
 
 
@@ -567,7 +558,7 @@ def test_multiple_violations_accumulate_in_one_run(
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert len(errors) == 3
     assert any("Risks" in line for line in errors)
     assert any("AC-1" in line and "tracer" in line for line in errors)
@@ -594,24 +585,22 @@ def test_legacy_v013_spec_is_accepted_on_read(tmp_path: Path, _run: _RunFn) -> N
 def test_legacy_v013_spec_is_not_execution_authority(tmp_path: Path) -> None:
     path = _write(tmp_path, "legacy-v013.md", LEGACY_SPEC)
     original = path.read_bytes()
-    result = _run_cook(
+    result = _run_finalize(
         path,
-        "--request-id",
-        "legacy-v013",
-        "--repository-root",
-        str(tmp_path),
         "--artifact-root",
         str(tmp_path / "artifacts"),
-        "--mode",
-        "full",
+        "--operation-id",
+        "legacy-v013",
+        "--request-id",
+        "legacy-v013",
     )
 
     assert result.returncode == 0, result.stderr
-    preparation = cast(dict[str, object], json.loads(result.stdout))
-    assert preparation["outcome"] == "needs-planning"
-    assert preparation["findings"] == []
-    assert preparation["handoff_ref"] is None
-    assert preparation["approved_plan_ref"] is None
+    finalization = cast(dict[str, object], json.loads(result.stdout))
+    assert finalization["status"] == "saved-not-ready"
+    assert finalization["ready"] is False
+    requirements = cast(list[dict[str, object]], finalization["requirements"])
+    assert any(item["requirement_id"] == "spec-validation" for item in requirements)
     assert path.read_bytes() == original
 
 
@@ -621,7 +610,7 @@ def test_legacy_v013_spec_is_rejected_under_strict_mint(
     path = _write(tmp_path, "spec.md", LEGACY_SPEC)
     result = _run(path, "--strict")
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert not _notice_lines(result)
     assert any("spec-provenance-required" in line for line in errors)
     assert not any("gate-applicability" in line for line in errors)
@@ -644,7 +633,7 @@ def test_legacy_spec_grounding_content_is_still_validated(
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert len(errors) == 1
     assert "delegation-digest-recorded" in errors[0]
     assert "records no evidence" in errors[0]
@@ -657,7 +646,7 @@ def test_legacy_spec_still_fails_on_a_section_v013_required(
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert any(
         "missing-required-section" in line and "Risks" in line for line in errors
     )
@@ -675,7 +664,7 @@ def test_legacy_spec_test_contracts_content_is_still_validated(
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert any("test-contracts-table-shape" in line for line in errors)
 
 
@@ -718,7 +707,7 @@ def test_nested_source_is_reported_without_a_traceback(
         "status: approved\n", "status: approved\nsource:\n  value: mold-handshake\n", 1
     )
     result = _run(_write(tmp_path, "spec.md", text), *flags)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert any("spec-provenance-invalid" in line for line in _error_lines(result))
     assert "Traceback" not in result.stderr
 
@@ -729,7 +718,7 @@ def test_spec_without_frontmatter_is_malformed_not_legacy(
     end = BASE_SPEC.index("---", 3) + 3
     path = _write(tmp_path, "spec.md", BASE_SPEC[end:].lstrip("\n"))
     result = _run(path, "--strict")
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert not _notice_lines(result)
     assert any("spec-provenance-required" in line for line in _error_lines(result))
 
@@ -753,7 +742,7 @@ def test_missing_grounding_section_is_rejected(tmp_path: Path, _run: _RunFn) -> 
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert len(errors) == 3
     assert any(
         "missing-required-section" in line and "Grounding" in line for line in errors
@@ -779,7 +768,7 @@ def test_unrecorded_probe_is_rejected(
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert len(errors) == 1
     assert rule in errors[0]
     assert f"record the {probe} probe exactly once, got 0" in errors[0]
@@ -799,7 +788,7 @@ def test_duplicated_probe_is_rejected(
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert len(errors) == 1
     assert rule in errors[0]
     assert f"record the {probe} probe exactly once, got 2" in errors[0]
@@ -812,7 +801,7 @@ def test_unavailable_probe_without_evidence_is_rejected(
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert len(errors) == 1
     assert "delegation-digest-recorded" in errors[0]
     assert "records no evidence" in errors[0]
@@ -835,7 +824,7 @@ def test_unknown_grounding_probe_is_rejected(tmp_path: Path, _run: _RunFn) -> No
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert len(errors) == 1
     assert "grounding-probe-closed-class" in errors[0]
     assert "'Wiki'" in errors[0]
@@ -846,7 +835,7 @@ def test_unknown_grounding_outcome_is_rejected(tmp_path: Path, _run: _RunFn) -> 
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert len(errors) == 1
     assert "grounding-outcome-closed-class" in errors[0]
     assert "'skipped'" in errors[0]
@@ -861,7 +850,7 @@ def test_grounding_table_column_drift_is_a_shape_error(
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert any("grounding-table-shape" in line for line in errors)
     assert any("grounding-probe-recorded" in line for line in errors)
     assert any("delegation-digest-recorded" in line for line in errors)
@@ -874,7 +863,7 @@ def test_spec_without_test_contracts_still_requires_grounding(
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert len(errors) == 1
     assert "grounding-probe-recorded" in errors[0]
 
@@ -891,7 +880,7 @@ def test_unknown_landing_shape_is_rejected(
     path = _write(tmp_path, "spec.md", text)
     result = _run(path, *([flag] if flag else []))
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert any("landing-closed-class" in line for line in errors)
 
 
@@ -904,7 +893,7 @@ def test_single_shape_with_layers_is_rejected(tmp_path: Path, _run: _RunFn) -> N
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert any("landing-closed-class" in line for line in errors)
 
 
@@ -980,7 +969,7 @@ def test_landing_layers_block_sequence_of_scalars_is_rejected(
     )
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
-    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.returncode == 2, result.stdout + result.stderr
     errors = "\n".join(_error_lines(result))
     assert (
         "landing-closed-class landing.layers must be a list of lists of strings"
@@ -1000,7 +989,7 @@ def test_landing_layers_with_non_string_item_is_rejected(
     )
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
-    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.returncode == 2, result.stdout + result.stderr
     errors = "\n".join(_error_lines(result))
     assert (
         "landing-closed-class landing.layers must be a list of lists of strings"
@@ -1019,7 +1008,7 @@ def test_landing_layers_with_duplicate_curd_id_is_rejected(
     )
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
-    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.returncode == 2, result.stdout + result.stderr
     errors = "\n".join(_error_lines(result))
     assert "landing-closed-class" in errors
     assert "landing-layer-curd-ids-must-be-unique" in errors

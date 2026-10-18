@@ -1,9 +1,10 @@
-"""The read-only commands: show, resolve, lint, validate, schema, list, log, turns."""
+"""The read-only commands: show, resolve, validate, schema, list, log, turns."""
 
 from __future__ import annotations
 
 import datetime as _dt
 import json
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Literal, TextIO, cast
@@ -17,9 +18,6 @@ from easy_cheese_schemas import schema_runtime
 from easy_cheese.shared import paths
 from easy_cheese.shared.wheypoint import checkpoint as checkpoint_mod
 from easy_cheese.shared.wheypoint import discovery
-from easy_cheese.shared.wheypoint import edges
-from easy_cheese.shared.wheypoint import fork_reconcile
-from easy_cheese.shared.wheypoint import lint as lint_mod
 from easy_cheese.shared.wheypoint import milknado_bridge
 from easy_cheese.shared.wheypoint import projection
 from easy_cheese.shared.wheypoint import records
@@ -27,7 +25,6 @@ from easy_cheese.shared.wheypoint import resolve as resolve_mod
 from easy_cheese.shared.wheypoint import resolve_cli
 from easy_cheese.shared.wheypoint import storage
 from easy_cheese.shared.wheypoint import transcript as transcript_mod
-from easy_cheese.shared.wheypoint.resolve_cli import findings_payload, maybe_payload
 
 from easy_cheese.cli.wheypoint.checkpoint import (
     IntentFlags,
@@ -68,17 +65,17 @@ def run_show(work_id: str, *, project: str | None = None) -> dict[str, object]:
     store = open_store(work_id, corpus_root=corpus_root)
     try:
         record = store.read_record()
+    except storage.SchemaVersionFutureError as exc:
+        raise fromargs.CliError(
+            f"{storage.FUTURE_STAMP_CODE}: {exc}", exit_code=2
+        ) from exc
     except (storage.StorageError, OSError, ValueError) as exc:
-        raise fromargs.CliError(f"record-unreadable: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"record-unreadable: {exc}", exit_code=2) from exc
     if record is None:
         raise fromargs.CliError(
             f"record-missing: work {work_id!r} has no record at {store.record_path}",
-            exit_code=1,
+            exit_code=2,
         )
-    siblings = edges.sibling_records(store.corpus_root, work_id=record.work_id)
-    pending = edges.pending_reciprocals(
-        record, siblings=siblings, receipts=store.receipt_revisions()
-    )
     bridge = milknado_bridge.bind(record, repo_root=paths.resolve_repo_root(None))
     return {
         "work_id": record.work_id,
@@ -86,12 +83,6 @@ def run_show(work_id: str, *, project: str | None = None) -> dict[str, object]:
         "revision_id": record.revision_id,
         "revision_number": record.revision_number,
         "record": records.unstructure(record),
-        "pending": [
-            *edges.pending_payload(pending),
-            *fork_reconcile.fork_payload(
-                fork_reconcile.pending_forks(record, siblings=siblings)
-            ),
-        ],
         "bridge": milknado_bridge.payload(bridge),
     }
 
@@ -125,6 +116,7 @@ def run_resolve(
             project_key=project_key_,
             workspace_root=workspace_root,
             require_workspace=project_key_ is not None,
+            fuzzy=True,
         )
     )
     payload = resolve_cli.resolve_payload(resolution, ref, workspace_root=workspace_root)
@@ -134,16 +126,6 @@ def run_resolve(
         )
     resolve_cli.raise_if_error(payload)
     return payload
-
-
-def run_lint(path: str) -> dict[str, object]:
-    report = lint_mod.lint_projection_file(path)
-    return {
-        "path": path,
-        "clean": report.ok,
-        "findings": findings_payload(report.findings),
-        "projection": maybe_payload(report.projection),
-    }
 
 
 def run_validate(
@@ -158,12 +140,12 @@ def run_validate(
         raise fromargs.CliError(
             "invalid-intent: a checkpoint intent must be a JSON object, not "
             + f"{type(payload).__name__}",
-            exit_code=1,
+            exit_code=2,
         )
     intent_payload = cast("dict[str, object]", payload)
     problems = [
-        f"{name} belongs to the compaction proof or the parent binding: pass it "
-        + "through --compacted or let the runtime bind it"
+        f"{name} is not authored in an intent: name the revision you read with "
+        + "base_revision_id (--base)"
         for name in checkpoint_mod.commit_only_fields(intent_payload)
     ]
     scrubbed = {
@@ -199,7 +181,7 @@ def run_validate(
             checkpoint_mod.delta_problems(action_intent, None, schema_only=True)
         )
     if problems:
-        raise fromargs.CliError("invalid-intent: " + "; ".join(problems), exit_code=1)
+        raise fromargs.CliError("invalid-intent: " + "; ".join(problems), exit_code=2)
     return {"valid": True, "work_id": loaded.value.work_id if loaded.value else None}
 
 
@@ -210,7 +192,7 @@ def run_schema(slug: str) -> dict[str, object]:
         raise fromargs.CliError(
             f"unknown-contract: no contract is registered as {slug!r}; known: "
             + f"{', '.join(sorted(table))}",
-            exit_code=1,
+            exit_code=2,
         )
     document = cast(
         dict[str, object], json.loads(schema_runtime.schema_bytes(table[slug]))
@@ -273,7 +255,7 @@ def _tsv_lines(
 def run_list(
     *,
     corpus_root: str | None = None,
-    scope: Literal["project", "machine"] = "project",
+    scope: Literal["project", "machine"] | None = None,
     project: list[str] | None = None,
     root: list[str] | None = None,
     grep: list[str] | None = None,
@@ -289,6 +271,7 @@ def run_list(
     edge_kind: list[str] | None = None,
     linked_to: list[str] | None = None,
     forked_from: list[str] | None = None,
+    owner: list[str] | None = None,
 ) -> dict[str, object]:
     """Every store and legacy note a caller can resume from (AC-13, G9)."""
     root_arg = Path(corpus_root) if corpus_root is not None else paths.project_corpus_root()
@@ -300,7 +283,16 @@ def run_list(
     _ = enum_values("--edge-kind", edge_kind or (), EdgeKind, "flag-kind")
     _ = enum_values("--entry-kind", entry_kind or (), EntryKind, "flag-entry")
     _ = enum_values("--entry-state", entry_state or (), EntryState, "flag-entry")
-    effective_scope = "machine" if projects else scope
+    # Only the default scope falls back: an explicit --scope, --corpus-root, or
+    # $EASY_CHEESE_PROJECT names where to look, so it keeps its meaning.
+    fallback = (
+        scope is None
+        and not projects
+        and corpus_root is None
+        and not os.environ.get("EASY_CHEESE_PROJECT", "").strip()
+        and paths.outside_git_repository()
+    )
+    effective_scope = "machine" if projects or fallback else scope or "project"
     result = discovery.discover(
         scope=effective_scope,
         start=Path.cwd(),
@@ -320,12 +312,13 @@ def run_list(
         edge_kind=edge_kind or (),
         linked_to=linked_to or (),
         forked_from=forked_from or (),
+        owner=owner or (),
     )
     items = [hit_item(hit) for hit in result.hits]
     lines = _tsv_lines(
         items, ("source", "project", "ref", "status", "next", "orientation")
     )
-    return {
+    payload: dict[str, object] = {
         "corpus_root": str(root_arg),
         "scope": effective_scope,
         "items": items,
@@ -334,6 +327,9 @@ def run_list(
         "hidden_mirrors": result.hidden_mirrors,
         "errors": list(result.errors),
     }
+    if fallback:
+        payload["scope-fallback"] = "machine"
+    return payload
 
 
 def run_log(
@@ -351,18 +347,18 @@ def run_log(
         try:
             record = store.read_record()
         except (storage.StorageError, OSError, ValueError) as exc:
-            raise fromargs.CliError(f"record-unreadable: {exc}", exit_code=1) from exc
+            raise fromargs.CliError(f"record-unreadable: {exc}", exit_code=2) from exc
         if record is None:
             raise fromargs.CliError(
                 f"record-missing: work {work_id!r} has no record at "
                 + f"{store.record_path}",
-                exit_code=1,
+                exit_code=2,
             )
         raise fromargs.CliError(
             f"store-inconsistent: work {work_id!r} has a record but no complete "
             + "revisions"
             + (f": {'; '.join(skipped)}" if skipped else ""),
-            exit_code=1,
+            exit_code=2,
         )
     entries: list[dict[str, object]] = []
     for file in files:
@@ -450,17 +446,17 @@ def run_turns(
                 f"session-required: {len(listing)} transcript(s) under {directory}: "
                 + "pass --session <id> (never guessed by recency) or --transcript "
                 + f"<path>. projects_dir: {directory}. candidates: {candidates_text}",
-                exit_code=1,
+                exit_code=2,
             )
         if transcript_mod.SESSION_ID_RE.fullmatch(session) is None:
             raise fromargs.CliError(
                 f"invalid-session: session id {session!r} must be one safe "
                 + "file-name segment",
-                exit_code=1,
+                exit_code=2,
             )
         path = directory / f"{session}.jsonl"
     if not path.is_file():
-        raise fromargs.CliError(f"transcript-missing: no transcript at {path}", exit_code=1)
+        raise fromargs.CliError(f"transcript-missing: no transcript at {path}", exit_code=2)
     turns, skipped = transcript_mod.user_turns(path)
     rows: list[dict[str, object]] = [
         {"timestamp": turn["timestamp"], "text": turn["text"]} for turn in turns

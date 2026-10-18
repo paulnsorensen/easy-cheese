@@ -124,6 +124,39 @@ def test_validate_publication_accepts_a_matching_v1_pr_plan() -> None:
     assert result["valid"] is True
 
 
+def _flat_plan() -> dict[str, object]:
+    plan = _pr_plan_v1(shape="orthogonal_flat")
+    plan["groups"] = [
+        {
+            "branch": name,
+            "title": f"feat: {name}",
+            "base": "main",
+            "commits": [sha],
+            "depends_on": [],
+        }
+        for name, sha in (("a", "abc1234"), ("b", "def5678"))
+    ]
+    return plan
+
+
+def test_validate_publication_accepts_flat_plan_with_ordinary_provider() -> None:
+    state = valid_publication() | {"topology": "stacked", "pr_plan": _flat_plan()}
+
+    result = publication.validate_publication(state)
+
+    assert result["valid"] is True
+
+
+def test_validate_publication_rejects_stacked_ordinary_without_flat_plan() -> None:
+    for extra in ({}, {"pr_plan": _pr_plan_v1(shape="stacked_linear")}):
+        state = valid_publication() | {"topology": "stacked"} | extra
+
+        with pytest.raises(publication.PublicationValidationError) as error:
+            _ = publication.validate_publication(state)
+
+        assert "stacked topology requires a stack provider" in error.value.errors
+
+
 def test_validate_publication_rejects_landing_topology_mismatch() -> None:
     state = valid_publication() | {
         "landing": {"shape": "stacked_linear", "layers": [["c1"], ["c2"]]}
@@ -136,6 +169,53 @@ def test_validate_publication_rejects_landing_topology_mismatch() -> None:
         "landing-topology-mismatch: landing.shape stacked_linear requires topology stacked, "
         + "got 'single'",
     )
+
+
+def _landing_stacked_state(shape: str, **extra: object) -> dict[str, object]:
+    landing = {"shape": "stacked_linear", "layers": [["c1"], ["c2"]]}
+    topology = "single" if shape == "single" else "stacked"
+    return valid_publication() | {
+        "topology": topology,
+        "landing": landing,
+        "pr_plan": _pr_plan_v1(shape=shape),
+    } | extra
+
+
+def test_validate_publication_rejects_flat_plan_against_stacked_linear_landing() -> None:
+    state = _landing_stacked_state("orthogonal_flat")
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert any(e.startswith("landing-shape-mismatch") for e in error.value.errors)
+
+
+def test_validate_publication_accepts_single_collapse_with_deviation() -> None:
+    state = _landing_stacked_state("single", deviation="layer 2 needs files layer 3 owns")
+
+    result = publication.validate_publication(state)
+
+    assert result["valid"] is True
+    assert result["deviation"] == "layer 2 needs files layer 3 owns"
+
+
+def test_validate_publication_rejects_single_collapse_without_deviation() -> None:
+    state = _landing_stacked_state("single")
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert any("non-empty deviation" in e for e in error.value.errors)
+
+
+def test_validate_publication_rejects_blank_deviation() -> None:
+    state = _landing_stacked_state("single", deviation="  ")
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert "deviation must be a non-empty string" in error.value.errors
+    assert any("non-empty deviation" in e for e in error.value.errors)
 
 
 def test_validate_publication_passes_landing_through_when_it_matches_topology() -> None:
@@ -218,7 +298,7 @@ def test_validate_publication_cli_reports_every_violation(
     path = tmp_path / "state.json"
     _ = path.write_text(json.dumps(state))
 
-    assert publication.main([str(path)]) == 1
+    assert publication.main([str(path)]) == 2
 
     stderr = capsys.readouterr().err
     assert "artifacts[0].verified must be true" in stderr
@@ -717,6 +797,8 @@ def test_validate_publication_pr_plan_layout_that_disagrees_with_landing_is_refu
 
     assert error.value.errors == (
         "pr_plan projects to stacked layout but topology is single",
+        "landing-shape-mismatch: landing.shape single requires pr_plan.shape single, "
+        + "got stacked_linear",
     )
 
 
@@ -730,7 +812,7 @@ def test_validate_publication_cli_reports_a_landing_topology_mismatch(
     path = tmp_path / "state.json"
     _ = path.write_text(json.dumps(state))
 
-    assert publication.main([str(path)]) == 1
+    assert publication.main([str(path)]) == 2
 
     stderr = capsys.readouterr().err
     assert (
@@ -746,7 +828,7 @@ def test_validate_publication_cli_reports_oversize_state_file(
     max_state_bytes = publication._MAX_STATE_BYTES  # pyright: ignore[reportPrivateUsage]
     _ = path.write_bytes(b" " * (max_state_bytes + 1))
 
-    assert publication.main([str(path)]) == 1
+    assert publication.main([str(path)]) == 2
 
     stderr = capsys.readouterr().err
     assert f"state file exceeds {max_state_bytes} bytes" in stderr
@@ -758,7 +840,7 @@ def test_validate_publication_cli_reports_non_utf8_state_file(
     path = tmp_path / "state.json"
     _ = path.write_bytes(b"\xff\xfe\x00\x01")
 
-    assert publication.main([str(path)]) == 1
+    assert publication.main([str(path)]) == 2
 
     stderr = capsys.readouterr().err
     assert "state file is not valid UTF-8" in stderr

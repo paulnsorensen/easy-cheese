@@ -16,6 +16,7 @@ Run `python3 skills/cure/scripts/cure.pyz wheypoint-resolve --ref <slug>`.
 `not-found` proceeds cold; `legacy` shows its source and slug, then proceeds.
 `gated`, `ambiguous`, and `error` stop and show the payload.
 Show advisory `stale-commit` and `grounded-path-missing` findings.
+Keep its `record.revision_id` as `<base>` ([§ Base revision](../cheese/references/handback-contract.md#base-revision)).
 
 ## Inputs
 
@@ -67,7 +68,6 @@ Slash commands are host renderings, not the control model.
    python3 skills/cure/scripts/cure.pyz findings parse-selection --report <path> --selection "<verb>"
    ```
 
-   Use the same bundle command when the host only ships the bundle.
    Render the coder brief per `references/selection.md` § Coder brief.
 3. **Apply.** Fix one logical group at a time.
    Implement each `recommendation:` as the locked decision; rebut only under `### Deferred`.
@@ -126,8 +126,6 @@ Report the precision loss.
 
 ## Validation
 
-Run the narrowest test that proves each fix.
-Then run all relevant existing gates.
 Record why an unavailable gate cannot run.
 Do not declare readiness while selected findings remain unresolved.
 
@@ -148,8 +146,6 @@ python3 skills/cure/scripts/cure.pyz gates classify \
   [--hard-floor-met] [--has-open-level-1-or-2] [--has-open-level-3] [--has-open-level-4-or-5] [--any-spinning]
 ```
 
-Use the same bundle command when the host only ships the bundle.
-
 ## Handoff slug
 
 Write the report to `.cheese/cure/<slug>.md`.
@@ -163,7 +159,7 @@ baseline: none | <recorded baseline block copied from the upstream handoff — s
 <one-line orientation: what cure applied or deferred>
 ```
 
-The [handback contract](../cheese/references/handback-contract.md) defines the `status:` grammar.
+The handback contract defines the `status:` grammar.
 Only `next:` and the additional keyed lines are specific to this phase.
 `artifact:` names the source report that this run consumed.
 Use `handoff_context.source_report` for that value, or the resolved `.cheese/age/<slug>.md` path.
@@ -174,7 +170,7 @@ Pass every optional field that this run has.
 
 ```text
 python3 skills/cure/scripts/cure.pyz write-handoff-artifact \
-  --slug <slug> --status <status> --phase cure --next age \
+  --slug <slug> --status <status> --phase cure --next age [--base <base>] \
   --artifact <consumed-report-path> --orientation "<one-line orientation>" \
   --baseline "<copied baseline block>" --durable-flags "<one line per flag>" \
   --grounded <path[#start-end]> \
@@ -187,7 +183,7 @@ Omit `--payload-schema`, because a terminal transition rejects a payload schema.
 
 ```text
 python3 skills/cure/scripts/cure.pyz write-handoff-artifact \
-  --slug <slug> --status <status> --phase cure --next done \
+  --slug <slug> --status <status> --phase cure --next done [--base <base>] \
   --artifact <consumed-report-path> --orientation "<one-line orientation>" \
   --baseline "<copied baseline block>" --grounded <path[#start-end]> \
   --body-file <body-path>
@@ -236,8 +232,7 @@ It posts the GitHub replies before it dispatches `/plate`.
 - With an open PR, dispatch `/plate [--hard]`.
   It performs its final write gate, commit, topology update, and publication.
 - With no open PR, use `--open-pr` to dispatch `/plate [--hard]`.
-  In this case, explicit topology choices and obviously cohesive work proceed without asking.
-  In other cases, stack-sized or ambiguous work asks before commit or branch-layout mutation.
+  `/plate` decides the topology without asking the user. See [`topology.md`](../plate/references/topology.md).
 - Without `--open-pr`, leave the remote unchanged.
   Report `no open PR — pass --open-pr or run /plate`.
 - Run § Post-PR write-back before every `/plate` dispatch.

@@ -27,7 +27,7 @@ landing:
 
 - `scripts/mold.pyz validate-spec --strict` (`validate_spec._typed_landing`) and the cook handoff digest (`taste_test.parse_landing`, front matter only; `curd-count` emits a top-level `landing` key and `handoff.metadata.landing`).
 - `scripts/cook.pyz accept <pointer> --spec <spec-path>`: `landing_layer_errors(plan, landing)` refuses a plan whose `dependencies` cross the declared layers with three tokens: `landing-layer-order`, `landing-layer-missing-curd`, `landing-layer-unknown-curd`. Without `--spec` the gate does not run and `accept` prints `NOTE: landing layers not checked (no --spec)` on stderr; Mold's hand-off passes `--spec "$SPEC"`.
-- `scripts/plate.pyz validate-publication` accepts a `landing` key and refuses `landing-topology-mismatch` when `topology` disagrees with the shape; explicit `landing: null` is refused like any non-mapping.
+- `scripts/plate.pyz validate-publication` accepts a `landing` key; explicit `landing: null` is refused like any non-mapping. With a `pr_plan`, the plan shape must equal `landing.shape` (`landing-shape-mismatch`). The one exception is a `single` plan against a multi-PR landing, which needs a non-empty `deviation` string naming the conflicting layer and files (issue #789). Without a `pr_plan`, it refuses `landing-topology-mismatch` when `topology` disagrees with the projected layout.
 
 ## Gotchas
 

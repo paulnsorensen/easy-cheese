@@ -111,23 +111,23 @@ def conflict_pick(
         Return resolved content without writing.
     """
     if ours and theirs:
-        raise fromargs.CliError("Cannot use both --ours and --theirs", exit_code=1)
+        raise fromargs.CliError("Cannot use both --ours and --theirs", exit_code=2)
     if not ours and not theirs:
-        raise fromargs.CliError("Must specify --ours or --theirs", exit_code=1)
+        raise fromargs.CliError("Must specify --ours or --theirs", exit_code=2)
 
     strategy = "ours" if ours else "theirs"
 
     guidance = binary_conflict_guidance(file)
     if guidance is not None:
-        raise fromargs.CliError(guidance, exit_code=1)
+        raise fromargs.CliError(guidance, exit_code=2)
 
     try:
         content = Path(file).read_text(encoding="utf-8")
     except FileNotFoundError:
-        raise fromargs.CliError(f"File not found: {file}", exit_code=1) from None
+        raise fromargs.CliError(f"File not found: {file}", exit_code=2) from None
     except UnicodeDecodeError:
         raise fromargs.CliError(
-            f"{file} is not UTF-8 text; resolve it manually", exit_code=1
+            f"{file} is not UTF-8 text; resolve it manually", exit_code=2
         ) from None
 
     if "<<<<<<" not in content:
@@ -157,7 +157,7 @@ def conflict_pick(
     add_result: subprocess.CompletedProcess[str] = run_git(["add", file])
     if add_result.returncode != 0:
         raise fromargs.CliError(
-            f"resolved but staging failed: {add_result.stderr.strip()}", exit_code=1
+            f"resolved but staging failed: {add_result.stderr.strip()}", exit_code=2
         )
     return {"path": file, "resolved": True, "remaining": False, "message": "resolved and staged"}
 

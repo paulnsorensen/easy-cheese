@@ -34,6 +34,8 @@ Show the gate after `/cure` returns.
 Include every drafted reply in the gate.
 A drafted reply is an applied reply, a deferred reply, a push-back draft, or an investigation note.
 Read the applied and deferred replies from `.cheese/cure/pr-<n>.md`.
+Also list each `## Already-addressed` thread to resolve.
+Every option except **Skip posting** resolves these threads.
 
 - **Post push-back drafts only** *(recommended)* — Post rejected drafts and hold every other reply.
 - **Investigate now, then post** — Investigate each claim and post its actual result.

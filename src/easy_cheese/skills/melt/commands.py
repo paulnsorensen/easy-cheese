@@ -42,6 +42,13 @@ def _lockfile_resolve(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("operation")
+def _operation(argv: list[str]) -> int:
+    from easy_cheese.skills.melt.operation import main
+
+    return main(argv)
+
+
 COMMANDS = (
     derive_command(
         _batch_resolve, "Run mergiraf structural merge over every conflicted file"
@@ -51,11 +58,12 @@ COMMANDS = (
         _conflict_summary, "Summarize conflicts with line numbers and framed context"
     ),
     derive_command(
-        _detect_squash_residue, "Detect squash-merge residue and print both remedies"
+        _detect_squash_residue, "Detect squash-merge residue and print the safe action"
     ),
     derive_command(
         _lockfile_resolve, "Take one side of a lockfile conflict and regenerate it"
     ),
+    derive_command(_operation, "Report or continue the current Git operation"),
 )
 
 
