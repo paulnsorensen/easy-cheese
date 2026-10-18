@@ -1,6 +1,6 @@
 # Tenet sweep follow-ups: what is next to decide (2026-10-18)
 
-This page is a reviewable snapshot of the wheypoint handoff `tenet-sweep-follow-ups` at revision `rev-1c27a4a21499` (record digest `sha256:b94fe7dc28889af796c9526a164b9a669a4139078b8eaa7e545083418fc34f3a`, schema 5). The record under `.cheese/notes/` stays authoritative and resumes with `/cheese --continue tenet-sweep-follow-ups`. The owner asked for this snapshot as a pull request so the open decisions can be read and discussed in one place.
+This page is a reviewable snapshot of the wheypoint handoff `tenet-sweep-follow-ups` at revision `rev-607d0446c9b8` (record digest `sha256:ebdf2bc8dc226bac4f9a31ba9c014727028cbb10d460e1641af2b5ba9367bc7c`, schema 5). The record under `.cheese/notes/` stays authoritative and resumes with `/cheese --continue tenet-sweep-follow-ups`. The owner asked for this snapshot as a pull request so the open decisions can be read and discussed in one place.
 
 Context: on 2026-10-18 the 23 open pull requests listed against the tenets in #828 and #829 were reviewed and either merged (11), closed with evidence (11), or held (#358). The owner then ruled on five of the ten lettered forks from #829 `docs/architecture/manifesto-evidence.md` section 5. What follows is what remains open, what was ruled, what is in flight, and the evidence behind it.
 
@@ -47,6 +47,14 @@ Recorded in the rebuild session of 2026-10-03 (copied into #829 under `docs/rese
 - Narrow or close issue #267.
 - Review and merge #820.
 
+### Follow-ups the cook workers surfaced
+
+- #835's diagram trigger fires on 49 of the last 200 first-parent commits on `main`, all multi-module feature or refactor PRs, with a visible `Diagram: none, <reason>` escape. Decide whether that rate is acceptable or whether pure deletions should stop counting as structural (`_STRUCTURAL` in `src/easy_cheese/skills/plate/diagram_trigger.py`).
+- After #835 merges, update the wiki page `architecture/plate-runtime-contract.md` through hallouminate; it still lists the old `check-pr-body` flags.
+- After #836 merges, add `test mold-review playwright` to the `main-protection` ruleset's required checks. That is a repository-admin action.
+- #834 leaves a pre-existing gap: the Send buttons disable only after a successful submit, so a double-click during a send clears the flag early.
+- #833 leaves two stale `ROUTED_FILES` entries (`skills/age/SKILL.md`, `skills/pasteurize/SKILL.md`) and per-file checks for the files still listed; tightening them is a later PR.
+
 ### Found while grounding
 
 `docs/architecture/milknado-semantic-boundary-reassessment.md` says to keep milknado as a consumer of `easy-cheese-schemas` that validates an imported projection. milknado's own `docs/adr/adversarial-review-loops-003.md` (accepted 2026-07-19) integrates at the artifact and format layer with no runtime coupling, and milknado's dependency list has no easy-cheese entry. The fork J ruling matches milknado's record, so this page needs reconciling.
@@ -63,12 +71,12 @@ Recorded in the rebuild session of 2026-10-03 (copied into #829 under `docs/rese
 
 ## In flight
 
-Four cook workers, one worktree and one draft pull request each, started after the rulings:
+Four cook workers, one worktree and one draft pull request each, opened after the rulings. Each passed a full local `just check` before its push. This snapshot is #832.
 
-- `cook/514-transport-audit`: salvage the transport-audit check from #514.
-- `cook/821-mold-review-status`: fix the mold-review status where Saved overwrites Sending.
-- `cook/753-diagram-trigger`: the deterministic diagram trigger scoped in the #753 close comment.
-- `cook/ci-mold-review-playwright`: a CI job that runs the mold-review Playwright suite.
+- [#833](https://github.com/paulnsorensen/easy-cheese/pull/833) `cook/514-transport-audit`: the per-paragraph transport-pointer check salvaged from #514, test-only.
+- [#834](https://github.com/paulnsorensen/easy-cheese/pull/834) `cook/821-mold-review-status`: Sending holds while a send drains its autosave, with a Playwright test; the committed mold assets bundle regenerates with it.
+- [#835](https://github.com/paulnsorensen/easy-cheese/pull/835) `cook/753-diagram-trigger`: `check-pr-body --diagram-base` requires a Mermaid flowchart when three or more code modules change and one is added, removed, or renamed, and prints a skip line otherwise.
+- [#836](https://github.com/paulnsorensen/easy-cheese/pull/836) `cook/ci-mold-review-playwright`: a `test mold-review playwright` job in the validate workflow; `just ci` already included the suite but no workflow ever ran it.
 
 Held: the #313 shared-store page from #358. hallouminate was unavailable in the session, and AGENTS.md says to skip wiki updates rather than hand-edit the indexed tree. #358 itself now re-derives from the size heuristics instead of a default flip.
 
@@ -95,5 +103,5 @@ The cited research for A, C, I, and J lives in the durable corpus at `research/f
 ## Record
 
 - work_id: `tenet-sweep-follow-ups`
-- revision: `rev-1c27a4a21499` (revision 4)
+- revision: `rev-607d0446c9b8` (revision 5)
 - resume: `/cheese --continue tenet-sweep-follow-ups`
