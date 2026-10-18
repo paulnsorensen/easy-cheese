@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal, TypedDict
 
@@ -36,6 +37,7 @@ def run_git(
     *,
     cwd: str | Path | None = None,
     timeout: float | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     command = ["git"]
     if cwd is not None:
@@ -48,6 +50,7 @@ def run_git(
             text=True,
             encoding="utf-8",
             errors="replace",
+            env=env,
         )
     return subprocess.run(
         command,
@@ -56,6 +59,7 @@ def run_git(
         encoding="utf-8",
         errors="replace",
         timeout=timeout,
+        env=env,
     )
 
 

@@ -2,6 +2,7 @@ name: validate
 
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
 
@@ -70,7 +71,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Set up uv
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.12.5"
           python-version: "3.12"
@@ -90,8 +91,40 @@ jobs:
       - name: Gate the checked-in runtime
         run: python3 scripts/runtime_gates.py
 
-      - name: Check committed skill archives
-        run: just wedge-check
+      # Main tracks no archives; build them before any suite executes one.
+      - name: Build skill archives
+        run: just wedge-build
+
+      # Run the publish dist checks before merge, so a merged change cannot
+      # stall every later dist publish.
+      - name: Stage shippable tree
+        run: python3 scripts/stage_release.py --out "$RUNNER_TEMP/dist"
+
+      - name: Install latest gh CLI
+        run: |
+          set -euo pipefail
+          # The releases/latest redirect makes no API call, so the shared
+          # runner rate limit cannot fail this step with HTTP 403.
+          url=$(curl -fsSIL --retry 3 -o /dev/null -w '%{url_effective}' https://github.com/cli/cli/releases/latest)
+          latest="${url##*/}"
+          ver="${latest#v}"
+          curl -fsSL --retry 3 "https://github.com/cli/cli/releases/download/${latest}/gh_${ver}_linux_amd64.tar.gz" | tar -xz -C /tmp
+          sudo install -m 755 "/tmp/gh_${ver}_linux_amd64/bin/gh" /usr/local/bin/gh
+          gh --version
+
+      - name: Validate staged skills
+        working-directory: ${{ runner.temp }}/dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh skill publish --dry-run
+
+      - name: Run each staged archive
+        working-directory: ${{ runner.temp }}/dist
+        run: |
+          set -euo pipefail
+          for archive in skills/*/scripts/*.pyz; do
+            python3 "$archive" --help > /dev/null
+          done
 
       # This job is the workflow's critical path. The suites are
       # subprocess-heavy, so run them with xdist as `just test` does.
@@ -107,15 +140,15 @@ jobs:
       - name: Run schema conformance tests
         run: python3 -m pytest tests/schemas/python -q -p xdist -n auto
 
-  install-script:
-    name: test install.sh (macOS)
+  fanout-bats:
+    name: test fan-out bats (macOS)
     runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install bats and shellcheck
-        run: brew install bats-core shellcheck
+      - name: Install bats
+        run: brew install bats-core
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -127,36 +160,8 @@ jobs:
           pip install --no-cache-dir pytest==9.0.3 pyyaml==6.0.2
           pip install --disable-pip-version-check --no-cache-dir --require-hashes --requirement requirements/runtime.txt
 
-      - name: Lint install.sh
-        run: shellcheck scripts/install.sh
-
-      - name: Run install.sh tests
-        run: bats tests/bash/test_install.bats
-
       - name: Run fan-out pr_plan_to_branches tests
         run: bats tests/fanout/bash/test_pr_plan_to_branches.bats
-
-      # Real (un-stubbed) smoke test: actually resolve every brew formula
-      # and run the gh-skill install on a fresh macos-latest runner.
-      # Catches "phantom formula" / "tap doesn't exist" / "this skill
-      # doesn't publish" bugs that the bats suite (which stubs everything)
-      # cannot. --skip-mcp avoids needing claude/tavily creds.
-      #
-      # tilth is left out of --tools: its npm package downloads a binary
-      # from the tilth repo's rolling `nightly` release, which that repo
-      # deletes and recreates before its per-target builds finish. Until
-      # the macOS arm64 build lands (hours, when runners are queued) every
-      # Apple Silicon install 404s — see #639. That gap is upstream, not
-      # something this script can fix; the bats suite pins the npm command.
-      - name: Real install smoke test (--skip-mcp)
-        env:
-          GH_TOKEN: ${{ github.token }}
-          # Pin every skill install to the commit under test so the smoke
-          # test exercises the script against this PR / push, not against
-          # the latest released tag (which can lag behind main when new
-          # skills are added).
-          EC_SKILL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: bash scripts/install.sh --skip-mcp --tools gh,ast-grep,just,mergiraf
 
   typecheck:
     name: type-check python
@@ -166,7 +171,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.12.5"
           python-version: "3.12"
@@ -189,7 +194,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.12.5"
           python-version: "3.12"

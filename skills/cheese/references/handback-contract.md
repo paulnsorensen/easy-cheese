@@ -6,10 +6,9 @@ The `hard-cheese` receipt uses `status: PASS | FAIL | FAILED | LOGGED`.
 It is a grading record, not a handback.
 Neither vocabulary extends the other.
 
-`easy_cheese_schemas.phase_contracts` is the machine source of truth.
-It defines the status vocabulary, wire grammar, and phase transition registry.
-Each skill bundle contains this module.
-This file describes only rules that the module enforces.
+`easy_cheese_schemas.handback_status` defines the status vocabulary and wire grammar.
+`easy_cheese.shared.phase_routes` validates active handoff routes privately.
+Each skill bundle contains the status vocabulary it uses.
 Producers and consumers must not derive the grammar again.
 
 ## The preamble
@@ -89,12 +88,28 @@ Two carriers, one contract:
 - The **durable artifact** is `.cheese/<phase>/<slug>.md`, written atomically by
   the handoff-artifact writer: the identical preamble as its first lines,
   a blank line, then the report body. The write validates `phase → next:`
-  against the phase-transition registry before it touches the filesystem, so an
+  against the private route table `_ROUTES` before it touches the filesystem, so an
   artifact that exists is an artifact whose transition is legal.
 
 A worker that writes a durable artifact hands back the same `status:` /
 `next:` it wrote there, with `artifact:` pointing at the report it consumed.
 The two must never tell different stories.
+
+## Base revision
+
+Every durable write over an existing Wheypoint record names the revision the
+writer read. This keeps every phase ready for a compaction.
+
+- Keep `record.revision_id` from the `authoritative` phase-entry resolve as `<base>`.
+- Pass `--base <base>` to each handoff write over an existing record.
+- Omit `--base` only when no record exists yet for the slug.
+- Pass `--base` only for chain phases. The writer refuses it for any other phase.
+- One exception: the workflow runtime's budget checkpoint has no earlier read
+  to name. It reads the record under one artifact lock and binds that revision
+  itself. No agent-facing write may do this.
+- After a compaction, resolve again before you write.
+- A `base-revision-required` or `stale-parent` refusal means: resolve again,
+  apply your result again, then write.
 
 ## Boundaries
 
@@ -104,14 +119,14 @@ The two must never tell different stories.
 | Durable report | the same phases, via the artifact writer | the next phase, `/cheese --continue` | same preamble + body | same |
 | Unregistered report | `/affinage`, `/pasteurize` | `/cheese --continue` | same preamble, written by hand | same |
 | Fan phase router | a fan-out phase handback | `/cook`'s fan pathway phase decision | `status` (routed by disposition), `next` | — |
-| Checkpoint note | `/wheypoint` | `/cheese --continue` | `status`, `next`, `artifact`, orientation | decision dossier body |
+| Checkpoint note | `/wheypoint` | `/cheese --continue` | `status`, `next`, `artifact`, orientation | notes body |
 | Grading receipt (distinct vocabulary, not a handback) | `/hard-cheese` | the attempt log | `status: PASS \| FAIL \| FAILED \| LOGGED` | `attempts` |
 
-`schema-intertwine.md` lists the registered source phases.
-Only a registered phase can use the artifact writer, because the writer validates `phase -> next:` first.
-`/affinage` and `/pasteurize` have no registered transition today.
+Routes live in the private `_ROUTES` table in `src/easy_cheese/shared/phase_routes.py`.
+Only a source phase in `_ROUTES` can use the artifact writer, because the writer validates `phase -> next:` against that table first.
+`/affinage` and `/pasteurize` have no route in `_ROUTES` today.
 They write the same preamble by hand and do not call the writer.
-Register their transitions before you route them through the writer.
+To route them through the writer, add their routes to `_ROUTES`.
 
 ## Wire-format limits
 

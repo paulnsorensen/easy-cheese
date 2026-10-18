@@ -8,7 +8,7 @@ Hard-cheese is the explanation-quality gate that runs once, at Plate's final bou
 
 ## `--hard` travels only in dispatch text
 
-No `HandoffPointer` or phase-contract payload has a field for the flag. Cook, Cure, and Mold must copy `--hard` into the next `/skill` command or the gate silently never runs. Mold's mini-spec and some full-mode Cook dispatch lines omitted it during the review. See [handoff-preamble-grammar](./handoff-preamble-grammar.md).
+No payload schema in the phase route table has a field for the flag. Cook, Cure, and Mold must copy `--hard` into the next `/skill` command or the gate silently never runs. Mold's mini-spec and some full-mode Cook dispatch lines omitted it during the review. See [handoff-preamble-grammar](./handoff-preamble-grammar.md).
 
 ## Outcomes and exit status
 

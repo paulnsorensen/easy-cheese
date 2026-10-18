@@ -9,6 +9,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from easy_cheese.shared.phase_routes import RouteError, validate_route
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILL_DIR = REPO_ROOT / "skills" / "cheese"
 CHEESE = SKILL_DIR / "SKILL.md"
@@ -172,14 +176,14 @@ class TestAffinageResumeNormalizesItsReference:
 class TestLintChecksOneProjection:
     """`edge-cheese-wheypoint.md` medium: Cheese overstated the lint command."""
 
-    def test_resume_sends_lineage_questions_to_resolve(self) -> None:
+    def test_resume_sends_validation_questions_to_resolve(self) -> None:
         body = _text(REFERENCES / "continue-resume.md")
-        assert "`resolve` is the only command that checks the complete lineage." in body
+        assert "`resolve` is the only validation command; no lint command exists." in body
 
-    def test_resume_scopes_lint_to_the_projection(self) -> None:
+    def test_resume_names_no_lint_command(self) -> None:
         body = _text(REFERENCES / "continue-resume.md")
-        assert "That command derives the document digest and the status again." in body
-        assert "It does not check the lineage." in body
+        assert "/wheypoint lint" not in body
+        assert "wheypoint.pyz lint" not in body
 
 
 class TestResumeRoutesByDisposition:
@@ -227,10 +231,10 @@ class TestPlateSummaryMatchesPlate:
     def test_skill_states_plate_decides_without_asking(self) -> None:
         body = _text(CHEESE)
         assert (
-            "`/plate` decides `single`, `orthogonal_flat`, or `stacked_linear` "
-            "for a new pull request without asking."
+            "`/plate` decides the topology of a new pull request without asking. "
+            "See [`topology.md`](../plate/references/topology.md)."
         ) in body
-        assert "Explicit choices win." in body
+        assert "orthogonal_flat" not in body
 
     def test_coherence_check_states_plate_decides_without_asking(self) -> None:
         body = _text(REFERENCES / "coherence-check.md")
@@ -356,18 +360,22 @@ class TestHandbackClaimMatchesThePhaseRegistry:
         assert "`/affinage`" in row and "`/pasteurize`" in row
         assert "written by hand" in row
 
-    def test_contract_names_the_registry_as_the_gate(self) -> None:
+    def test_contract_names_the_route_table_as_the_gate(self) -> None:
         body = _text(REFERENCES / "handback-contract.md")
-        assert "`schema-intertwine.md` lists the registered source phases." in body
+        assert (
+            "Routes live in the private `_ROUTES` table in "
+            + "`src/easy_cheese/shared/phase_routes.py`."
+            in body
+        )
         assert (
             "They write the same preamble by hand and do not call the writer." in body
         )
 
-    def test_registry_projection_still_omits_the_unregistered_phases(self) -> None:
-        """The narrowed claim is only correct while the registry omits them."""
-        body = _text(REFERENCES / "schema-intertwine.md")
-        assert "| affinage |" not in body
-        assert "| pasteurize |" not in body
+    @pytest.mark.parametrize("phase", ["affinage", "pasteurize"])
+    def test_route_table_still_omits_the_unrouted_phases(self, phase: str) -> None:
+        """The narrowed claim is only correct while the route table omits them."""
+        with pytest.raises(RouteError, match="unknown source phase"):
+            validate_route(phase, "done")
 
 
 class TestPlannerAndIntegratorAreSeparateJobs:

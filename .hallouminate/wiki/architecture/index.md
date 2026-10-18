@@ -14,5 +14,6 @@
 - [spec-landing-block](./spec-landing-block.md) — Spec landing block: the PR shape is settled at mold time
 - [ultracook-agent-topology](./ultracook-agent-topology.md) — Ultracook agent topology (now owned by /cook's fan pathway)
 - [ultracook-runtime-retirement](./ultracook-runtime-retirement.md) — Ultracook runtime retirement
+- [wheypoint-transfer-bundles](./wheypoint-transfer-bundles.md) — Wheypoint transfer bundles
 - [workflow-contract-map](./workflow-contract-map.md) — Workflow contract map
 <!-- HALLOUMINATE:INDEX-END -->

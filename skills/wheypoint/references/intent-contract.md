@@ -19,13 +19,7 @@ Run `validate` for a schema-only dry run that never opens the store.
   "entries": [
     {"kind": "decision", "summary": "Cap the backoff at 30s.", "rationale": "Burst callers saturate the pool."},
     {"kind": "directive", "summary": "Prose stays STE100.", "quote": "is it all in STE100?"},
-    {"kind": "question", "summary": "Do we jitter?", "blocks_continuation": true},
-    {"kind": "blocker", "summary": "Staging is down.", "blocks_continuation": true}
-  ],
-  "decision_dossier": [
-    {"fork": "Ceiling or jitter first",
-     "options": [{"option": "ceiling", "evidence": ["src/auth/retry.py:88"], "breaks": "burst callers"}],
-     "prior_leaning": "ceiling"}
+    {"kind": "question", "summary": "Do we jitter?", "blocks_continuation": true, "rationale": "Options: ceiling first or jitter first; leaning ceiling (src/auth/retry.py:88)."}
   ],
   "artifact_links": [{"path": ".cheese/specs/auth-retry-backoff.md", "covers_entry_ids": []}],
   "remove_artifact_links": [".cheese/cook/stale.md"],
@@ -43,18 +37,17 @@ Run `validate` for a schema-only dry run that never opens the store.
 - **`orientation`** is free text; its first line becomes the title at genesis.
 - **`working_context`** is a list of pointers, not a paragraph.
 - **`notes`** is the Markdown body the projection renders under `## Notes`; omission carries it forward.
-- `notes` holds at most 6000 characters; `lint` warns `notes-long` above 4000.
+- The record stamps `notes_revision_number` when a checkpoint replaces `notes`, and `decisions_revision_number` when it adds or transitions a decision. When the decision stamp is newer, or only the decision stamp exists, the projection prints one `> notes may be stale: ...` line at the top of `## Notes` that names both revisions. A record without stamps prints no marker.
+- `notes` holds at most 6000 characters.
 - **`next`** accepts `mold`, `cook`, `press`, `age`, `cure`, `affinage`, `briesearch`, `culture`, `hold`, `tasks`, or `done`.
 - **`artifact`** rides beside `next`; `affinage` needs `PR#<n>` or a PR URL, and `cook` needs a path.
-- **`entries`** holds `ProposedEntry` values of kind `decision`, `question`, `blocker`, or `directive`.
+- **`entries`** holds `ProposedEntry` values of kind `decision`, `question`, or `directive`.
 - Each entry has `{kind, summary, rationale?, quote?, blocks_continuation}`.
-- Only a question or a blocker can set `blocks_continuation: true`.
+- Only a question can set `blocks_continuation: true`.
 - A `directive` carries the user's words verbatim in `quote`.
 - The runtime derives each `entry_id` from the parent and the proposal.
-- **`decision_dossier`** holds forks `{fork, options: [{option, evidence, breaks}], prior_leaning}`.
-- A fork may describe any active question; every gating entry needs a covering fork.
-- A `decision_dossier` merges into the carried dossier by fork title; a fork with a carried title replaces that fork in place.
-- **`remove_dossier_forks`** names carried fork titles to drop before the merge; an unknown title is refused as `unknown-dossier-fork`.
+- A `question` with `blocks_continuation: true` needs a `rationale`; the rationale states the options, the evidence, and your prior leaning.
+- A `blocker` entry no longer exists; a pre-v5 blocker loads as a blocking question.
 - **`artifact_links`** holds `{path, ref?, covers_entry_ids?}`; the runtime computes the digest and pins the revision.
 - `ref` is a typed ref; see the scheme table in [`work-graph.md`](work-graph.md).
 - A link without `ref` reads as `repo:<path>`.
@@ -66,17 +59,17 @@ Run `validate` for a schema-only dry run that never opens the store.
 - **`add_edges`** holds `{to, kind, rationale?}`; the host stamps `revision_id` at commit and refuses a supplied value.
 - **`remove_edges`** holds `{to, kind}` keys of carried edges to drop.
 - Edges are a set keyed by `(to, kind)`; [`work-graph.md`](work-graph.md) lists each `kind`.
-- An intent never adds or removes a `forked_from` or `forked_to` edge; `fork` and the host own them.
+- An intent never adds or removes a `forked_from` edge; `fork` and the host own it.
 - **`transitions`** holds `{entry_id, action, rationale, target_entry_id}`; `action` is `resolve`, `supersede`, or `withdraw`.
 - Only a transition changes a protected entry's state; no operation removes one.
 - **`tasks`** and **`parallel`** carry independent moves when `next` is `tasks`; see [`parallel-handoffs.md`](parallel-handoffs.md).
-- **`base_revision_id`** pins the revision the intent was written against; omit it to bind the current revision.
+- **`base_revision_id`** names the revision the writer read. It is required for every write to an existing record; a genesis write and a `fork` child need none.
 - **`session`** holds optional `{harness, session_id, captured_at}`.
 
 ## Rules
 
 - Omission carries data forward; `null` means unchanged.
-- An explicit empty `working_context` or `decision_dossier` replaces the carried value with nothing.
+- An explicit empty `working_context` replaces the carried value with nothing.
 - Identifiers match `[a-z0-9][a-z0-9._-]{0,63}`.
 - Text fields contain at most 2000 characters, `notes` at most 6000; lists at most 64 items.
 - References (`to`, `ref`) are absolute URIs of at most 2000 characters.
@@ -84,19 +77,14 @@ Run `validate` for a schema-only dry run that never opens the store.
 - An unknown key at any depth is refused and named by path.
 - Text that matches a credential pattern is refused and named by field.
 - An identical intent against the same parent replays the existing receipt.
-- A changed intent against a superseded parent is refused as stale.
+- A write to an existing record with no base is refused as `base-revision-required`.
+- A base that is not the current revision is refused as `stale-parent`.
 
-## Compaction proof
+## Compaction
 
-After a context compaction, rehydrate with `show`, then pass `--compacted <proof.json>`.
-
-The proof is a `CompactionRecord`: `{rehydrated_from_revision_id, rehydrated_record_digest, reconciled_entry_ids}`.
-
-`rehydrated_from_revision_id` must equal the current revision and `rehydrated_record_digest` its record digest.
-
-`reconciled_entry_ids` must include every protected entry in the record.
-
-The runtime derives `prior_compaction_revision_id` from stored receipts and refuses a supplied value.
+The runtime is always ready for a compaction: every write names the revision the writer read.
+After a context compaction, read with `show` or `resolve` again and write with that `revision_id` as `--base`.
+There is no compaction proof; `--compacted` is removed.
 
 ## Flag form
 
@@ -107,10 +95,16 @@ With flags, a positional that names no existing path is a work id.
 Flags ignore stdin unless the intent argument is `-`.
 
 - `--work-id`, `--orientation`, `--next`, `--artifact`, and `--notes-file` set one scalar each.
-- `--question` and `--blocker` add entries; `--gates` makes every one of them in the call block continuation.
+- `--base` sets `base_revision_id` to the revision you read; an existing record requires it.
+- `--question` adds a question entry; `--gates` makes every question in the call block continuation.
+- A blocking question needs a `--rationale`; the rationale pairs by order, see below.
 - `--decision` adds a decision, and `--directive` adds a directive with the paired `--quote`.
+- `--operator-directive` adds a directive with `scope: operator`: how the user wants to be worked with, not an instruction for this work. Pair each with an `--operator-quote`; `--quote` pairs only with `--directive`. The projection lists it under `## Operator preferences`, apart from `## Directives`.
+- `--owner` and `--when` store free-text `owner` and `when` on a question. Give none, or one per `--question`; they pair by order. A different count refuses with `flag-pairing` and writes nothing. The projection groups open questions under one `###` subheading per owner (matched case-insensitively), puts unowned ones under `unassigned`, and prints `(when: <trigger>)` after the summary. A blocking question's gate line also shows `(owner: <who>)` and `(when: <trigger>)`. With no owner on any question the list stays flat.
+- A checkpoint pins each bare `path:line` (or `path:line-line`) in `--context` items, in intent `working_context`, and in artifact links to `path:line@<short HEAD sha>`, when `HEAD` holds the file. It never pins on read. The text stays unpinned and the result warns `unpinned-line-ref` when there is no checkout or commit, or the file is untracked, ignored, or absent. `path#symbol` and already pinned refs stay as written. A pin changes the intent, so the same intent at a later HEAD is a new revision.
 - `--resolve` and `--withdraw` add transitions for carried entry ids.
-- `--rationale` values pair in order with each `--decision`, then each `--resolve`, then each `--withdraw`.
+- `--supersede <old>` adds a `supersede` transition that sets `superseded_by` on `<old>`. `--by <new>` names the successor entry id; give one `--by` per `--supersede`. Without `--by`, the successor is the one entry of the same kind that the same checkpoint adds, and that needs the revision you read (`--base`). If no successor resolves, the checkpoint refuses with `flag-pairing` and writes nothing.
+- `--rationale` values pair in order with each blocking question, then each `--decision`, then each `--resolve`, then each `--withdraw`, then each `--supersede`.
 - `--context` adds a `working_context` path.
 - `--link` adds an edge with the paired `--kind`; a pinnable ref also adds an artifact link.
 - `--covers` applies to every pinnable `--link` in the call.
@@ -118,7 +112,7 @@ Flags ignore stdin unless the intent argument is `-`.
 
 The flag form refuses with these codes:
 
-- `flag-pairing`: the `--rationale` count differs from the decisions, resolves, and withdraws, a `--quote` or `--kind` count differs from its pair, `--gates` has no question or blocker, or `--covers` has no pinnable `--link`.
+- `flag-pairing`: the `--rationale` count differs from the blocking questions, decisions, resolves, withdraws, and supersedes (so a `--supersede` with no `--rationale` refuses), a `--by` count differs from the `--supersede` count, a `--supersede` without `--by` has no resolvable successor (its id prefix names no entry kind, the checkpoint does not add exactly one entry of that kind, or the work id or `--base` is missing), an `--owner` or `--when` count differs from the `--question` count, a `--quote`, `--operator-quote`, or `--kind` count differs from its pair, `--gates` has no question, or `--covers` has no pinnable `--link`.
 - `flag-kind`: a `--kind` names no edge kind.
 - `flag-link`: a `--link` is not a valid typed ref.
 - `flag-conflict`: the intent file holds a non-list value at a key a flag extends.
@@ -138,16 +132,16 @@ The flag form refuses with these codes:
 ## Reply envelope
 
 A success reply prints one indented JSON document to stdout: `{"ok": true, "command": "<name>", ...fields}`.
-A refusal writes one JSON line to stderr and prints nothing to stdout: `{"error": "<code>: <message>", "exit_code": 1}`.
+A refusal writes one JSON line to stderr and prints nothing to stdout: `{"error": "<code>: <message>", "exit_code": 2}`.
 
-- **`checkpoint`** returns `note_path`, `replayed`, `work_id`, `revision_id`, `revision_number`, `parent_revision_id`, `status`, `durability`, `projection_path`, `record`, `revision`, `markdown`, `derived_entry_ids`, `applied_transitions`, `applied_edges`, and `removed_edges`.
+- **`checkpoint`** returns `note_path`, `replayed`, `work_id`, `revision_id`, `revision_number`, `parent_revision_id`, `status`, `durability`, `projection_path`, `record`, `revision`, `markdown`, `derived_entry_ids`, `applied_transitions`, `applied_edges`, `removed_edges`, and `warnings`.
 - **`validate`** returns `valid` and `work_id`.
 - **`schema`** returns `slug` and `schema`.
-- **`resolve`** returns `ref`, `outcome`, `dispatchable`, `source`, `work_id`, `record`, `projection`, `findings`, `matches`, `searched`, `legacy_note`, `legacy_slug`, `phase_slug`, `detail`, `pending`, `bridge`.
-- **`show`** returns `work_id`, `status`, `revision_id`, `revision_number`, `record`, `pending`, `bridge`.
-- **`fork`**, **`link`**, **`unlink`**, **`shape`**, and **`backlinks`** replies are in [`work-graph.md`](work-graph.md).
-- **`lint`** returns `path`, `clean`, `findings`, `projection`.
-- **`list`** returns `corpus_root`, `items`, and `lines`.
+- **`resolve`** returns `ref`, `outcome`, `dispatchable`, `source`, `work_id`, `record`, `projection`, `findings`, `matches`, `searched`, `legacy_note`, `legacy_slug`, `phase_slug`, `detail`, `matched_by`, `bridge`.
+  `matched_by` is `exact`, `prefix`, or `substring`, or `null` when nothing matched. A prefix or substring match still dispatches.
+- **`show`** returns `work_id`, `status`, `revision_id`, `revision_number`, `record`, `bridge`.
+- **`fork`** replies are in [`work-graph.md`](work-graph.md).
+- **`list`** returns `corpus_root`, `items`, and `lines`, plus `scope-fallback` only when the scope fell back.
 - **`log`** returns `work_id`, `revisions`, `lines`, and `unreadable`.
 - **`turns`** returns `transcript`, `count`, `skipped_lines`, `turns`, and `lines`.
 
@@ -168,10 +162,11 @@ This escaping keeps one line one record.
 `skipped_lines` (from `turns`) counts transcript lines that could not be parsed as a turn.
 `count` (from `turns`) is the number of turns returned.
 `corpus_root` (from `list`) is the resolved root directory the listing scanned.
+`scope-fallback` (from `list`) is `machine` when `list` ran with no `--scope`, `--project`, `--corpus-root`, or `$EASY_CHEESE_PROJECT` outside a Git checkout, and so searched machine scope.
+Under that fallback, `corpus_root` is the project corpus root that would apply, not the root scanned; the scan covered every project corpus.
 
 Exit `0` means the command succeeded; the reply carries the command's own fields.
-Exit `1` means the command refused the request; the stderr line carries `error` and `exit_code`.
-Exit `2` means the command-line usage was wrong, before any command ran.
+Exit `2` means the command refused the request or the command-line usage was wrong; a refusal stderr line carries `error` and `exit_code`.
 Exit `3` means the reply violated its own schema contract.
 An unexpected crash also exits `1`, but the stderr line names the exception class and points to a `traceback` file; it carries no refusal code.
 
@@ -180,13 +175,12 @@ Each refusal names a `code`:
 - `invalid-json`: stdin was not one JSON value.
 - `storage-error`: the work store could not be opened or read.
 - `commit-only-field`: `checkpoint` was asked to author `compacted`, `compaction`, or `expected_revision_id` directly.
-- `invalid-intent`: the intent payload failed schema or delta validation.
+- `base-revision-required`: the record exists and the write named no `--base`; the message names the current revision.
+- `invalid-intent`: the intent payload failed schema or delta validation, such as a blocking question without a `rationale`.
 - `secret-pattern`: a field looked like a credential.
 - `record-unreadable`: the work's record exists but could not be parsed.
-- `compaction-proof-unreadable`: the `--compacted` proof file could not be read or parsed as JSON.
-- `invalid-compaction-proof`: the `--compacted` proof failed schema validation.
 - `genesis-conflict`: a genesis commit collided with an existing record.
-- `stale-parent`: the intent's parent revision has moved on.
+- `stale-parent`: the named base is not the current revision; read again and re-apply.
 - `commit-refused`: the commit kernel refused the delta for another reason.
 - `note-unwritable`: the note directory or mirror file could not be written.
 - `pending-corrupt`: a pending-mirror ledger entry named a different request than its revision.
@@ -198,5 +192,6 @@ Each refusal names a `code`:
 - `transcript-missing`: no transcript file exists at the resolved path.
 - `invalid-reference`: `resolve` could not interpret the given reference.
 - `flag-pairing`, `flag-kind`, `flag-link`, `flag-conflict`, `notes-unreadable`: the flag form refused; see [Flag form](#flag-form).
-- `unpinnable-scheme`, `unknown-edge`, `unknown-dossier-fork`: the commit kernel refused a ref, an edge, or a dossier title.
-- A host-only edge kind on `add_edges` or `remove_edges`, or a reciprocal-marker rationale on `add_edges`, is refused at intent validation as `invalid-intent`, before the commit kernel runs.
+- `unpinnable-scheme`, `unknown-edge`: the commit kernel refused a ref or an edge.
+- A host-only edge kind on `add_edges` or `remove_edges` is refused at intent validation as `invalid-intent`, before the commit kernel runs.
+- A record stamped with a newer schema than this archive reads is refused as `schema-version-future`.

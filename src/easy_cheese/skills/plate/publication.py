@@ -22,11 +22,18 @@ _TOPOLOGIES = {"single", "stacked", "n/a"}
 _PROVIDERS = {"ordinary", "graphite", "git-town", "gh-stack", "n/a"}
 _STACK_PROVIDERS = {"graphite", "git-town", "gh-stack"}
 _REQUIRED = {"mode", "topology", "provider", "artifacts", "gate", "commits", "prs", "risk"}
-_ALLOWED = _REQUIRED | {"pr_plan", "landing"}
+_ALLOWED = _REQUIRED | {"pr_plan", "landing", "deviation"}
 _SHA = re.compile(r"[0-9a-fA-F]{7,40}")
 
 
-def _validate_landing(raw: object, topology: object, mode: object, errors: list[str]) -> None:
+def _validate_landing(
+    raw: object,
+    topology: object,
+    mode: object,
+    plan_shape: PrShape | None,
+    deviation: object,
+    errors: list[str],
+) -> None:
     """Decode the spec's landing block with the schema's rules, then check topology."""
     try:
         landing = parse_landing_mapping(raw)
@@ -34,7 +41,24 @@ def _validate_landing(raw: object, topology: object, mode: object, errors: list[
         errors.append(str(exc))
         return
     expected = plate_layout_for(landing.shape).value
-    if topology in {"single", "stacked"} and topology != expected:
+    if plan_shape is not None:
+        collapsed = (
+            plan_shape is PrShape.SINGLE
+            and landing.shape is not LandingShape.SINGLE
+            and isinstance(deviation, str)
+            and bool(deviation.strip())
+        )
+        if plan_shape.value != landing.shape.value and not collapsed:
+            hint = (
+                "; a single collapse needs a non-empty deviation"
+                if plan_shape is PrShape.SINGLE
+                else ""
+            )
+            errors.append(
+                f"landing-shape-mismatch: landing.shape {landing.shape.value} "
+                + f"requires pr_plan.shape {landing.shape.value}, got {plan_shape.value}{hint}"
+            )
+    elif topology in {"single", "stacked"} and topology != expected:
         errors.append(
             f"landing-topology-mismatch: landing.shape {landing.shape.value} "
             + f"requires topology {expected}, got {topology!r}"
@@ -170,13 +194,15 @@ def validate_publication(data: object) -> dict[str, object]:
         errors.append("risk must be a non-empty string")
 
     flat_plan = False
+    plan_shape: PrShape | None = None
     if "pr_plan" in state:
         plan = _object(state["pr_plan"], "pr_plan", errors)
         if plan is not None:
             loaded = load_pr_plan(plan)
             errors.extend(f"pr_plan {problem}" for problem in loaded.problems)
             if loaded.value is not None:
-                flat_plan = loaded.value.shape == PrShape.ORTHOGONAL_FLAT
+                plan_shape = loaded.value.shape
+                flat_plan = plan_shape == PrShape.ORTHOGONAL_FLAT
                 projected = plate_layout_for_plan(loaded.value).value
                 if projected != topology:
                     errors.append(
@@ -184,8 +210,14 @@ def validate_publication(data: object) -> dict[str, object]:
                         + f"{topology}"
                     )
 
+    if "deviation" in state:
+        deviation = state["deviation"]
+        if not isinstance(deviation, str) or not deviation.strip():
+            errors.append("deviation must be a non-empty string")
     if "landing" in state:
-        _validate_landing(state["landing"], topology, mode, errors)
+        _validate_landing(
+            state["landing"], topology, mode, plan_shape, state.get("deviation"), errors
+        )
 
     if mode == "topology-preflight":
         if topology not in {"single", "stacked"}:
@@ -243,9 +275,9 @@ def validate_cmd(state: str) -> dict[str, object]:
         data = cast(object, json.loads(_read_state_text(path)))
         return validate_publication(data)
     except (OSError, json.JSONDecodeError) as error:
-        raise fromargs.CliError(str(error), exit_code=1) from error
+        raise fromargs.CliError(str(error), exit_code=2) from error
     except PublicationValidationError as error:
-        raise fromargs.CliError("\n".join(error.errors), exit_code=1) from error
+        raise fromargs.CliError("\n".join(error.errors), exit_code=2) from error
 
 
 def build_app() -> fromargs.App:

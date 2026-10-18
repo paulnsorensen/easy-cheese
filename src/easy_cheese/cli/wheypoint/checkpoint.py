@@ -12,6 +12,7 @@ import contextlib
 import json
 import os
 import re
+import subprocess
 from collections.abc import Callable, Sequence
 from enum import Enum
 from pathlib import Path
@@ -23,13 +24,12 @@ from attrs import define, evolve
 from easy_cheese_schemas import (
     LOWER_IDENTIFIER_RE,
     CheckpointIntent,
-    CompactionRecord,
     Durability,
     WheypointDelta,
     WheypointRecord,
 )
 
-from easy_cheese.shared import paths
+from easy_cheese.shared import git_utils, paths
 from easy_cheese.shared.wheypoint import canonical
 from easy_cheese.shared.wheypoint import checkpoint as checkpoint_mod
 from easy_cheese.shared.wheypoint import commit as commit_mod
@@ -54,16 +54,7 @@ def enum_values(
         return tuple(choices(value) for value in values)
     except ValueError as exc:
         known = ", ".join(cast(str, item.value) for item in choices)
-        raise fromargs.CliError(f"{code}: {flag} {exc}; known: {known}", exit_code=1) from exc
-
-
-def parsed_ref(ref: str) -> str:
-    """`ref` when the ref grammar can read it, else a `flag-link` refusal."""
-    try:
-        _ = ref_grammar.parse_ref(ref)
-    except ValueError as exc:
-        raise fromargs.CliError(f"flag-link: {exc}", exit_code=1) from exc
-    return ref
+        raise fromargs.CliError(f"{code}: {flag} {exc}; known: {known}", exit_code=2) from exc
 
 
 @define(frozen=True, kw_only=True)
@@ -72,7 +63,6 @@ class IntentFlags:
 
     work_id: str | None = None
     question: Sequence[str] = ()
-    blocker: Sequence[str] = ()
     gates: bool = False
     decision: Sequence[str] = ()
     rationale: Sequence[str] = ()
@@ -80,6 +70,12 @@ class IntentFlags:
     quote: Sequence[str] = ()
     resolve: Sequence[str] = ()
     withdraw: Sequence[str] = ()
+    supersede: Sequence[str] = ()
+    by: Sequence[str] = ()
+    owner: Sequence[str] = ()
+    when: Sequence[str] = ()
+    operator_directive: Sequence[str] = ()
+    operator_quote: Sequence[str] = ()
     orientation: str | None = None
     next: str | None = None
     artifact: str | None = None
@@ -88,6 +84,7 @@ class IntentFlags:
     link: Sequence[str] = ()
     kind: Sequence[str] = ()
     covers: Sequence[str] = ()
+    base: str | None = None
 
     def given(self) -> bool:
         return self != IntentFlags()
@@ -98,14 +95,13 @@ class IntentFlags:
             raise fromargs.CliError(
                 "invalid-intent: flags overlay a JSON object intent, not "
                 + f"{type(payload).__name__}",
-                exit_code=1,
+                exit_code=2,
             )
         try:
             return intent_flags.overlay(
                 cast(dict[str, object], payload),
                 work_id=self.work_id,
                 question=self.question,
-                blocker=self.blocker,
                 gates=self.gates,
                 decision=self.decision,
                 rationale=self.rationale,
@@ -113,6 +109,12 @@ class IntentFlags:
                 quote=self.quote,
                 resolve=self.resolve,
                 withdraw=self.withdraw,
+                supersede=self.supersede,
+                by=self.by,
+                owner=self.owner,
+                when=self.when,
+                operator_directive=self.operator_directive,
+                operator_quote=self.operator_quote,
                 orientation=self.orientation,
                 next=self.next,
                 artifact=self.artifact,
@@ -121,6 +123,7 @@ class IntentFlags:
                 link=self.link,
                 kind=self.kind,
                 covers=self.covers,
+                base=self.base,
             )
         except intent_flags.IntentFlagError as exc:
             raise refusal_for(exc) from exc
@@ -134,7 +137,7 @@ def read_notes_file(path_arg: str | None) -> str | None:
         return Path(path_arg).read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
         raise fromargs.CliError(
-            f"notes-unreadable: {path_arg}: {exc}", exit_code=1
+            f"notes-unreadable: {path_arg}: {exc}", exit_code=2
         ) from exc
 
 
@@ -170,7 +173,7 @@ def read_payload(stdin: TextIO) -> object:
         return cast(object, json.loads(stdin.read()))
     except ValueError as exc:
         raise fromargs.CliError(
-            f"invalid-json: stdin is not one JSON value: {exc}", exit_code=1
+            f"invalid-json: stdin is not one JSON value: {exc}", exit_code=2
         ) from exc
 
 
@@ -201,7 +204,7 @@ def _read_overlaid(
                 raise fromargs.CliError(
                     f"intent-unreadable: {intent_arg!r} is not a file: pass "
                     + "--work-id to write to a work id that shares its name",
-                    exit_code=1,
+                    exit_code=2,
                 )
         base: object = {} if intent_arg is None else read_intent(intent_arg, stdin)
         return flags.apply(base), _link_count(base)
@@ -212,13 +215,13 @@ def _read_overlaid(
         raw = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
         raise fromargs.CliError(
-            f"intent-unreadable: {intent_arg}: {exc}", exit_code=1
+            f"intent-unreadable: {intent_arg}: {exc}", exit_code=2
         ) from exc
     try:
         return cast(object, json.loads(raw)), None
     except ValueError as exc:
         raise fromargs.CliError(
-            f"invalid-json: {intent_arg} is not one JSON value: {exc}", exit_code=1
+            f"invalid-json: {intent_arg} is not one JSON value: {exc}", exit_code=2
         ) from exc
 
 
@@ -234,19 +237,19 @@ def _positional_work_id(value: str, flags: IntentFlags) -> IntentFlags:
     """`flags` writing to the work id `value`, the AC-14 positional form."""
     if value.endswith(".json") or "/" in value or os.sep in value:
         raise fromargs.CliError(
-            f"intent-unreadable: {value}: no such intent file", exit_code=1
+            f"intent-unreadable: {value}: no such intent file", exit_code=2
         )
     if not LOWER_IDENTIFIER_RE.fullmatch(value):
         raise fromargs.CliError(
             f"intent-unreadable: {value!r} is neither an intent file nor a work id: "
             + "pass `<intent-file|-> --<flag>` or `<work-id> --<flag>`",
-            exit_code=1,
+            exit_code=2,
         )
     if flags.work_id not in (None, value):
         raise fromargs.CliError(
             f"intent-ambiguous: the positional work id {value!r} and --work-id "
             + f"{flags.work_id!r} differ",
-            exit_code=1,
+            exit_code=2,
         )
     return evolve(flags, work_id=value)
 
@@ -255,28 +258,26 @@ def open_store(work_id: str, *, corpus_root: Path | None = None) -> storage.Work
     try:
         return storage.WorkStore.open(work_id, corpus_root=corpus_root)
     except storage.StorageError as exc:
-        raise fromargs.CliError(f"storage-error: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"storage-error: {exc}", exit_code=2) from exc
 
 
 def run_checkpoint(
     intent_arg: str | None,
     stdin: TextIO,
     *,
-    compacted: str | None,
     note_dir: str | None,
     no_note: bool,
     flags: IntentFlags | None = None,
 ) -> dict[str, object]:
-    """A semantic intent, bound to the current record and committed.
+    """A semantic intent, committed onto the revision its writer read.
 
-    The binding is a read outside the lock, so it settles nothing: `commit`
+    The base is a read outside the lock, so it settles nothing: `commit`
     re-checks the parent under the lock and refuses a delta whose record has
-    moved on. This command shortens the authoring, not the checking.
+    moved on. An existing record with no base is refused.
     """
     payload, carry_from = _read_overlaid(intent_arg, stdin, flags)
     return commit_intent(
         payload,
-        compacted=compacted,
         note_dir=note_dir,
         no_note=no_note,
         carry_from=carry_from,
@@ -286,7 +287,6 @@ def run_checkpoint(
 def commit_intent(
     payload: object,
     *,
-    compacted: str | None = None,
     note_dir: str | None = None,
     no_note: bool = False,
     carry_from: int | None = None,
@@ -301,48 +301,68 @@ def commit_intent(
     if reserved:
         raise fromargs.CliError(
             f"commit-only-field: checkpoint does not author {', '.join(reserved)}: "
-            + "the runtime binds the parent automatically. Use base_revision_id to pin "
-            + "a read revision. Use checkpoint --compacted <proof-path> for a compaction proof.",
-            exit_code=1,
+            + "name the revision you read with base_revision_id (--base); "
+            + "compaction proofs are no longer accepted.",
+            exit_code=2,
+        )
+    pin_warnings: list[str] = []
+    if isinstance(payload, dict):
+        checkout = paths.git_toplevel()
+        payload, pin_warnings = intent_flags.pin_line_refs(
+            cast(dict[str, object], payload),
+            checkout=checkout,
+            head=None if checkout is None else _head_sha(checkout),
         )
     try:
         intent = records.structure(payload, CheckpointIntent, forbid_unknown=True)
     except records.RecordError as exc:
-        raise fromargs.CliError(f"invalid-intent: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"invalid-intent: {exc}", exit_code=2) from exc
     secret = checkpoint_mod.secret_field(intent)
     if secret is not None:
         raise fromargs.CliError(
             f"secret-pattern: {secret} looks like a credential: a checkpoint is "
             + "durable, digest-protected text, so it cannot carry one",
-            exit_code=1,
+            exit_code=2,
         )
-    proof = _compaction_proof(compacted)
     store = open_store(intent.work_id)
     try:
         current = store.read_record()
+    except storage.SchemaVersionFutureError as exc:
+        raise refusal_for(exc) from exc
     except ValueError as exc:
         raise fromargs.CliError(
             f"record-unreadable: work {intent.work_id!r} has a record that cannot "
             + f"be read, so no checkpoint can be bound to it: {exc}",
-            exit_code=1,
+            exit_code=2,
         ) from exc
     if carry_from is not None:
         intent = carry_coverage(intent, current, carry_from)
-    # The proof is part of the request: an identical intent with and without a
-    # proof must not share a pending-mirror ledger entry.
-    request_identity = request_identity_for(intent, proof)
+    request_identity = request_identity_for(intent)
     try:
         delta = checkpoint_mod.build_delta(intent, current)
+    except checkpoint_mod.BaseRevisionRequiredError as exc:
+        raise fromargs.CliError(f"base-revision-required: {exc}", exit_code=2) from exc
     except checkpoint_mod.IntentError as exc:
-        raise fromargs.CliError(f"invalid-intent: {exc}", exit_code=1) from exc
-    if proof is not None:
-        delta = evolve(delta, compacted=True, compaction=proof)
-    return _promote(
+        raise fromargs.CliError(f"invalid-intent: {exc}", exit_code=2) from exc
+    reply = _promote(
         delta,
         store,
         note_dir=note_dir_for(note_dir=note_dir, no_note=no_note),
         request_identity=request_identity,
     )
+    reply["warnings"] = [*cast(list[str], reply["warnings"]), *pin_warnings]
+    return reply
+
+
+def _head_sha(checkout: Path) -> str | None:
+    """The short sha of `checkout`'s HEAD, or None when it has no commit."""
+    try:
+        head = git_utils.run_git(
+            ["rev-parse", "--short", "HEAD"], cwd=checkout, timeout=5
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return head.stdout.strip() or None if head.returncode == 0 else None
 
 
 def carry_coverage(
@@ -388,45 +408,14 @@ def _held_covers(held: Sequence[tuple[str, Sequence[str]]], ref: str) -> list[st
 
 def _normalized(ref: str) -> str:
     try:
-        return ref_grammar.normalize_ref(ref)
+        return ref_grammar.strip_pin(ref_grammar.normalize_ref(ref))
     except ValueError:
         return ref
 
 
-def request_identity_for(
-    intent: CheckpointIntent, proof: CompactionRecord | None
-) -> str:
-    """The pending-mirror ledger key: the intent, plus the proof when one rides with it."""
-    if proof is None:
-        return canonical.digest_value(records.unstructure(intent))
-    return canonical.digest_value(
-        {
-            "intent": records.unstructure(intent),
-            "compaction": records.unstructure(proof),
-        }
-    )
-
-
-def _compaction_proof(path_arg: str | None) -> CompactionRecord | None:
-    """The `--compacted` proof, validated before it can touch a delta."""
-    if path_arg is None:
-        return None
-    path = Path(path_arg)
-    try:
-        raw = cast(object, json.loads(path.read_text(encoding="utf-8")))
-    except OSError as exc:
-        raise fromargs.CliError(
-            f"compaction-proof-unreadable: {path_arg}: {exc}", exit_code=1
-        ) from exc
-    except ValueError as exc:
-        raise fromargs.CliError(
-            f"compaction-proof-unreadable: {path_arg} is not one JSON value: {exc}",
-            exit_code=1,
-        ) from exc
-    try:
-        return records.structure(raw, CompactionRecord, forbid_unknown=True)
-    except records.RecordError as exc:
-        raise fromargs.CliError(f"invalid-compaction-proof: {exc}", exit_code=1) from exc
+def request_identity_for(intent: CheckpointIntent) -> str:
+    """The pending-mirror ledger key: the digest of the intent."""
+    return canonical.digest_value(records.unstructure(intent))
 
 
 def refusal_for(exc: Exception) -> fromargs.CliError:
@@ -435,17 +424,19 @@ def refusal_for(exc: Exception) -> fromargs.CliError:
     A fork, flag, or commit refusal whose message starts with its own code
     surfaces that code; any other commit refusal is `commit-refused`.
     """
+    if isinstance(exc, storage.SchemaVersionFutureError):
+        return fromargs.CliError(f"{storage.FUTURE_STAMP_CODE}: {exc}", exit_code=2)
     if isinstance(exc, commit_mod.GenesisConflictError):
-        return fromargs.CliError(f"genesis-conflict: {exc}", exit_code=1)
+        return fromargs.CliError(f"genesis-conflict: {exc}", exit_code=2)
     if isinstance(exc, commit_mod.StaleParentError):
-        return fromargs.CliError(f"stale-parent: {exc}", exit_code=1)
+        return fromargs.CliError(f"stale-parent: {exc}", exit_code=2)
     if isinstance(
         exc, (commit_mod.CommitError, fork_mod.ForkError, intent_flags.IntentFlagError)
     ):
         if _CODED_REFUSAL.match(str(exc)):
-            return fromargs.CliError(str(exc), exit_code=1)
-        return fromargs.CliError(f"commit-refused: {exc}", exit_code=1)
-    return fromargs.CliError(f"storage-error: {exc}", exit_code=1)
+            return fromargs.CliError(str(exc), exit_code=2)
+        return fromargs.CliError(f"commit-refused: {exc}", exit_code=2)
+    return fromargs.CliError(f"storage-error: {exc}", exit_code=2)
 
 
 def _promote(
@@ -464,24 +455,42 @@ def _promote(
             )
         except (commit_mod.CommitError, storage.StorageError) as exc:
             raise refusal_for(exc) from exc
-        return result_payload(result, None)
+        return result_payload(result, None, warnings=_warnings_for(result))
+
+    try:
+        current = store.read_record()
+    except storage.SchemaVersionFutureError as exc:
+        raise refusal_for(exc) from exc
+    except ValueError as exc:
+        raise fromargs.CliError(
+            f"record-unreadable: work {store.work_id!r} has a record that cannot "
+            + f"be read: {exc}",
+            exit_code=2,
+        ) from exc
+    # Refuse a superseded base before the note directory or the ledger exist.
+    # The commit repeats this check under the store lock as the race backstop,
+    # and a request that already has a complete receipt is a replay, not stale.
+    if (
+        current is not None
+        and delta.expected_revision_id
+        not in (commit_mod.GENESIS_PARENT, current.revision_id)
+        and store.find_complete_revision(commit_mod.revision_id_for(delta)) is None
+    ):
+        raise refusal_for(
+            commit_mod.StaleParentError(
+                f"delta expects revision {delta.expected_revision_id!r} but the "
+                + f"current revision is {current.revision_id!r}"
+            )
+        )
 
     try:
         note_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         raise fromargs.CliError(
             f"note-unwritable: note directory {note_dir} cannot be created: {exc}",
-            exit_code=1,
+            exit_code=2,
         ) from exc
 
-    try:
-        current = store.read_record()
-    except ValueError as exc:
-        raise fromargs.CliError(
-            f"record-unreadable: work {store.work_id!r} has a record that cannot "
-            + f"be read: {exc}",
-            exit_code=1,
-        ) from exc
     target = note_dir / (f"{store.work_id if current is None else current.slug}.md")
     pending = _read_pending(store, request_identity)
     if pending is not None:
@@ -491,18 +500,20 @@ def _promote(
                 raise fromargs.CliError(
                     f"pending-corrupt: request ledger for {request_identity!r} names "
                     + f"a different request than revision {pending.revision_id!r}",
-                    exit_code=1,
+                    exit_code=2,
                 )
             resume_target = note_dir / pending.target
             result = _resume_mirror(store, revision.revision_id, resume_target, pending)
-            return result_payload(result, str(resume_target))
+            return result_payload(
+                result, str(resume_target), warnings=_warnings_for(result)
+            )
         try:
             store.remove_pending(request_identity)
         except OSError as exc:
             raise fromargs.CliError(
                 "storage-error: request ledger "
                 + f"{store.pending_path(request_identity)} cannot be cleared: {exc}",
-                exit_code=1,
+                exit_code=2,
             ) from exc
 
     request_digest = records.request_fingerprint(delta)
@@ -523,12 +534,12 @@ def _promote(
         )
     except MirrorError as exc:
         _drop_uncommitted_pending(store, pending)
-        raise fromargs.CliError(f"note-unwritable: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"note-unwritable: {exc}", exit_code=2) from exc
     except (commit_mod.CommitError, storage.StorageError) as exc:
         _drop_uncommitted_pending(store, pending)
         raise refusal_for(exc) from exc
     _clear_pending(store, request_identity)
-    return result_payload(result, str(target))
+    return result_payload(result, str(target), warnings=_warnings_for(result))
 
 
 def mirror_finalizer(
@@ -561,7 +572,7 @@ def _read_pending(
         return None
     except OSError as exc:
         raise fromargs.CliError(
-            f"storage-error: request ledger {path} cannot be read: {exc}", exit_code=1
+            f"storage-error: request ledger {path} cannot be read: {exc}", exit_code=2
         ) from exc
     try:
         decoded = cast(object, json.loads(raw.decode("utf-8")))
@@ -576,11 +587,11 @@ def _read_pending(
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise fromargs.CliError(
-            f"pending-corrupt: request ledger {path} is invalid: {exc}", exit_code=1
+            f"pending-corrupt: request ledger {path} is invalid: {exc}", exit_code=2
         ) from exc
     if pending.request_identity != request_identity:
         raise fromargs.CliError(
-            f"pending-corrupt: request ledger {path} has invalid identity", exit_code=1
+            f"pending-corrupt: request ledger {path} has invalid identity", exit_code=2
         )
     return pending
 
@@ -603,7 +614,7 @@ def _write_pending(store: storage.WorkStore, pending: _PendingMirror) -> None:
     except OSError as exc:
         raise fromargs.CliError(
             f"note-unwritable: request ledger {path} cannot be written: {exc}",
-            exit_code=1,
+            exit_code=2,
         ) from exc
 
 
@@ -623,7 +634,7 @@ def _clear_pending(store: storage.WorkStore, request_identity: str) -> None:
         raise fromargs.CliError(
             "storage-error: request ledger "
             + f"{store.pending_path(request_identity)} cannot be cleared: {exc}",
-            exit_code=1,
+            exit_code=2,
         ) from exc
 
 
@@ -640,15 +651,34 @@ def _resume_mirror(
             finalize=mirror_finalizer(target),
         )
     except MirrorError as exc:
-        raise fromargs.CliError(f"note-unwritable: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"note-unwritable: {exc}", exit_code=2) from exc
     except (commit_mod.CommitError, storage.StorageError) as exc:
         raise refusal_for(exc) from exc
     _clear_pending(store, pending.request_identity)
     return result
 
 
+def _warnings_for(result: commit_mod.CommitResult) -> list[str]:
+    """Advice that does not refuse the write.
+
+    `stale-notes`: this revision moved the decisions but not the notes, so the
+    free-text notes may now describe a superseded state. The revision stamps
+    carry that rule. A genesis commit, or a record that never had notes, has
+    none to go stale.
+    """
+    record = result.record
+    if result.revision.parent_revision_id is None or not record.notes:
+        return []
+    number = result.revision.revision_number
+    moved = record.decisions_revision_number == number
+    return ["stale-notes"] if moved and record.notes_revision_number != number else []
+
+
 def result_payload(
-    result: commit_mod.CommitResult, note_path: str | None
+    result: commit_mod.CommitResult,
+    note_path: str | None,
+    *,
+    warnings: Sequence[str] = (),
 ) -> dict[str, object]:
     """The commit reply every write verb shares, with each derived id named."""
     revision = result.revision
@@ -671,4 +701,5 @@ def result_payload(
         ],
         "applied_edges": [records.unstructure(edge) for edge in revision.applied_edges],
         "removed_edges": [records.unstructure(key) for key in revision.removed_edges],
+        "warnings": list(warnings),
     }

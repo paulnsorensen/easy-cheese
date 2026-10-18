@@ -139,9 +139,9 @@ YAML
     [[ "$output" == *"Convert a fan-out pr-plan"* ]]
 }
 
-@test "script rejects missing file with exit 1" {
+@test "script rejects missing file with exit 4" {
     run "$SCRIPT" /nope/nope/nope.yaml
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 4 ]
     [[ "$output" == *"not found"* ]]
 }
 
@@ -250,7 +250,7 @@ groups:
     commits: [c]
 YAML
     run "$SCRIPT" "$PLAN_FILE"
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 4 ]
     # AC-2 of wheypoint-ergonomics: an enum problem names the field, the value, and the allowed set.
     [[ "$output" == *"shape must be valid: unknown value 'marbled'"* ]]
     [[ "$output" == *"allowed: single, orthogonal_flat, stacked_linear, diamond_stack"* ]]
@@ -266,7 +266,7 @@ shape: single
 groups: []
 YAML
     run "$SCRIPT" "$PLAN_FILE"
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 4 ]
     [[ "$output" == *"groups must be a non-empty list"* ]]
 }
 
@@ -280,7 +280,7 @@ groups:
     commits: [c]
 YAML
     run "$SCRIPT" "$PLAN_FILE"
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 4 ]
     [[ "$output" == *"shape"* ]]
 }
 
@@ -303,7 +303,7 @@ groups:
     commits: [--abort]
 YAML
     run "$SCRIPT" "$PLAN_FILE"
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 4 ]
     [[ "$output" == *"must be a hex SHA"* ]]
     # No git command should have leaked into stdout.
     [[ "$output" != *"git cherry-pick"* ]]
@@ -327,7 +327,7 @@ groups:
     commits: [abc1234]
 YAML
     run "$SCRIPT" "$PLAN_FILE"
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 4 ]
     [[ "$output" == *"base contains characters unsafe for a git ref"* ]]
     [[ "$output" != *"git checkout -b"* ]]
 
@@ -345,7 +345,7 @@ groups:
     commits: [abc1234]
 YAML
     run "$SCRIPT" "$PLAN_FILE"
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 4 ]
     [[ "$output" == *"branch contains characters unsafe for a git ref"* ]]
     [[ "$output" != *"git checkout -b"* ]]
 }

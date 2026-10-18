@@ -1258,7 +1258,7 @@ def taste_test_cmd(
             gaps = lexical_precheck(draft_bytes, ledger_value)
             if gaps:
                 raise fromargs.CliError(
-                    "precheck gaps found: " + "; ".join(gaps), exit_code=1
+                    "precheck gaps found: " + "; ".join(gaps), exit_code=4
                 )
             return {"gaps": []}
         if coverage:
@@ -1280,7 +1280,7 @@ def taste_test_cmd(
         if not gate.allowed:
             suffix = ", ".join(gate.reopened_forks) or "none"
             raise fromargs.CliError(
-                f"{gate.reason}: reopen={suffix}", exit_code=1
+                f"{gate.reason}: reopen={suffix}", exit_code=4
             )
         return result.to_dict()
     except (OSError, json.JSONDecodeError, TasteTestError) as exc:

@@ -517,12 +517,12 @@ def check(path: str | None = None) -> dict[str, object]:
     try:
         manifest = read_mapping_arg_or_stdin(argv, "usage: validate_manifest.py [<manifest.yaml|json>]")
     except ManifestLoadError as exc:
-        exit_code = 2 if str(exc).startswith("usage:") else 1
+        exit_code = 2 if str(exc).startswith("usage:") else 4
         raise fromargs.CliError(str(exc), exit_code=exit_code) from exc
 
     errors = validate_run_manifest(manifest)
     if errors:
-        raise fromargs.CliError("\n".join(f"ERROR: {error}" for error in errors), exit_code=1)
+        raise fromargs.CliError("\n".join(f"ERROR: {error}" for error in errors), exit_code=4)
 
     curds = manifest.get("curds")
     curd_count = len(cast("list[object]", curds)) if isinstance(curds, list) else 0

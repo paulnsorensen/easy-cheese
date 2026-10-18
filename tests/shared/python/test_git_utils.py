@@ -176,6 +176,7 @@ class TestRunGit:
             text=True,
             encoding="utf-8",
             errors="replace",
+            env=None,
         )
 
 

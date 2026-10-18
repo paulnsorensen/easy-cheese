@@ -125,6 +125,7 @@ The user can append `--auto` explicitly, as in `/cheese --continue <slug> --auto
 The durable pipeline is `culture -> mold -> cook -> press -> age -> cure -> plate`.
 An approved Mold handoff routes to `/cook`.
 It routes to `/cook --auto` only when the user makes auto explicit.
+A Full or planned handoff reruns `/mold` finalize first.
 It carries its durable specification pointer in the typed `spec_ref` field.
 Continuation forwards `spec_ref` unchanged.
 It also forwards `artifact:` unchanged, which always names the prior consumed report.
@@ -210,8 +211,7 @@ Default targets per intent:
 - **prototype** — `/cook --prototype <idea>` (recommended). No auto variant.
 - **ultracook (retired)** — `/ultracook <slug-or-path>` resolves to `/cook <slug-or-path>`, carrying forward `--open-pr`/`--resume`/`--auto`/`--hard`.
 - **plate** — `/plate` handles commits, ordinary pull requests, and pull request stacks.
-  `/plate` decides `single`, `orthogonal_flat`, or `stacked_linear` for a new pull request without asking.
-  Explicit choices win.
+  `/plate` decides the topology of a new pull request without asking. See [`topology.md`](../plate/references/topology.md).
 - **debug** — default: `/pasteurize --auto <input>`. Safe-mode alternatives: `/pasteurize <input>` (no auto), `/culture` only when the user wants no-write diagnosis or asks to think through the problem before fixing it.
 - **affinage** — `/affinage <pr>` (recommended).
   Use bare `/affinage` when the input names no pull request.

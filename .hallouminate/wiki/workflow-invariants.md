@@ -121,7 +121,7 @@ the `status:` field. The word "handback" first entered the repo in PR #578
 (closing #350 and #154); it does not exist on `main` before that PR.
 
 The vocabulary is machine-owned by `easy_cheese_schemas.handback_status`
-(re-exported by `phase_contracts` and the package): `ok`, `ok-with-concerns`,
+(re-exported by the package): `ok`, `ok-with-concerns`,
 `needs-context`, `gated`, `halt`, each mapped to a `Disposition` StrEnum
 (`proceed` / `retry` / `stop`). Prose face:
 `skills/cheese/references/handback-contract.md`; every producer doc prints
@@ -153,9 +153,22 @@ Gotchas the r014 cure settled:
 
 
 
-The preamble key set, the single-line rule, the `--body-file` trap, and the
-phase-registry gate on the canonical writer are recorded in
-[architecture/handoff-preamble-grammar](./architecture/handoff-preamble-grammar.md).
+[architecture/handoff-preamble-grammar](./architecture/handoff-preamble-grammar.md)
+records the preamble key set, the single-line rule, the `--body-file` trap, the
+route-table gate on the canonical writer (`validate_route` in
+`src/easy_cheese/shared/phase_routes.py`), and the base-revision rule for
+phase writes.
+
+## Cook entry refuses held specs
+
+Cook has no typed handoff or `prepare` step.
+Mold `finalize` prints `/cook --auto --result <result_path>` for bound work, and standalone work uses `/cook --spec <path>`.
+Bound work runs through `execute_bound_plan`, which first calls `validate_bound_execution` (`src/easy_cheese/shared/mold_cook_handoff.py`).
+That validator refuses a spec whose lifecycle is not `approved` and a spec with non-empty `gates_overridden`.
+For a `--spec` run, Cook's ingress prose adds a spec-hold refusal: it refuses a spec with `execution_holds`, or with a `do-not-implement` or `do-not-proceed` `request_directive` (`skills/cook/SKILL.md:280`).
+Saving a spec never clears a hold.
+Cook still accepts a legacy spec that lacks a hardened `source` on read.
+The reasons are in [mold-cook-boundary-002](./adr/mold-cook-boundary-002.md); PR #774 removed the typed handoff.
 
 ## Plate is the final writing gate
 
@@ -167,12 +180,12 @@ and records `{target, backend, verified}`.[^plate-writes] A required write that 
 verified stops publication.
 
 For every new PR, an explicit topology choice is authoritative. Otherwise `/plate`
-selects a single PR without asking only for one cohesive review unit; it recommends a
-stack and asks when the work has independently reviewable ordered layers, and asks when
-review shape is genuinely ambiguous. The policy uses cohesion and stable layer
-boundaries, not line or file counts. `/cook`'s parallel fan pathway (`--open-pr`) runs that policy
-before seed or worker commits, records `plate_layout` in its manifest and PR plan, and
-reuses the resolution at terminal publication. A supplied plan cannot override an
+decides the shape without asking: `single`, `orthogonal_flat`, `stacked_linear`, or a
+dependent chain plus independent PRs ([[plate-publication-boundary-002]]). It never
+stacks parts that do not depend on each other. Dependency and cohesion decide the shape;
+size never decides it alone. `/cook`'s parallel fan pathway (`--open-pr`) runs that policy
+before seed or worker commits, records `plate_layout` and `shape` in its manifest and PR
+plan, and reuses the resolution at terminal publication. A supplied plan cannot override an
 explicit choice. Existing PR updates preserve detected topology. A stack runs the write,
 validation, named-stage, commit, and verification transaction once per layer before
 whole-chain submission; shared durable writes belong on the bottom/common branch or an

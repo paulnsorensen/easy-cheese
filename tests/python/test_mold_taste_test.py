@@ -757,11 +757,11 @@ def test_cli_precheck_exits_zero_when_clean_and_one_with_gaps(
     )
     _ = draft.write_text(draft_with_gaps, encoding="utf-8")
     exit_code = taste.main(["--draft", str(draft), "--ledger", str(ledger), "--precheck"])
-    assert exit_code == 1
+    assert exit_code == 4
     captured = capsys.readouterr()
     assert captured.out == ""
     envelope = cast(dict[str, object], json.loads(captured.err))
-    assert envelope["exit_code"] == 1
+    assert envelope["exit_code"] == 4
     message = cast(str, envelope["error"])
     assert "missing-section:F-1:interface" in message
     assert "missing-section:F-2:interface" in message

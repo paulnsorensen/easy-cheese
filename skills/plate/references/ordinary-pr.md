@@ -11,6 +11,10 @@ It covers the `single` shape and the `orthogonal_flat` shape (independent PRs of
 3. Draft a title and body per `## Body contract` below.
 4. Write the body to a temporary or transient file. Pass that file through `--body-file`.
    Do not embed a markdown heredoc in `--body`.
+   Then run `python3 skills/plate/scripts/plate.pyz check-pr-body --body-file <body-path>`.
+   Add `--template-file .github/PULL_REQUEST_TEMPLATE.md` when the repository tracks that template.
+   Add `--stack-layer` for a stack layer. Fix every reported error and run the check again.
+   Do not create or edit the PR until the check exits 0.
 5. Push the named branch without force. Follow `## Push verification` before the next step.
 6. Create the PR with an explicit base and head:
 
@@ -27,14 +31,15 @@ Do not use `--fill` when it would omit artifact or verification details.
 Use this section for the `orthogonal_flat` shape. Base every group on the trunk. A group has no `depends_on`.
 Record the evidence as topology `stacked`, provider `ordinary`, and a `pr_plan` with shape `orthogonal_flat`.
 `validate-publication` accepts provider `ordinary` with topology `stacked` only for that plan shape.
+Emit the carving commands once: `python3 skills/plate/scripts/plate.pyz carve-flat --source-branch <source> --pr-plan <plan-path>`.
+The JSON `groups` list follows plan order. Each entry holds `branch`, `base`, `carve`, and `restore`.
 For each group, in plan order:
 
-1. Create the group branch from the trunk: `git switch -c <branch> <trunk>`.
-2. Cherry-pick the group's commits in their original order.
-   When one commit mixes groups, check out the group's whole files from the source branch and create a new commit.
-3. Run the quality gate on the group branch. Halt at `quality gate` for that group when it fails.
-4. Publish the group as a `## New PR`. Its body describes only its own group.
-5. Return to the source branch before the next group.
+1. Run the group's `carve` commands. They create the branch from the trunk and cherry-pick its commits in order.
+   When one commit mixes groups, check out the group's whole files from the source branch and create a new commit instead of the cherry-pick.
+2. Run the quality gate on the group branch. Halt at `quality gate` for that group when it fails.
+3. Publish the group as a `## New PR`. Its body describes only its own group.
+4. Run the group's `restore` command before the next group.
 
 Leave the source branch unchanged. Report every PR URL in plan order.
 
@@ -62,7 +67,7 @@ Publication-relevant GitHub operations remain here:
 - Add `--reviewer <login>` or `--assignee <login>` only from the supplied
   publication metadata.
 - Use `gh pr edit <number> --title <title> --body-file <path>` when verified
-  commits make existing metadata inaccurate.
+  commits make existing metadata inaccurate. Run `check-pr-body` on that file first.
 - Use `gh pr ready <number>` only when asked to publish a draft.
 - Use `gh pr checks` to verify publication context. CI triage, review, comments,
   and merge stay outside `/plate`. Use the `gh` CLI directly for that work.
@@ -75,6 +80,9 @@ If a PR exists, switch to the existing-PR path. Do not rely on a failed create c
 A reviewer reads a short body. Agent-written bodies that claim changes the diff lacks lose reviewer trust.
 When the repository tracks `.github/PULL_REQUEST_TEMPLATE.md`, use its section headings.
 Otherwise use `## Why`, `## What changed`, `## Non-obvious changes`, `## How to verify`, and `## Risk`.
+`check-pr-body` enforces the 40-line cap, the required headings, the `Plated as` line, the filler-word ban,
+and, for a stack layer, the `Stack: <n> of <total>` line and the stack-order flowchart.
+The 20-line cap for a small change, the claims, and the reading order stay a judgment call.
 Keep the body file transient unless the repository tracks PR templates or release artifacts.
 Leave a transient body file unstaged after verification.
 

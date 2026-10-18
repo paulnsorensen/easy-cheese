@@ -37,8 +37,8 @@ def test_check_and_ci_depend_on_dead_code() -> None:
 
 
 @needs_just
-def test_check_and_ci_do_not_repeat_wedge_check() -> None:
-    """The test recipe owns archive freshness before archive execution."""
+def test_check_and_ci_do_not_repeat_wedge_build() -> None:
+    """The test recipe owns the archive build before archive execution."""
     result = subprocess.run(
         ["just", "--dump", "--dump-format", "json"],
         cwd=ROOT,
@@ -48,17 +48,18 @@ def test_check_and_ci_do_not_repeat_wedge_check() -> None:
     )
     assert result.returncode == 0, result.stdout + result.stderr
     recipes = cast(dict[str, object], json.loads(result.stdout)["recipes"])
+    assert "wedge-check" not in recipes
     for name in ("check", "ci"):
         recipe = cast(dict[str, object], recipes[name])
         deps = cast(list[dict[str, object]], recipe["dependencies"])
         dependencies = {cast(str, dependency["recipe"]) for dependency in deps}
-        assert "wedge-check" not in dependencies
+        assert "wedge-build" not in dependencies
         assert "test" in dependencies
 
 
 @needs_just
-def test_test_recipe_gates_runtime_and_committed_archives_before_suites() -> None:
-    """The test recipe validates committed archives before executing them."""
+def test_test_recipe_gates_runtime_and_builds_archives_before_suites() -> None:
+    """The test recipe gates the runtime, then builds archives before executing them."""
     result = subprocess.run(
         ["just", "--dump", "--dump-format", "json"],
         cwd=ROOT,
@@ -77,14 +78,14 @@ def test_test_recipe_gates_runtime_and_committed_archives_before_suites() -> Non
 
     justfile = (ROOT / "justfile").read_text(encoding="utf-8")
     gates = justfile.index("scripts/runtime_gates.py")
-    freshness = justfile.index("just wedge-check")
+    freshness = justfile.index("just wedge-build")
     python_suite = justfile.index("-m pytest tests/python")
     browser_suite = justfile.index("just test-mold-review")
     assert gates < freshness < min(python_suite, browser_suite)
     assert "skill_archives.py" not in justfile
     assert "EASY_CHEESE_PREBUILT_PYZ" not in justfile
     assert "prebuilt_pyz_dir" not in justfile
-    assert '{{wedge}} bundle --root skills --check' in justfile
+    assert "bundle --root skills --check" not in justfile
 
 
 def test_docs_workflow_matches_the_package_build_command() -> None:
@@ -120,8 +121,8 @@ def test_docs_workflow_matches_the_package_build_command() -> None:
     assert "refs/heads/main" in cast(str, deploy["if"])
 
 
-def test_validate_workflow_gates_committed_archives_before_suites() -> None:
-    """validate.yml checks committed archives before executing them."""
+def test_validate_workflow_builds_archives_before_suites() -> None:
+    """validate.yml builds archives before executing them; main tracks none."""
     workflow_path = ROOT / ".github" / "workflows" / "validate.yml"
     workflow_text = workflow_path.read_text(encoding="utf-8")
     workflow = cast(dict[str, object], yaml.safe_load(workflow_text))
@@ -129,12 +130,13 @@ def test_validate_workflow_gates_committed_archives_before_suites() -> None:
     steps = cast(list[dict[str, object]], cast(dict[str, object], jobs["test"])["steps"])
     runs = [cast(str, step["run"]) for step in steps if "run" in step]
     gates = next(i for i, run in enumerate(runs) if "scripts/runtime_gates.py" in run)
-    freshness = next(i for i, run in enumerate(runs) if "just wedge-check" in run)
+    freshness = next(i for i, run in enumerate(runs) if "just wedge-build" in run)
     suites = [i for i, run in enumerate(runs) if "-m pytest" in run]
     assert suites
     assert gates < freshness < min(suites)
     assert workflow_text.count("\non:") == 1
     assert "pull_request:" in workflow_text
+    assert "merge_group:" in workflow_text
     assert "push:" in workflow_text
     assert "branches: [main]" in workflow_text
     assert workflow["permissions"] == {"contents": "read"}

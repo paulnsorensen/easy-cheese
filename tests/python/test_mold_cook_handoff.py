@@ -1,408 +1,134 @@
-"""Direct tests for the shared Mold-to-Cook validation seam."""
+"""Direct tests for the surviving Mold-to-Cook artifact seam."""
 
 from __future__ import annotations
 
-import inspect
 import json
-from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
 import pytest
 
-from easy_cheese_schemas import ArtifactRef, canonical_bytes
-from easy_cheese_schemas.mold_cook import (
-    CookSetupAuthorization,
-    MoldCookApproval,
-    MoldCookApprovalDecision,
-    MoldCookApprovalSource,
-    MoldCookCoverage,
-    MoldCookHandoff,
+from easy_cheese_schemas import ArtifactRef, canonical_bytes, require_contract_version
+from easy_cheese_schemas.contracts import (
+    BoundedScope,
+    Criterion,
+    CurdPlan,
+    IdentityAction,
+    IdentityLineage,
+    SemanticCurd,
 )
 from easy_cheese_schemas.schema_runtime import ContractValidationError
-
-from easy_cheese.shared import mold_cook_handoff, taste_test
 from easy_cheese.shared.mold_cook_handoff import (
-    canonical_mold_cook_proposal,
-    dialogue_authorizes_execution,
     materialize_artifact_ref,
-    publish_mold_cook_handoff,
+    resolve_contract,
     resolve_contract_value,
-    validate_mold_cook_approval,
-    validate_mold_cook_handoff,
+    request_directive,
 )
-
-from tests.python.mold_cook_helpers import bind_mold_cook_runner_approval
-
-SPEC_DIGEST = "sha256:" + ("a" * 64)
-
-
-def _write_ref(
-    root: Path,
-    value: object,
-    *,
-    artifact_id: str,
-    role: str,
-    filename: str,
-    media_type: str,
-) -> ArtifactRef:
-    payload = value if isinstance(value, bytes) else canonical_bytes(value)
-    path = root / filename
-    path.parent.mkdir(parents=True, exist_ok=True)
-    _ = path.write_bytes(payload)
-    return materialize_artifact_ref(
-        value,
-        artifact_id=artifact_id,
-        role=role,
-        uri=f"repo://{filename}",
-        media_type=media_type,
-    )
-
-
-def _runner_approval(
-    root: Path,
-    *,
-    response_text: str,
-    response_ref: ArtifactRef,
-    source: MoldCookApprovalSource = MoldCookApprovalSource.USER_RESPONSE,
-    decision: MoldCookApprovalDecision = MoldCookApprovalDecision.APPROVED,
-) -> MoldCookApproval:
-    coverage = MoldCookCoverage(curd_ids=["curd-1"])
-    setup_authorization = CookSetupAuthorization(
-        prerequisite_curd_id="setup",
-        allowed_paths=("src/",),
-        allowed_commands=("just build",),
-    )
-    proposal_ref = _write_ref(
-        root,
-        canonical_mold_cook_proposal(
-            request_id="request-1",
-            spec_digest=SPEC_DIGEST,
-            coverage=coverage,
-            setup_authorization=setup_authorization,
-        ),
-        artifact_id="proposal-1",
-        role="proposal",
-        filename="proposal.json",
-        media_type="application/json",
-    )
-    return bind_mold_cook_runner_approval(
-        request_id="request-1",
-        decision=decision,
-        source=source,
-        spec_digest=SPEC_DIGEST,
-        proposal_ref=proposal_ref,
-        response_ref=response_ref,
-        response_text=response_text,
-        response_source=response_ref.artifact_id,
-        coverage=coverage,
-        setup_authorization=setup_authorization,
-    )
 
 
 @pytest.mark.parametrize(
-    "validator", [validate_mold_cook_approval, validate_mold_cook_handoff]
-)
-def test_exported_validators_require_an_explicit_artifact_root(
-    validator: Callable[..., object],
-) -> None:
-    """Finding 2: no root default, so validation never falls back to the cwd."""
-
-    parameter = inspect.signature(validator).parameters["artifact_root"]
-
-    assert cast("object", parameter.default) is inspect.Parameter.empty
-    with pytest.raises(TypeError):
-        _ = validator(object())
-
-
-def test_validation_refuses_a_remote_artifact_scheme(tmp_path: Path) -> None:
-    """Finding 5: a handoff-authored URI cannot choose an egress destination."""
-
-    response_ref = materialize_artifact_ref(
-        b"Approve",
-        artifact_id="response-1",
-        role="response",
-        uri="https://example.invalid/response.txt",
-        media_type="text/plain",
-    )
-    approval = _runner_approval(
-        tmp_path, response_text="Approve", response_ref=response_ref
-    )
-
-    with pytest.raises(ContractValidationError, match="unsupported URI scheme"):
-        _ = validate_mold_cook_approval(approval, tmp_path)
-
-
-def test_rejected_runner_approval_is_not_consent(tmp_path: Path) -> None:
-    """Only an approved decision validates; the response text never overrides it."""
-
-    response_ref = _write_ref(
-        tmp_path,
-        b"Approve",
-        artifact_id="response-1",
-        role="response",
-        filename="response.txt",
-        media_type="text/plain",
-    )
-    approval = _runner_approval(
-        tmp_path,
-        response_text="Approve",
-        response_ref=response_ref,
-        decision=MoldCookApprovalDecision.REJECTED,
-    )
-
-    with pytest.raises(ContractValidationError, match="carries rejected response"):
-        _ = validate_mold_cook_approval(approval, tmp_path)
-
-
-def test_approved_runner_approval_requires_the_exact_response_text(
-    tmp_path: Path,
-) -> None:
-    response_ref = _write_ref(
-        tmp_path,
-        b"Approve",
-        artifact_id="response-1",
-        role="response",
-        filename="response.txt",
-        media_type="text/plain",
-    )
-    approval = _runner_approval(
-        tmp_path, response_text="Approve", response_ref=response_ref
-    )
-    detached = _runner_approval(
-        tmp_path, response_text="Something else", response_ref=response_ref
-    )
-
-    assert validate_mold_cook_approval(approval, tmp_path) is approval
-    with pytest.raises(ContractValidationError, match="detached from response"):
-        _ = validate_mold_cook_approval(detached, tmp_path)
-
-
-@pytest.mark.parametrize(
-    "dialogue",
+    ("text", "expected"),
     [
-        {"question": "Approve?", "response": "Approve", "clear_holds": ["hold-1"]},
-        {"question": "Approve?", "response": "Approve", "execution_authorized": True},
-        {
-            "question": "Approve?",
-            "response": "Approve",
-            "clear_holds": ["hold-1"],
-            "execution_authorized": "yes",
-        },
-        {
-            "question": "Approve?",
-            "response": "Approve",
-            "clear_holds": [],
-            "execution_authorized": True,
-        },
+        ("---\nrequest_directive: do-not-implement\n---\n", "do-not-implement"),
+        ("---\nexecution_directive:\n  decision: DO_NOT_PROCEED\n---\n", "do-not-proceed"),
+        ("---\nwhole_request_directive:\n  intent: do not implement\n---\n", "do-not-implement"),
+        ("---\nstatus: approved\n---\n## Whole-request Directive\n- action: do-not-proceed\n", "do-not-proceed"),
     ],
 )
-def test_dialogue_authorization_must_be_affirmative_and_explicit(
-    tmp_path: Path, dialogue: dict[str, object]
-) -> None:
-    """Finding 4: a missing or untyped authorization key is never consent."""
-
-    response_ref = _write_ref(
-        tmp_path,
-        dialogue,
-        artifact_id="dialogue-1",
-        role="dialogue",
-        filename="dialogue.json",
-        media_type="application/json",
-    )
-    approval = _runner_approval(
-        tmp_path,
-        response_text="Approve",
-        response_ref=response_ref,
-        source=MoldCookApprovalSource.LOCAL_DIALOGUE,
-    )
-
-    with pytest.raises(ContractValidationError, match="does not authorize execution"):
-        _ = validate_mold_cook_approval(approval, tmp_path)
+def test_request_directive_accepts_existing_spellings(text: str, expected: str) -> None:
+    assert request_directive(text) == expected
 
 
-def test_dialogue_that_names_its_cleared_holds_authorizes_execution(
-    tmp_path: Path,
-) -> None:
-    dialogue = {
-        "question": "Approve?",
-        "response": "Approve",
-        "clear_holds": ["hold-1"],
-        "execution_authorized": True,
-    }
-    response_ref = _write_ref(
-        tmp_path,
-        dialogue,
-        artifact_id="dialogue-1",
-        role="dialogue",
-        filename="dialogue.json",
-        media_type="application/json",
-    )
-    approval = _runner_approval(
-        tmp_path,
-        response_text="Approve",
-        response_ref=response_ref,
-        source=MoldCookApprovalSource.LOCAL_DIALOGUE,
-    )
-
-    assert dialogue_authorizes_execution(dialogue) is True
-    assert validate_mold_cook_approval(approval, tmp_path) is approval
-
-
-def test_runner_approval_is_bound_to_its_own_canonical_envelope(
-    tmp_path: Path,
-) -> None:
-    """Finding 10: a widened setup envelope cannot ride an approval through."""
-
-    coverage = MoldCookCoverage(curd_ids=["curd-1"])
-    authorized = CookSetupAuthorization(
-        prerequisite_curd_id="setup",
-        allowed_paths=("src/",),
-        allowed_commands=("just build",),
-    )
-    widened = CookSetupAuthorization(
-        prerequisite_curd_id="setup",
-        allowed_paths=("src/", "docs/"),
-        allowed_commands=("just build", "curl"),
-    )
-    proposal_ref = _write_ref(
-        tmp_path,
-        canonical_mold_cook_proposal(
-            request_id="request-1",
-            spec_digest=SPEC_DIGEST,
-            coverage=coverage,
-            setup_authorization=widened,
+def _plan() -> CurdPlan:
+    curd = SemanticCurd(
+        curd_id="root",
+        outcome="Implement root",
+        scope=BoundedScope(paths=["src/root.py"]),
+        inputs=(),
+        outputs=("root-result",),
+        dependencies=(),
+        criteria=(
+            Criterion(
+                criterion_id="root-criterion",
+                description="root passes",
+                check="focused test passes",
+            ),
         ),
-        artifact_id="proposal-1",
-        role="proposal",
-        filename="proposal.json",
-        media_type="application/json",
+        lineage=IdentityLineage(IdentityAction.NEW),
     )
-    response_ref = _write_ref(
-        tmp_path,
-        b"Approve",
-        artifact_id="response-1",
-        role="response",
-        filename="response.txt",
-        media_type="text/plain",
+    return CurdPlan.signed(
+        contract_version=require_contract_version(CurdPlan),
+        plan_id="bound-plan",
+        revision=1,
+        objective="Execute the selected work",
+        curds=(curd,),
     )
-    approval = bind_mold_cook_runner_approval(
-        request_id="request-1",
-        decision=MoldCookApprovalDecision.APPROVED,
-        source=MoldCookApprovalSource.USER_RESPONSE,
-        spec_digest=SPEC_DIGEST,
-        proposal_ref=proposal_ref,
-        response_ref=response_ref,
-        response_text="Approve",
-        response_source="response-1",
-        coverage=coverage,
-        setup_authorization=authorized,
-    )
-
-    with pytest.raises(ContractValidationError, match="canonical envelope"):
-        _ = validate_mold_cook_approval(approval, tmp_path)
-
-
-def test_typed_mold_document_is_a_public_taste_test_export() -> None:
-    """Finding 75: the shared seam imports a supported name."""
-
-    assert "typed_mold_document" in taste_test.__all__
-    assert taste_test.typed_mold_document is not None
-
-
-def _default_approval(root: Path) -> MoldCookApproval:
-    response_ref = _write_ref(
-        root,
-        b"Approve",
-        artifact_id="response-1",
-        role="response",
-        filename="response.txt",
-        media_type="text/plain",
-    )
-    return _runner_approval(root, response_text="Approve", response_ref=response_ref)
 
 
 @pytest.mark.parametrize("shape", ["instance", "bytes", "mapping", "path"])
 def test_resolve_contract_value_validates_every_producer_input_shape(
     tmp_path: Path, shape: str
 ) -> None:
-    """Finding 61: one seam types the four shapes a producer holds."""
-
-    approval = _default_approval(tmp_path)
-    payload = canonical_bytes(approval)
-    document = tmp_path / "approval.json"
+    plan = _plan()
+    payload = canonical_bytes(plan)
+    document = tmp_path / "plan.json"
     _ = document.write_bytes(payload)
     value: object = {
-        "instance": approval,
+        "instance": plan,
         "bytes": payload,
-        "mapping": cast("dict[str, object]", json.loads(payload)),
+        "mapping": cast(dict[str, object], json.loads(payload)),
         "path": document,
     }[shape]
 
-    assert resolve_contract_value(value, MoldCookApproval, tmp_path) == approval
+    assert resolve_contract_value(value, CurdPlan, tmp_path) == plan
 
 
-def test_resolve_contract_value_rejects_an_unsupported_input_type(
+def test_resolve_contract_value_rejects_unsupported_and_wrong_content(
     tmp_path: Path,
 ) -> None:
-    """A value the seam cannot type is never structured into a contract."""
-
     with pytest.raises(ContractValidationError, match="from a int value"):
-        _ = resolve_contract_value(7, MoldCookApproval, tmp_path)
+        _ = resolve_contract_value(7, CurdPlan, tmp_path)
+    with pytest.raises(ContractValidationError, match="not a valid CurdPlan"):
+        _ = resolve_contract_value(b'{"kind":"other"}', CurdPlan, tmp_path)
 
 
-def test_resolve_contract_value_reads_a_path_outside_the_artifact_root(
+def test_resolve_contract_value_rejects_symlinked_contract_path(
     tmp_path: Path,
 ) -> None:
-    """An operator names the contract path; the retention root does not bound it."""
-
-    approval = _default_approval(tmp_path)
-    document = tmp_path / "approval.json"
-    _ = document.write_bytes(canonical_bytes(approval))
-    root = tmp_path / "artifacts"
-    root.mkdir()
-
-    assert resolve_contract_value(document, MoldCookApproval, root) == approval
-
-
-def test_resolve_contract_value_refuses_a_symlinked_contract_path(
-    tmp_path: Path,
-) -> None:
-    """A symlink still cannot redirect the read to another file."""
-
-    approval = _default_approval(tmp_path)
-    document = tmp_path / "approval.json"
-    _ = document.write_bytes(canonical_bytes(approval))
+    document = tmp_path / "plan.json"
+    _ = document.write_bytes(canonical_bytes(_plan()))
     link = tmp_path / "link.json"
     link.symlink_to(document)
 
     with pytest.raises(ContractValidationError, match="is unreadable"):
-        _ = resolve_contract_value(link, MoldCookApproval, tmp_path)
+        _ = resolve_contract_value(link, CurdPlan, tmp_path)
 
 
-def test_publish_reports_an_unsupported_host_version_as_a_contract_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The publish seam answers a host defect with its own error type."""
+def test_resolve_contract_rejects_remote_and_stale_references(tmp_path: Path) -> None:
+    plan = _plan()
+    content = canonical_bytes(plan)
+    document = tmp_path / "plan.json"
+    _ = document.write_bytes(content)
+    reference = materialize_artifact_ref(
+        plan,
+        artifact_id="plan",
+        role="curd_plan",
+        uri=document.as_uri(),
+        media_type="application/json",
+    )
+    assert resolve_contract(reference, CurdPlan, tmp_path).value == plan
 
-    def unsupported(_contract: object) -> str:
-        raise TypeError("MoldCookHandoff has no supported contract version")
+    remote = ArtifactRef(
+        artifact_id="remote",
+        role="curd_plan",
+        uri="https://example.invalid/plan.json",
+        digest=reference.digest,
+        size_bytes=reference.size_bytes,
+        media_type="application/json",
+    )
+    with pytest.raises(ContractValidationError, match="unsupported URI scheme"):
+        _ = resolve_contract(remote, CurdPlan, tmp_path)
 
-    monkeypatch.setattr(mold_cook_handoff, "require_contract_version", unsupported)
-
-    with pytest.raises(ContractValidationError, match="no supported contract version"):
-        _ = publish_mold_cook_handoff(
-            cast("MoldCookHandoff", object()),
-            request_digest=SPEC_DIGEST,
-            operation_id="publish-host-defect",
-            artifact_root=tmp_path,
-        )
-
-
-def test_resolve_contract_value_rejects_bytes_that_are_not_the_contract(
-    tmp_path: Path,
-) -> None:
-    """Bytes of the wrong document fail against the host-supported version."""
-
-    with pytest.raises(ContractValidationError, match="not a valid MoldCookApproval"):
-        _ = resolve_contract_value(b'{"kind": "plan"}', MoldCookApproval, tmp_path)
+    _ = document.write_bytes(content.replace(b"bound-plan", b"other-plan"))
+    with pytest.raises(ContractValidationError, match="stale or corrupt"):
+        _ = resolve_contract(reference, CurdPlan, tmp_path)

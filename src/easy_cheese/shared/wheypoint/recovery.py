@@ -235,10 +235,8 @@ def _same_intent(
         (
             delta.add_decisions,
             delta.add_questions,
-            delta.add_blockers,
             delta.add_directives,
             delta.transitions,
-            delta.decision_dossier,
             delta.remove_artifact_links,
         )
     ):
@@ -272,6 +270,13 @@ def persist_checkpoint(
             current = store.read_record()
         except (ValueError, OSError) as exc:
             raise RecoveryError("current checkpoint record cannot be read") from exc
+        # Documented exception to the required-base rule: the only caller is
+        # the workflow runtime's budget checkpoint, which has no earlier read
+        # to name. It reads inside one artifact lock with no model memory in
+        # between, so the record just read is its base. A write that races in
+        # before the commit makes the commit refuse; it is not retried.
+        if current is not None and intent.base_revision_id is None:
+            intent = attrs.evolve(intent, base_revision_id=current.revision_id)
         try:
             delta = checkpoint.build_delta(intent, current)
         except checkpoint.IntentError as exc:
@@ -297,17 +302,7 @@ def persist_checkpoint(
         if should_publish:
             previous = _publish(root, artifact_path, artifact_payload)
             try:
-                try:
-                    _ = commit.commit(delta, store=store, artifact_root=root)
-                except (commit.StaleParentError, commit.GenesisConflictError):
-                    refreshed = store.read_record()
-                    if refreshed is None:
-                        raise RecoveryError("checkpoint retry found no current record")
-                    retry_intent = attrs.evolve(
-                        intent, base_revision_id=refreshed.revision_id
-                    )
-                    retry_delta = checkpoint.build_delta(retry_intent, refreshed)
-                    _ = commit.commit(retry_delta, store=store, artifact_root=root)
+                _ = commit.commit(delta, store=store, artifact_root=root)
             except BaseException:
                 try:
                     current_after = store.read_record()
