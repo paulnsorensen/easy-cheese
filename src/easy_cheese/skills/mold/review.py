@@ -7,6 +7,7 @@ from collections.abc import Generator
 from contextlib import contextmanager, nullcontext
 import hashlib
 import json
+import re
 import secrets
 import threading
 import time
@@ -36,6 +37,8 @@ ASSET_TYPES = {
     ".woff": "font/woff",
     ".woff2": "font/woff2",
 }
+TAILNET_HOST_PATTERN = re.compile(r"(?:[a-z0-9-]+\.)+ts\.net")
+PORT_PATTERN = re.compile(r"[0-9]{1,5}")
 
 
 @contextmanager
@@ -176,6 +179,7 @@ class MoldReview:
 class _ReviewServer(ThreadingHTTPServer):
     review: MoldReview = cast(MoldReview, object())
     token: str = ""
+    trusted_host: str | None = None
     state_signature: tuple[int, int] | None = None
 
     def __init__(self, address: tuple[str, int], handler: type[BaseHTTPRequestHandler]) -> None:
@@ -219,9 +223,35 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def _authorized(self, require_origin: bool = False) -> bool:
-        origin = self.headers.get("Origin")
+    def _expected_origin(self) -> str | None:
+        """Return the origin a request may come from, or None for an untrusted Host.
+
+        Loopback requests come from ``http://127.0.0.1:<port>``. With a trusted
+        tailnet host, ``tailscale serve`` forwards the original Host over TLS, so
+        those requests come from ``https://<host>``. Funnel traffic is public and
+        never trusted.
+        """
+        server = cast(_ReviewServer, self.server)
         host = self.headers.get("Host", "")
+        if self.headers.get("Tailscale-Funnel-Request") is not None:
+            return None
+        if host == f"127.0.0.1:{server.server_port}":
+            return f"http://{host}"
+        name, separator, port = host.partition(":")
+        if (
+            server.trusted_host is not None
+            and name == server.trusted_host
+            and (not separator or PORT_PATTERN.fullmatch(port))
+            and self.headers.get("X-Forwarded-Proto") == "https"
+        ):
+            return f"https://{host}"
+        return None
+
+    def _authorized(self, require_origin: bool = False) -> bool:
+        expected = self._expected_origin()
+        if expected is None:
+            return False
+        origin = self.headers.get("Origin")
         token = self.headers.get("X-Mold-Token")
         request = urlparse(self.path)
         if not token and request.path in ("/", "/index.html"):
@@ -235,13 +265,11 @@ class _Handler(BaseHTTPRequestHandler):
                 ),
                 "",
             )
-        server = cast(_ReviewServer, self.server)
-        loopback = host == f"127.0.0.1:{server.server_port}"
-        same_origin = origin == f"http://{host}" if require_origin else origin in (None, "null", f"http://{host}")
-        return loopback and same_origin and secrets.compare_digest(token, server.token)
+        same_origin = origin == expected if require_origin else origin in (None, "null", expected)
+        return same_origin and secrets.compare_digest(token, cast(_ReviewServer, self.server).token)
 
     def _asset_is_authorized(self, path: str) -> bool:
-        if not path.startswith("/assets/"):
+        if not path.startswith("/assets/") or self._expected_origin() is None:
             return False
         if self.headers.get("Sec-Fetch-Site") == "same-origin":
             return True
@@ -277,11 +305,12 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(404, {"error": "review asset missing"})
             return
         token = cast(_ReviewServer, self.server).token
+        secure = "; Secure" if (self._expected_origin() or "").startswith("https://") else ""
         self._send(
             200,
             index.read_bytes(),
             "text/html; charset=utf-8",
-            f"mold_token={token}; Path=/; HttpOnly; SameSite=Strict",
+            f"mold_token={token}; Path=/; HttpOnly; SameSite=Strict{secure}",
         )
 
     def _serve_review(self) -> None:
@@ -401,7 +430,7 @@ class _Handler(BaseHTTPRequestHandler):
         return {"closed": True}
 
 
-def _serve(*, state_dir: str, port: int = 0) -> None:
+def _serve(*, state_dir: str, port: int = 0, trusted_host: str | None = None) -> None:
     """Launch the local review server and block until the review closes.
 
     Parameters
@@ -410,7 +439,15 @@ def _serve(*, state_dir: str, port: int = 0) -> None:
         Directory holding review.json.
     port
         TCP port to bind; 0 picks an ephemeral port.
+    trusted_host
+        Tailnet name such as ``node.tailnet.ts.net`` to accept through
+        ``tailscale serve``; the server still binds loopback only.
     """
+    if trusted_host is not None and not TAILNET_HOST_PATTERN.fullmatch(trusted_host):
+        raise fromargs.CliError(
+            f"trusted host must be a lowercase *.ts.net name without a port: {trusted_host!r}",
+            exit_code=2,
+        )
     state = Path(state_dir)
     state.mkdir(parents=True, exist_ok=True)
     path = state / "review.json"
@@ -424,17 +461,18 @@ def _serve(*, state_dir: str, port: int = 0) -> None:
     server = _ReviewServer(("127.0.0.1", port), _Handler)
     server.review = review
     server.token = token
+    server.trusted_host = trusted_host
     server.state_signature = _state_signature(path)
-    print(
-        json.dumps(
-            {
-                "url": f"http://127.0.0.1:{server.server_port}/?token={quote(token, safe='')}",
-                "token": token,
-                "review_id": review.review_id,
-            }
-        ),
-        flush=True,
-    )
+    query = f"?token={quote(token, safe='')}"
+    launch: JSONObject = {
+        "url": f"http://127.0.0.1:{server.server_port}/{query}",
+        "token": token,
+        "review_id": review.review_id,
+    }
+    if trusted_host is not None:
+        launch["remote_url"] = f"https://{trusted_host}/{query}"
+        launch["tailscale_serve"] = f"tailscale serve --bg http://127.0.0.1:{server.server_port}"
+    print(json.dumps(launch), flush=True)
     server.timeout = 0.2
     try:
         while True:
