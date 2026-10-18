@@ -15,6 +15,8 @@ Use the bundled review canvas when visual artifacts or browser interaction help 
 ## Remote access over Tailscale
 
 Use this mode only when the user asks to open the canvas from another tailnet device.
+If `tailscale` is missing, `Self.DNSName` is empty, or the tailnet has no HTTPS certificates, tell the user that remote access is unavailable.
+Then serve without `--trusted-host` and give the loopback `url`, or continue the review in conversation.
 
 1. Read the node name from `tailscale status --json` at `Self.DNSName`, without the trailing dot.
 2. Add `--trusted-host NODE.TAILNET.ts.net` to `review serve`.
