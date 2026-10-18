@@ -107,3 +107,7 @@
 
 - 2026-10-15 · 5d06dbb1e665716c · merged · adr/culture-wheypoint-collaboration-001.md · Replace explicit altitude selection with user-approved conversational navigation. Frozen identity and natural-language probes return the page at rank 1.
 
+
+
+- 2026-10-18 · 9014418ab9a8e937 · merged · ideas/minimal-easy-cheese.md · Prepare the manifesto discussion for review: separate assistant proposals, state evidence limits, and add measurable next steps. Publication does not approve a rewrite.
+

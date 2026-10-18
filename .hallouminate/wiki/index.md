@@ -18,11 +18,13 @@ git-tracking axis (`skills/cheese/references/formatting.md:103`).
 - [architecture/](./architecture/index.md) — architecture
 - [decisions/](./decisions/index.md) — decisions
 - [gotchas/](./gotchas/index.md) — gotchas
+- [ideas/](./ideas/index.md) — ideas
 - [research/](./research/index.md) — research
 - [specs/](./specs/index.md) — specs
 - [architecture](./architecture.md) — Architecture of easy-cheese
 - [docs-mermaid-rendering](./docs-mermaid-rendering.md) — Docs Mermaid rendering
 - [domain-model](./domain-model.md) — Easy Cheese domain model
+- [easy-cheese-manifesto](./easy-cheese-manifesto.md) — Easy-cheese manifesto
 - [fanout-engine-entities](./fanout-engine-entities.md) — Fan-out engine entities
 - [log](./log.md) — Ingest Log
 - [post-pr-wiki-writeback](./post-pr-wiki-writeback.md) — Post-PR wiki write-back — plan and followups
