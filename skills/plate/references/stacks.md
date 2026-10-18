@@ -49,6 +49,8 @@ that the repository metadata directory is the literal `.git` path.
 
 Use the `stack-tools` report on every invocation. Preserve the provider that already tracks the branch.
 When no provider tracks it, use the report's `recommended` provider. State the choice.
+A `not-installed` provider with `repository_signal: true` is configured for this repository.
+Name the missing executable when you choose another provider or stop.
 Only a `gh-stack` status of `not-enabled` (preflight `404`) is a repository enablement requirement.
 Other non-`available` statuses are environment failures.
 When the preflight is indeterminate, a remote operation's exit code `9` is the fallback enablement signal.

@@ -594,6 +594,10 @@ def test_gh_stack_preflight_is_skipped_when_the_extension_is_absent(
     def run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args == ["git", "rev-parse", "--git-dir"]:
             return completed(args, stdout=".git\n")
+        if args == ["git", "config", "--get", "git-town.main-branch"]:
+            return completed(args, returncode=1)
+        if args == ["git", "rev-parse", "--show-toplevel"]:
+            return completed(args, stdout=f"{tmp_path}\n")
         if args == ["gh", "extension", "list"]:
             return completed(args, stdout="github/gh-dash\tgh dash\n")
         raise AssertionError(args)
@@ -678,6 +682,43 @@ def test_git_town_detects_a_committed_config_file_without_local_git_config(
     assert providers["git-town"]["status"] == status
     assert providers["git-town"]["repository_signal"] is (status == "available")
     assert result["recommended"] == ("git-town" if status == "available" else None)
+
+
+def test_git_town_reports_a_committed_config_when_the_binary_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Git Town repository without `git-town` shows the repository signal.
+
+    The provider stays `not-installed` and is never recommended, but the report
+    no longer claims that the repository has no Git Town configuration.
+    """
+    _ = (tmp_path / "git-town.toml").write_text('[branches]\nmain = "trunk"\n')
+
+    def which(name: str) -> str | None:
+        return "/bin/git" if name == "git" else None
+
+    monkeypatch.setattr(shutil, "which", which)
+
+    def run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args == ["git", "rev-parse", "--git-dir"]:
+            return completed(args, stdout=".git\n")
+        if args == ["git", "config", "--get", "git-town.main-branch"]:
+            return completed(args, returncode=1)
+        if args == ["git", "rev-parse", "--show-toplevel"]:
+            return completed(args, stdout=f"{tmp_path}\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(subprocess, "run", run)
+
+    result = stack_tools.detect_stack_tools(tmp_path)
+
+    providers = cast(dict[str, dict[str, object]], result["providers"])
+    assert providers["git-town"] == {
+        "installed": False,
+        "repository_signal": True,
+        "status": "not-installed",
+    }
+    assert result["recommended"] is None
 
 
 def test_validate_publication_commit_only_landing_with_na_topology_is_valid() -> None:

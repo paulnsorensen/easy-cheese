@@ -141,16 +141,20 @@ def detect_stack_tools(cwd: Path) -> dict[str, object]:
     graphite_signal = bool(git_dir and (git_dir / ".graphite_repo_config").is_file())
 
     git_town_installed = shutil.which("git-town") is not None
+    # The trunk is a repository fact, like Graphite's signal: read it even when
+    # the binary is missing, so the report shows a Git Town repository whose
+    # `git-town` executable is not installed.
+    git_installed = shutil.which("git") is not None
     git_town_result = (
         _run(["git", "config", "--get", "git-town.main-branch"], cwd)
-        if git_town_installed and shutil.which("git") is not None
+        if git_installed
         else None
     )
     git_town_signal = bool(
         git_town_result
         and git_town_result.returncode == 0
         and git_town_result.stdout.strip()
-    ) or (git_town_result is not None and _git_town_file_trunk(cwd))
+    ) or (git_installed and _git_town_file_trunk(cwd))
 
     gh_installed = shutil.which("gh") is not None
     extension_result = _run(["gh", "extension", "list"], cwd) if gh_installed else None
