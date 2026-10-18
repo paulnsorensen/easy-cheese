@@ -293,3 +293,14 @@ def test_instructions_exempt_the_cook_press_sub_agent_from_the_dispatch_rule() -
 
     assert "The one exception is Cook's" in text
     assert "not a phase handoff" in " ".join(text.split())
+
+
+def test_press_loop_runs_inline_on_a_harness_without_sub_agents() -> None:
+    """T8: a host with no sub-agents degrades visibly; it never skips Press."""
+    loop = _read(REFERENCES / "press-loop.md")
+    skill = _read(SKILL)
+
+    assert "When the host has no fresh-context sub-agent, run the round inline instead of halting." in loop
+    assert "Record `topology: inline` and `degraded: true` in `agent_resolution`" in loop
+    assert "Never skip the round because no sub-agent exists." in loop
+    assert "general, then inline in the Cook session (`degraded: true`)" in skill

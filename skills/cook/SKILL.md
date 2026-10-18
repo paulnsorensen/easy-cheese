@@ -264,7 +264,7 @@ Harvest and plate stay parent-owned.
 | Work | Preferred types | Permissions/isolation | Minimum power | Effort | Fallback |
 | --- | --- | --- | --- | --- | --- |
 | Decompose the spec | planner, general | write (manifest only), fresh-context | powerful | high | compatible planner, then general |
-| Press loop | coder | write (tests only), fresh-context | default | medium | general |
+| Press loop | coder | write (tests only), fresh-context preferred | default | medium | general, then inline in the Cook session (`degraded: true`) |
 
 The handoff carries the `agent_resolution` block.
 Publish a terminal Age only when it contains `next: done`.
