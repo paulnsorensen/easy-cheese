@@ -265,6 +265,34 @@ def test_checkpoint_mirrors_the_projection_into_an_explicit_note_dir(
     assert "durability: repo-snapshot" in markdown
 
 
+@pytest.mark.parametrize("command", ["checkpoint", "import"])
+def test_help_names_the_repository_relative_note_default(command: str) -> None:
+    """`--help` must keep the `<git toplevel>` prefix on the note-directory
+    default; a bare `/.cheese/notes` reads as a filesystem-root path, which the
+    help renderer produced when the angle brackets were parsed as an empty HTML
+    tag (issue #763)."""
+    out = io.StringIO()
+
+    status = wheypoint.main([command, "--help"], stdin=io.StringIO(""), stdout=out)
+
+    assert status == 0
+    rendered = " ".join(out.getvalue().split())
+    assert (
+        "default: <git toplevel>/.cheese/notes; no mirror outside a repository"
+        in rendered
+    )
+
+
+def test_resolve_help_names_the_legacy_slug_placeholder() -> None:
+    out = io.StringIO()
+
+    status = wheypoint.main(["resolve", "--help"], stdin=io.StringIO(""), stdout=out)
+
+    assert status == 0
+    rendered = " ".join(out.getvalue().split())
+    assert ".cheese/notes/<slug>.md" in rendered
+
+
 @pytest.mark.usefixtures("store")
 def test_checkpoint_replay_rewrites_the_identical_mirror(tmp_path: Path) -> None:
     notes = tmp_path / "handoffs"
