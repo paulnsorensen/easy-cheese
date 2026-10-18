@@ -236,6 +236,14 @@ class TestSessionTags:
         with pytest.raises(ValueError):
             _ = debug_tag_sweep.session_tags([session])
 
+    def test_help_keeps_the_tag_placeholder(
+        self, debug_tag_sweep: _DebugTagSweepModule, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        output = StringIO()
+        _ = debug_tag_sweep.build_app().run(("--help",), stdout=output)
+        rendered = " ".join((output.getvalue() + capsys.readouterr().out).split())
+        assert "[DEBUG-<tag>]" in rendered
+
     def test_another_session_tag_is_not_a_hit(
         self, debug_tag_sweep: _DebugTagSweepModule, tmp_path: Path
     ) -> None:
