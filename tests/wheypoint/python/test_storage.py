@@ -8,6 +8,7 @@ receipt, a missing projection, and tampering with each of the three files.
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Callable
 from pathlib import Path
@@ -16,6 +17,7 @@ from typing import Protocol, cast
 import pytest
 from attrs import evolve
 from easy_cheese_schemas import (
+    SCHEMA_VERSION,
     ArtifactLink,
     EntryKind,
     EntryState,
@@ -26,7 +28,7 @@ from easy_cheese_schemas import (
     WheypointRevision,
 )
 
-from easy_cheese.shared.wheypoint import projection, records, refs, storage
+from easy_cheese.shared.wheypoint import canonical, projection, records, refs, storage
 
 
 class _Promotion(Protocol):
@@ -247,7 +249,7 @@ def test_a_promoted_revision_is_immutable(
     store.promote(promotion.record, promotion.revision, promotion.markdown)
     original = store.revision_path(1, "rev-0001").read_bytes()
 
-    rewritten = evolve(promotion.revision, preserved_entry_ids=["d-one"])
+    rewritten = evolve(promotion.revision, request_digest="sha256:" + "7" * 64)
     with pytest.raises(storage.StorageError, match="already exists"):
         store.promote(promotion.record, rewritten, promotion.markdown)
     assert store.revision_path(1, "rev-0001").read_bytes() == original
@@ -332,7 +334,7 @@ def test_an_incomplete_pair_may_be_replaced_by_any_agreeing_triple_at_its_name(
     store.revisions_dir.mkdir(parents=True, exist_ok=True)
     _ = store.revision_path(1, "rev-0001").write_bytes(
         records.canonical_payload(
-            evolve(promotion.revision, preserved_entry_ids=["injected"])
+            evolve(promotion.revision, request_digest="sha256:" + "7" * 64)
         )
     )
     assert store.recover().complete == ()
@@ -344,12 +346,11 @@ def test_an_incomplete_pair_may_be_replaced_by_any_agreeing_triple_at_its_name(
     assert store.recover().consistent
 
 
-def test_a_complete_pair_is_refused_when_the_projection_is_what_changed(
+def test_a_complete_pair_keeps_its_projection_when_a_retry_carries_other_markdown(
     store: storage.WorkStore, make_promotion: Callable[..., _Promotion]
 ) -> None:
-    """The projection digest lives in the receipt, so different markdown is a
-    different receipt: re-promoting it at a settled name is a rewrite, and both
-    files stay exactly as the first promotion left them."""
+    """The receipt pins no projection digest, so the retry moves only the
+    record pointer; both immutable files stay as the first promotion left them."""
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
     before_receipt = store.revision_path(1, "rev-0001").read_bytes()
@@ -359,13 +360,8 @@ def test_a_complete_pair_is_refused_when_the_projection_is_what_changed(
         "Implement the canonical record runtime.", "Ship it, no gates."
     )
     assert rewritten != promotion.markdown
-    reprojected = evolve(
-        promotion.revision,
-        projection_digest=projection.projection_digest_of_text(rewritten),
-    )
 
-    with pytest.raises(storage.StorageError, match="already exists"):
-        store.promote(promotion.record, reprojected, rewritten)
+    store.promote(promotion.record, promotion.revision, rewritten)
 
     assert store.revision_path(1, "rev-0001").read_bytes() == before_receipt
     assert (
@@ -393,7 +389,7 @@ def test_a_projection_no_receipt_names_is_reported_rather_than_unseen(
 
 @pytest.mark.parametrize(
     "field",
-    ["revision_id", "revision_number", "work_id", "record_digest", "projection_digest"],
+    ["revision_id", "revision_number", "work_id", "record_digest"],
 )
 def test_promotion_refuses_a_triple_that_does_not_agree(
     store: storage.WorkStore, make_promotion: Callable[..., _Promotion], field: str
@@ -410,7 +406,6 @@ def test_promotion_refuses_a_triple_that_does_not_agree(
         },
         "work_id": {"work_id": "work-9999"},
         "record_digest": {"record_digest": "sha256:" + "9" * 64},
-        "projection_digest": {"projection_digest": "sha256:" + "9" * 64},
     }
     with pytest.raises(storage.StorageError):
         store.promote(
@@ -499,9 +494,10 @@ def test_a_receipt_whose_filename_lies_about_its_identity_is_incomplete(
     )
 
 
-def test_a_tampered_projection_breaks_its_pair(
+def test_a_v5_projection_edit_does_not_break_its_pair(
     store: storage.WorkStore, make_promotion: Callable[..., _Promotion]
 ) -> None:
+    """A v5 receipt pins no projection digest: the projection is derived text."""
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
     path = store.projection_path(1, "rev-0001")
@@ -510,6 +506,30 @@ def test_a_tampered_projection_breaks_its_pair(
     )
     assert tampered != promotion.markdown
     _ = path.write_text(tampered, encoding="utf-8")
+
+    report = store.recover()
+    assert report.incomplete == ()
+    assert [file.revision.revision_id for file in report.complete] == ["rev-0001"]
+
+
+def test_a_legacy_receipt_projection_digest_still_breaks_its_pair(
+    store: storage.WorkStore, make_promotion: Callable[..., _Promotion]
+) -> None:
+    promotion = make_promotion()
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    receipt_path = store.revision_path(1, "rev-0001")
+    raw = cast(dict[str, object], json.loads(receipt_path.read_bytes()))
+    raw["projection_digest"] = projection.projection_digest_of_text(promotion.markdown)
+    _ = receipt_path.write_bytes(canonical.canonical_bytes(raw))
+    assert store.recover().incomplete == ()
+
+    path = store.projection_path(1, "rev-0001")
+    _ = path.write_text(
+        promotion.markdown.replace(
+            "Implement the canonical record runtime.", "Ship it, no gates."
+        ),
+        encoding="utf-8",
+    )
 
     report = store.recover()
     assert report.complete == ()
@@ -1036,3 +1056,42 @@ def test_both_readers_skip_a_broken_receipt_in_the_same_words(
     skipped = store.revisions().skipped
     assert store.survey_receipts().incomplete == skipped
     assert skipped[0].startswith(expected)
+
+
+# ----- future schema stamps -------------------------------------------------
+
+
+def _stamp_future(path: Path) -> None:
+    payload = cast(dict[str, object], json.loads(path.read_text()))
+    payload["schema_version"] = cast(int, payload["schema_version"]) + 1
+    _ = path.write_text(json.dumps(payload))
+
+
+def test_read_record_refuses_a_future_stamp(
+    store: storage.WorkStore, make_promotion: Callable[..., _Promotion]
+) -> None:
+    promotion = make_promotion()
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    _stamp_future(store.record_path)
+
+    with pytest.raises(storage.SchemaVersionFutureError, match="upgrade the wheypoint bundle"):
+        _ = store.read_record()
+
+
+def test_read_revision_refuses_a_future_stamp(
+    store: storage.WorkStore, make_promotion: Callable[..., _Promotion]
+) -> None:
+    promotion = make_promotion()
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    revision = promotion.revision
+    _stamp_future(store.revision_path(revision.revision_number, revision.revision_id))
+
+    with pytest.raises(storage.SchemaVersionFutureError, match="stamped schema version"):
+        _ = store.read_revision(revision.revision_number, revision.revision_id)
+
+
+def test_future_stamp_detail_names_both_versions() -> None:
+    detail = storage.future_stamp_detail(99, "record")
+
+    assert "record is stamped schema version 99" in detail
+    assert f"reads up to {SCHEMA_VERSION}" in detail

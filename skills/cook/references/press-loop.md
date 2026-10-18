@@ -14,6 +14,11 @@ The spawn prompt carries the no-chain directive from [`auto-mode.md`](auto-mode.
 Press writes `.cheese/press/<slug>.md` and returns to Cook.
 See [`../../press/SKILL.md`](../../press/SKILL.md) and [`../../press/references/gap-analysis.md`](../../press/references/gap-analysis.md).
 
+When the host has no fresh-context sub-agent, run the round inline instead of halting.
+Write the package report first, then follow `../../press/SKILL.md` for one round in the same session, writing tests only.
+Record `topology: inline` and `degraded: true` in `agent_resolution`, and name the lost isolation in the `### Press loop` section.
+Never skip the round because no sub-agent exists.
+
 ## Outcomes
 
 | Press outcome | Cook action |

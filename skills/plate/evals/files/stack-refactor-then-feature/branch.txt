@@ -1,0 +1,16 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/briesearch-cache. No PR exists for this branch.
+Quality gate: `just check` passed at HEAD and at the first commit (exit 0 each).
+Installed stack tools: Graphite (`gt`) is installed and the repository is initialized. gh stack and Git Town are absent.
+PR template: .github/PULL_REQUEST_TEMPLATE.md with sections What changed / Why / How to verify / Non-obvious changes / Risk / rollout notes / Checklist.
+
+$ git log --oneline --reverse main..HEAD
+5d10a2b refactor(briesearch): move provider probes into easy_cheese.shared.providers
+7e44c9f feat(briesearch): cache provider probe results for one hour
+
+$ git diff --stat per commit
+5d10a2b  12 files, +611 -604. Pure move: src/easy_cheese/skills/briesearch/probes/*.py -> src/easy_cheese/shared/providers/*.py,
+         import paths updated in 9 callers. git diff -M reports 96-100% similarity for every moved file.
+         No public command, flag, or output changes.
+7e44c9f  4 files, +158 -6. Adds src/easy_cheese/shared/providers/cache.py, wires it into probe(), adds tests.
+
+The feature commit imports from the new shared.providers location, so it cannot land before the move.

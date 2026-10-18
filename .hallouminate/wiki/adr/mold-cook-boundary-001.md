@@ -1,5 +1,7 @@
 # ADR: Cook prepares missing plans but preserves plan approval
 
+> Superseded in part by PR #774, which removed `cook prepare` and the typed handoff. Bound execution now uses `validate_bound_execution`. See [workflow-contract-map](../architecture/workflow-contract-map.md).
+
 Status: implemented for the repository boundary; external harness integration remains (2026-09-26).
 
 Cook may generate a missing Full-tier plan from approved scope. It must request approval of the generated plan before execution.

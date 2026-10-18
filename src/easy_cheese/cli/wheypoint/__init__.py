@@ -1,7 +1,7 @@
-"""The fourteen commands the bundle exposes: checkpoint, validate, schema, resolve, show, lint, list, log, turns, fork, link, unlink, shape, backlinks.
+"""The commands the bundle exposes: checkpoint, validate, schema, resolve, show, list, log, turns, fork, export, import.
 
 This package is a mouth, not a brain. Every decision it reports was made by
-`commit`, `resolve`, or `lint`; nothing here parses a projection, compares a
+`commit` or `resolve`; nothing here parses a projection, compares a
 revision, or decides what is dispatchable, because a second implementation of
 any of those would be a second answer to a question the kernel already answers.
 
@@ -18,8 +18,7 @@ stderr, ``{"error": "<code>: <message>", "exit_code": <n>}``.
 
 A resolution that is gated, ambiguous, or not found is an *answer* about the
 corpus, so it prints with ``ok: true`` and the outcome in the payload; only a
-reference that could not be interpreted at all is a refusal. Lint findings are
-answers by the same rule.
+reference that could not be interpreted at all is a refusal.
 """
 
 from __future__ import annotations
@@ -34,8 +33,9 @@ from easy_cheese.cli.wheypoint.checkpoint import (
     request_identity_for as request_identity_for,
     run_checkpoint,
 )
-from easy_cheese.cli.wheypoint import graph as graph_mod
+from easy_cheese.cli.wheypoint import fork as fork_mod
 from easy_cheese.cli.wheypoint import queries as queries_mod
+from easy_cheese.cli.wheypoint import transfer as transfer_mod
 
 COMMANDS = (
     "checkpoint",
@@ -43,15 +43,12 @@ COMMANDS = (
     "schema",
     "resolve",
     "show",
-    "lint",
     "list",
     "log",
     "turns",
     "fork",
-    "link",
-    "unlink",
-    "shape",
-    "backlinks",
+    "export",
+    "import",
 )
 
 
@@ -71,12 +68,10 @@ def build_app(stdin: TextIO) -> fromargs.App:
             str | None, fromargs.Parameter(allow_leading_hyphen=True)
         ] = None,
         *,
-        compacted: str | None = None,
         note_dir: str | None = None,
         no_note: bool = False,
         work_id: str | None = None,
         question: list[str] | None = None,
-        blocker: list[str] | None = None,
         gates: bool = False,
         decision: list[str] | None = None,
         rationale: list[str] | None = None,
@@ -84,6 +79,12 @@ def build_app(stdin: TextIO) -> fromargs.App:
         quote: list[str] | None = None,
         resolve: list[str] | None = None,
         withdraw: list[str] | None = None,
+        supersede: list[str] | None = None,
+        by: list[str] | None = None,
+        owner: list[str] | None = None,
+        when: list[str] | None = None,
+        operator_directive: list[str] | None = None,
+        operator_quote: list[str] | None = None,
         orientation: str | None = None,
         next: str | None = None,
         artifact: str | None = None,
@@ -92,6 +93,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         link: list[str] | None = None,
         kind: list[str] | None = None,
         covers: list[str] | None = None,
+        base: str | None = None,
     ) -> dict[str, object]:
         """Checkpoint a semantic intent onto the current record.
 
@@ -100,9 +102,6 @@ def build_app(stdin: TextIO) -> fromargs.App:
         intent
             path to a JSON intent file, or - for stdin (default: stdin); with
             flags it may name the work id, and when absent the intent starts empty
-        compacted
-            path to a caller-authored CompactionRecord proving the session
-            rehydrated from the current revision before writing
         note_dir
             directory the readable projection is mirrored into (default:
             <git toplevel>/.cheese/notes)
@@ -112,15 +111,14 @@ def build_app(stdin: TextIO) -> fromargs.App:
             the work id the flags write to (default: the intent's work_id)
         question
             add an open question (repeatable)
-        blocker
-            add a blocker (repeatable)
         gates
-            the added questions and blockers block continuation
+            the added questions block continuation; pair each with a --rationale
         decision
             add a decision; pair each with a --rationale (repeatable)
         rationale
-            the rationale for each --decision, then each --resolve, then each
-            --withdraw, in that order (repeatable)
+            the rationale for each gating --question, then each --decision,
+            then each --resolve, then each --withdraw, then each --supersede,
+            in that order (repeatable)
         directive
             add a user directive; pair each with a --quote (repeatable)
         quote
@@ -129,6 +127,22 @@ def build_app(stdin: TextIO) -> fromargs.App:
             resolve an entry id; pair each with a --rationale (repeatable)
         withdraw
             withdraw an entry id; pair each with a --rationale (repeatable)
+        supersede
+            supersede an entry id; pair each with a --rationale (repeatable)
+        by
+            the entry id that replaces each --supersede; without --by, the one
+            entry of that kind this checkpoint adds (repeatable)
+        owner
+            who answers each --question; one per --question, paired by order
+            (repeatable)
+        when
+            the trigger that makes each --question due; one per --question,
+            paired by order (repeatable)
+        operator_directive
+            add an operator-preference directive (how the user wants to be
+            worked with); pair each with an --operator-quote (repeatable)
+        operator_quote
+            the user's own words for each --operator-directive (repeatable)
         orientation
             the orientation; its first line is the record title
         next
@@ -145,11 +159,13 @@ def build_app(stdin: TextIO) -> fromargs.App:
             the edge kind for each --link (repeatable)
         covers
             entry ids the pinnable --link covers (repeatable)
+        base
+            the revision id you read (from resolve or show); required when the
+            record exists, so a write never lands on state you did not read
         """
         flags = IntentFlags(
             work_id=work_id,
             question=question or (),
-            blocker=blocker or (),
             gates=gates,
             decision=decision or (),
             rationale=rationale or (),
@@ -157,6 +173,12 @@ def build_app(stdin: TextIO) -> fromargs.App:
             quote=quote or (),
             resolve=resolve or (),
             withdraw=withdraw or (),
+            supersede=supersede or (),
+            by=by or (),
+            owner=owner or (),
+            when=when or (),
+            operator_directive=operator_directive or (),
+            operator_quote=operator_quote or (),
             orientation=orientation,
             next=next,
             artifact=artifact,
@@ -165,13 +187,13 @@ def build_app(stdin: TextIO) -> fromargs.App:
             link=link or (),
             kind=kind or (),
             covers=covers or (),
+            base=base,
         )
         return _ok(
             "checkpoint",
             run_checkpoint(
                 intent,
                 stdin,
-                compacted=compacted,
                 note_dir=note_dir,
                 no_note=no_note,
                 flags=flags,
@@ -185,7 +207,6 @@ def build_app(stdin: TextIO) -> fromargs.App:
         *,
         work_id: str | None = None,
         question: list[str] | None = None,
-        blocker: list[str] | None = None,
         gates: bool = False,
         decision: list[str] | None = None,
         rationale: list[str] | None = None,
@@ -193,6 +214,12 @@ def build_app(stdin: TextIO) -> fromargs.App:
         quote: list[str] | None = None,
         resolve: list[str] | None = None,
         withdraw: list[str] | None = None,
+        supersede: list[str] | None = None,
+        by: list[str] | None = None,
+        owner: list[str] | None = None,
+        when: list[str] | None = None,
+        operator_directive: list[str] | None = None,
+        operator_quote: list[str] | None = None,
         orientation: str | None = None,
         next: str | None = None,
         artifact: str | None = None,
@@ -201,6 +228,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         link: list[str] | None = None,
         kind: list[str] | None = None,
         covers: list[str] | None = None,
+        base: str | None = None,
     ) -> dict[str, object]:
         """Validate an intent against its schema without opening the store.
 
@@ -213,15 +241,14 @@ def build_app(stdin: TextIO) -> fromargs.App:
             the work id the flags write to (default: the intent's work_id)
         question
             add an open question (repeatable)
-        blocker
-            add a blocker (repeatable)
         gates
-            the added questions and blockers block continuation
+            the added questions block continuation; pair each with a --rationale
         decision
             add a decision; pair each with a --rationale (repeatable)
         rationale
-            the rationale for each --decision, then each --resolve, then each
-            --withdraw, in that order (repeatable)
+            the rationale for each gating --question, then each --decision,
+            then each --resolve, then each --withdraw, then each --supersede,
+            in that order (repeatable)
         directive
             add a user directive; pair each with a --quote (repeatable)
         quote
@@ -230,6 +257,22 @@ def build_app(stdin: TextIO) -> fromargs.App:
             resolve an entry id; pair each with a --rationale (repeatable)
         withdraw
             withdraw an entry id; pair each with a --rationale (repeatable)
+        supersede
+            supersede an entry id; pair each with a --rationale (repeatable)
+        by
+            the entry id that replaces each --supersede; without --by, the one
+            entry of that kind this checkpoint adds (repeatable)
+        owner
+            who answers each --question; one per --question, paired by order
+            (repeatable)
+        when
+            the trigger that makes each --question due; one per --question,
+            paired by order (repeatable)
+        operator_directive
+            add an operator-preference directive (how the user wants to be
+            worked with); pair each with an --operator-quote (repeatable)
+        operator_quote
+            the user's own words for each --operator-directive (repeatable)
         orientation
             the orientation; its first line is the record title
         next
@@ -246,11 +289,13 @@ def build_app(stdin: TextIO) -> fromargs.App:
             the edge kind for each --link (repeatable)
         covers
             entry ids the pinnable --link covers (repeatable)
+        base
+            the revision id you read (from resolve or show); required when the
+            record exists, so a write never lands on state you did not read
         """
         flags = IntentFlags(
             work_id=work_id,
             question=question or (),
-            blocker=blocker or (),
             gates=gates,
             decision=decision or (),
             rationale=rationale or (),
@@ -258,6 +303,12 @@ def build_app(stdin: TextIO) -> fromargs.App:
             quote=quote or (),
             resolve=resolve or (),
             withdraw=withdraw or (),
+            supersede=supersede or (),
+            by=by or (),
+            owner=owner or (),
+            when=when or (),
+            operator_directive=operator_directive or (),
+            operator_quote=operator_quote or (),
             orientation=orientation,
             next=next,
             artifact=artifact,
@@ -266,6 +317,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
             link=link or (),
             kind=kind or (),
             covers=covers or (),
+            base=base,
         )
         return _ok("validate", queries_mod.run_validate(intent, stdin, flags))
 
@@ -287,7 +339,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         project: str | None = None,
         workspace_root: str | None = None,
     ) -> dict[str, object]:
-        """Resolve a slug, work id, or path to the current record.
+        """Resolve a slug (exact, unique prefix, or unique substring), work id, or path to the current record.
 
         Parameters
         ----------
@@ -325,20 +377,10 @@ def build_app(stdin: TextIO) -> fromargs.App:
         """
         return _ok("show", queries_mod.run_show(work_id, project=project))
 
-    def lint(path: str) -> dict[str, object]:
-        """Lint a generated projection against the record.
-
-        Parameters
-        ----------
-        path
-            path to a rendered projection document
-        """
-        return _ok("lint", queries_mod.run_lint(path))
-
     def list_(
         *,
         corpus_root: str | None = None,
-        scope: Literal["project", "machine"] = "project",
+        scope: Literal["project", "machine"] | None = None,
         project: list[str] | None = None,
         root: list[str] | None = None,
         grep: list[str] | None = None,
@@ -354,15 +396,18 @@ def build_app(stdin: TextIO) -> fromargs.App:
         edge_kind: list[str] | None = None,
         linked_to: list[str] | None = None,
         forked_from: list[str] | None = None,
+        owner: list[str] | None = None,
     ) -> dict[str, object]:
-        """List and search work items and notes across worktrees.
+        """List and search work items and notes across worktrees; outside a Git checkout the default scope falls back to machine.
 
         Parameters
         ----------
         corpus_root
             the per-project corpus root (default: the project's own corpus)
         scope
-            this project's worktrees (default), or the whole machine
+            this project's worktrees (default; outside a Git checkout the
+            default falls back to the whole machine and reports
+            scope-fallback: machine), or the whole machine
         project
             limit hits to this project key (repeatable; implies --scope machine)
         root
@@ -394,6 +439,9 @@ def build_app(stdin: TextIO) -> fromargs.App:
             keep records whose edges or links name this ref (repeatable)
         forked_from
             keep records forked from this parent work id (repeatable)
+        owner
+            keep records with an active question owned by this person
+            (repeatable; case-insensitive; matches any)
         """
         return _ok(
             "list",
@@ -415,6 +463,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
                 edge_kind=edge_kind,
                 linked_to=linked_to,
                 forked_from=forked_from,
+                owner=owner,
             ),
         )
 
@@ -458,9 +507,6 @@ def build_app(stdin: TextIO) -> fromargs.App:
         child: str,
         *,
         orientation: str,
-        move: list[str] | None = None,
-        copy: list[str] | None = None,
-        dossier: list[str] | None = None,
         link: list[str] | None = None,
         context: list[str] | None = None,
         notes_file: str | None = None,
@@ -478,14 +524,6 @@ def build_app(stdin: TextIO) -> fromargs.App:
             the new child work id
         orientation
             the child orientation; its first line is the child title
-        move
-            a parent entry id the child takes over (repeatable; default:
-            active questions and blockers)
-        copy
-            a parent entry id the child copies (repeatable; default: active
-            decisions and directives)
-        dossier
-            a parent decision-dossier fork title the child takes (repeatable)
         link
             a parent artifact-link ref the child takes (repeatable)
         context
@@ -502,13 +540,10 @@ def build_app(stdin: TextIO) -> fromargs.App:
         """
         return _ok(
             "fork",
-            graph_mod.run_fork(
+            fork_mod.run_fork(
                 parent,
                 child,
                 orientation=orientation,
-                move=move or (),
-                copy=copy or (),
-                dossier=dossier or (),
                 links=link or (),
                 context=context or (),
                 notes_file=notes_file,
@@ -517,109 +552,72 @@ def build_app(stdin: TextIO) -> fromargs.App:
                 project=project,
             ),
         )
-
-    def link(
-        work_id: str,
+    def export(
         ref: str,
         *,
-        kind: str,
-        covers: list[str] | None = None,
-        rationale: str | None = None,
+        out: str | None = None,
+        include_operator: bool = False,
+        include_local: bool = False,
+        workspace_root: str | None = None,
     ) -> dict[str, object]:
-        """Add one typed edge from a record to a work item or document.
+        """Write one canonical JSON bundle of a record, for another person to import.
 
         Parameters
         ----------
-        work_id
-            the work id that holds the edge
         ref
-            the typed target ref, e.g. wheypoint:acme-app/wg-1
-        kind
-            the edge kind, e.g. relates_to, informs, or checkpoints
-        covers
-            an entry id the pinned link covers (repeatable)
-        rationale
-            why the edge exists
+            a slug, work id, or projection path
+        out
+            write the bundle to this file (default: print it in the reply)
+        include_operator
+            keep operator-preference directives (omitted by default)
+        include_local
+            keep references that need this machine (omitted by default)
+        workspace_root
+            the Git checkout that owns the record's paths (default: the Git toplevel)
         """
         return _ok(
-            "link",
-            graph_mod.run_link(
-                work_id, ref, kind=kind, covers=covers or (), rationale=rationale
+            "export",
+            transfer_mod.run_export(
+                ref,
+                out=out,
+                include_operator=include_operator,
+                include_local=include_local,
+                workspace_root=workspace_root,
             ),
         )
 
-    def unlink(work_id: str, ref: str, *, kind: str) -> dict[str, object]:
-        """Remove the edge a record holds to a ref under one kind.
-
-        Parameters
-        ----------
-        work_id
-            the work id that holds the edge
-        ref
-            the edge target ref
-        kind
-            the edge kind
-        """
-        return _ok("unlink", graph_mod.run_unlink(work_id, ref, kind=kind))
-
-    def shape(
-        work_id: str | None = None,
+    def import_(
+        bundle: str,
         *,
-        scope: Literal["project", "machine"] = "project",
-        project: list[str] | None = None,
-        depth: int | None = None,
-        kind: list[str] | None = None,
+        slug: Annotated[str | None, fromargs.Parameter(name="--as")] = None,
+        note_dir: str | None = None,
+        no_note: bool = False,
+        workspace_root: str | None = None,
     ) -> dict[str, object]:
-        """Print the work graph as JSON, with a Graphviz string in dot.
+        """Verify a bundle and write it as a fork child with a forked_from edge.
 
         Parameters
         ----------
-        work_id
-            keep only the component around this work id
-        scope
-            this project's corpus (default), or every project on the machine
-        project
-            read this project key (repeatable)
-        depth
-            keep records within this many hops of work_id
-        kind
-            keep only edges of this kind (repeatable)
+        bundle
+            path to a bundle written by export
+        slug
+            the new work id (default: the bundle's work id)
+        note_dir
+            directory the readable projection is mirrored into (default:
+            <git toplevel>/.cheese/notes)
+        no_note
+            write no mirror; the import stays canonical-local
+        workspace_root
+            the Git checkout that digests artifact links (default: the Git toplevel)
         """
         return _ok(
-            "shape",
-            graph_mod.run_shape(
-                work_id,
-                scope=scope,
-                project=project or (),
-                depth=depth,
-                kind=kind or (),
-            ),
-        )
-
-    def backlinks(
-        ref: str,
-        *,
-        corpus_root: str | None = None,
-        scope: Literal["project", "machine"] = "project",
-        project: list[str] | None = None,
-    ) -> dict[str, object]:
-        """List every record whose edges or links name a ref.
-
-        Parameters
-        ----------
-        ref
-            the typed ref, e.g. wheypoint:acme-app/wg-1
-        corpus_root
-            the per-project corpus root (default: the project's own corpus)
-        scope
-            this project's worktrees (default), or the whole machine
-        project
-            limit hits to this project key (repeatable; implies --scope machine)
-        """
-        return _ok(
-            "backlinks",
-            graph_mod.run_backlinks(
-                ref, scope=scope, project=project or (), corpus_root=corpus_root
+            "import",
+            transfer_mod.run_import(
+                bundle,
+                slug=slug,
+                note_dir=note_dir,
+                no_note=no_note,
+                workspace_root=workspace_root,
             ),
         )
 
@@ -628,15 +626,12 @@ def build_app(stdin: TextIO) -> fromargs.App:
     _ = app.command(schema, name="schema")
     _ = app.command(resolve, name="resolve")
     _ = app.command(show, name="show")
-    _ = app.command(lint, name="lint")
     _ = app.command(list_, name="list")
     _ = app.command(log, name="log")
     _ = app.command(turns, name="turns")
     _ = app.command(fork, name="fork")
-    _ = app.command(link, name="link")
-    _ = app.command(unlink, name="unlink")
-    _ = app.command(shape, name="shape")
-    _ = app.command(backlinks, name="backlinks")
+    _ = app.command(export, name="export")
+    _ = app.command(import_, name="import")
     return app
 
 

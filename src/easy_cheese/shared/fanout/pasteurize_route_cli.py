@@ -32,7 +32,7 @@ def pasteurize_route(path: str | None = None) -> int:
     try:
         return size_pasteurize_fanout(**payload)  # pyright: ignore[reportArgumentType]
     except (TypeError, ValueError) as exc:
-        raise fromargs.CliError(str(exc), exit_code=1) from exc
+        raise fromargs.CliError(str(exc), exit_code=4) from exc
 
 
 def build_app() -> fromargs.App:

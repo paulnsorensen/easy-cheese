@@ -1,5 +1,7 @@
 # ADR: Curdle overrides save work without granting execution
 
+> Superseded in part by PR #774. The typed handoff and `cook prepare` are gone. The hold rule remains: Cook refuses a `--spec` run with `execution_holds` or a do-not-implement directive. See [workflow-invariants](../workflow-invariants.md).
+
 Status: implemented for the repository boundary; external runner integration and live evidence remain (2026-09-18).
 
 The curdle anyway behavior saves a non-ready design. It never waives required execution-readiness checks.

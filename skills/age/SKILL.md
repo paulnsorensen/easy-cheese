@@ -1,10 +1,10 @@
 ---
 name: age
 description: >-
-  Review a diff, PR, branch, or path across twelve dimensions. Emit a severity-grouped findings report.
+  Review a diff, PR, branch, or path across thirteen dimensions. Emit a severity-grouped findings report.
   Use when the user wants a code review. Trigger on "review this", "/age", "is this safe to merge", or "find bugs".
   Also trigger on "spot security issues", "check for slop", "review my PR", or "what's wrong with this code".
-  Review every requested dimension. Review all twelve dimensions by default.
+  Review every requested dimension. Review all thirteen dimensions by default.
   Do not apply fixes. Route them to /cure.
   Do not harden tests; route that work to /press.
 license: MIT
@@ -13,7 +13,7 @@ metadata: {dispatches-agents: true}
 
 # /age
 
-Review a diff or scoped path before merging or after `/press`. Use this skill whenever the user wants evidence-backed observations rather than an approval verdict. Do not apply fixes in this skill. Let `/cure` apply them.
+Review a diff or scoped path before merging or after `/press`. Use this skill whenever the user wants evidence-backed observations rather than an approval verdict.
 
 ## Phase entry
 
@@ -22,6 +22,7 @@ Run `python3 skills/age/scripts/age.pyz wheypoint-resolve --ref <slug>`.
 `not-found` proceeds cold; `legacy` shows its source and slug, then proceeds.
 `gated`, `ambiguous`, and `error` stop and show the payload.
 Show advisory `stale-commit` and `grounded-path-missing` findings.
+Keep its `record.revision_id` as `<base>` ([§ Base revision](../cheese/references/handback-contract.md#base-revision)).
 
 ## Inputs
 
@@ -73,8 +74,8 @@ The output is offline and uses no CDN or JS.
 Read [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md) for helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions.
 Prefer the bundled or repo-local helper.
 Treat `${CLAUDE_SKILL_DIR}` as an optional host-provided fallback.
+Slash commands are host renderings, not the control model.
 The handoff blocks below define the portable contract.
-Remember: slash commands are host renderings, not the control model.
 
 ## Review effort and scope
 
@@ -84,12 +85,14 @@ Use `--overall` for full subject fan-out across the review target.
 
 ## Review dimensions
 
-Review correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, telemetry, conventions, and altitude.
+Review correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, telemetry, conventions, altitude, and reframe.
 Assign one `blocker`, `high`, `medium`, or `low` severity to each finding.
 Use `references/dimensions.md` for severity rules and recommendation shapes.
 This workflow omits the git-history/precedent dimension.
 
 ## Flow
+
+![The /age review flow](assets/review-flow.svg)
 
 1. Identify the diff, scope, and relevant specification or issue.
    Read `references/fan-out.md` for the context checklist and deterministic planning contract.
@@ -133,7 +136,7 @@ If `.cheese/glossary/<slug>.md` exists, read it to flag naming drift as a deslop
    Set `<next>` to `done` when that set is empty.
    Set `<artifact>` to the upstream report path from step 2. Use `""` only when no upstream report exists.
    Set `<baseline>` to the baseline block from that upstream handoff. Omit `--baseline` only when the upstream handoff has none.
-   Run `python3 skills/age/scripts/age.pyz write-handoff-artifact --phase age --slug <slug> --status ok --next <next> --artifact "<artifact>" --orientation "<one-line orientation>" --durable-flags "<none | one line per flag>" --baseline "<baseline>" --grounded <path[#start-end]> --body-file ".cheese/age/<slug>-body.md"`.
+   Run `python3 skills/age/scripts/age.pyz write-handoff-artifact --phase age [--base <base>] --slug <slug> --status ok --next <next> --artifact "<artifact>" --orientation "<one-line orientation>" --durable-flags "<none | one line per flag>" --baseline "<baseline>" --grounded <path[#start-end]> --body-file ".cheese/age/<slug>-body.md"`.
 
    Print the path.
    Only a new packet for this slug permits recovery; follow `references/packet.md` § Late evidence.
@@ -173,8 +176,6 @@ Set `status: ok` when the review completes.
 Set `status: halt: <reason>` when the review cannot reach evidence.
 Follow the [handback contract](../cheese/references/handback-contract.md).
 Derive `next` from the recommended set that `## Handoff` computes.
-Set `next: cure` when that set is not empty.
-Set `next: done` when that set is empty.
 Keep every finding in the report, whatever `next` says.
 Set `durable_flags:` to `none` by default, as in cook's gate.
 When the plan or host restricts coverage, record the actual restriction in `durable_flags` and `## Confidence`, not a size-only warning.
@@ -222,8 +223,7 @@ Explain where to look and why.
 Do not edit production files.
 The step 1 review lock enforces this rule.
 `/cure` applies each fix.
-Do not raise a finding for a gate failure identical to the diff's recorded `baseline:` block.
-Flag only new/changed failures per [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
+Do not raise a finding for a gate failure that matches the recorded `baseline:` block.
 Default to acting.
 Auto-select the recommended set.
 Dispatch `/cure` without a gate.

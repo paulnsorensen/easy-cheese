@@ -647,11 +647,11 @@ def review_instructions(
             request_args, "usage: review-instructions [--text] [<request.json>]"
         )
     except (ManifestLoadError, OSError, UnicodeError, ValueError) as exc:
-        raise fromargs.CliError(str(exc), exit_code=1) from exc
+        raise fromargs.CliError(str(exc), exit_code=2) from exc
     try:
         result = _request(payload)
     except (InstructionCollectionError, OSError, TypeError, UnicodeError) as exc:
-        raise fromargs.CliError(str(exc), exit_code=1) from exc
+        raise fromargs.CliError(str(exc), exit_code=2) from exc
     if text:
         return {"text": render_text(result)}
     return result

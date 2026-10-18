@@ -30,7 +30,7 @@ def age_route(path: str | None = None) -> dict[str, object]:
     try:
         return route(**payload)  # pyright: ignore[reportArgumentType]
     except (TypeError, ValueError) as exc:
-        raise fromargs.CliError(str(exc), exit_code=1) from exc
+        raise fromargs.CliError(str(exc), exit_code=4) from exc
 
 
 def build_app() -> fromargs.App:

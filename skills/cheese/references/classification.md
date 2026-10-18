@@ -63,18 +63,19 @@ Defer to `/briesearch` even when the user did not say "research" — the router'
 
 ### rubber-duck (`/culture`)
 
-The user has explicitly requested discussion without production writes, code, or pull requests.
-This path is narrow.
+The user has explicitly requested discussion without production writes, code, or pull requests, or has asked to think through a problem before fixing it.
+A request to fix or diagnose does not enter this path.
 For all other cases, `/culture` runs silently during step 1 of `/cheese`.
 
 | Signal | Example |
 | --- | --- |
 | "no writes" / "just thinking" / "rubber duck this" / "let's just talk about X" | "let's rubber-duck whether to split this slice — don't write anything" |
 | Explicit "discuss only" framing | "I want to think about this with you before we touch code" |
+| Asks to think through a problem | "these bugs feel connected", "help me think through this problem", "I want to understand before fixing" |
 
-If the user dropped a debug or implementation signal *and* asked for discussion only, the rubber-duck signal wins — they opted out of writes. If the conversation later reveals real work, `/culture` itself recommends `/mold` or `/cook`.
+If the user dropped a debug or implementation signal *and* asked for discussion only, the rubber-duck signal wins — they opted out of writes. A request to fix or diagnose ("fix these", a stack trace, a failing test) stays on `/pasteurize`. If the conversation later reveals real work, `/culture` itself recommends `/mold` or `/cook`.
 
-`/culture` is otherwise the agent's internal-thinking skill — invoked silently by `/cheese` (and other workflow skills) to model the problem before dispatching. Never route to it as a user-facing target unless the rubber-duck signal is present.
+`/culture` is otherwise the agent's internal-thinking skill — invoked silently by `/cheese` (and other workflow skills) to model the problem before dispatching. Route to it as a user-facing target only when a rubber-duck signal is present.
 
 ### mold (`/mold`)
 

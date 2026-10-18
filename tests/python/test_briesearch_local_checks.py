@@ -1,8 +1,10 @@
-"""Prose contract for briesearch uncertainty and local-check reporting."""
+"""Contract for briesearch uncertainty and local-check reporting."""
 from __future__ import annotations
 
 import re
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REFERENCES = REPO_ROOT / "skills" / "briesearch" / "references"
@@ -58,3 +60,62 @@ def test_query_planning_stops_when_uncertainty_requires_execution() -> None:
     done_lines = [ln for ln in text.splitlines() if ln.startswith("- Done when:")]
     assert len(done_lines) == 2
     assert all("requires execution rather than more sources" in ln for ln in done_lines)
+
+
+_LOCAL_CHECK_HEADER = (
+    "| Decision affected | Evidence | Remaining uncertainty in our environment"
+    " | Smallest local check |\n|---|---|---|---|\n"
+)
+
+
+def _local_check_violations(section: str) -> list[tuple[str, str]]:
+    from easy_cheese.skills.briesearch import ground_check
+
+    report = (
+        "## Research: q\n\n### Uncertainty and local checks\n"
+        + section
+        + "\n### Confidence\n`speculating` — one source.\n"
+    )
+    violations, _ = ground_check.check_report(report)
+    return [(v.level, v.kind) for v in violations if v.kind == "LOCAL_CHECK"]
+
+
+@pytest.mark.parametrize(
+    "section",
+    [
+        "none\n",
+        "`none`\n",
+        _LOCAL_CHECK_HEADER
+        + "| Pick the retry knob | docs say 3 retries | our proxy may cap it"
+        + " | `pytest tests/test_retry.py -k proxy` |\n",
+    ],
+)
+def test_ground_check_accepts_none_or_a_complete_local_check_table(section: str) -> None:
+    assert _local_check_violations(section) == []
+
+
+@pytest.mark.parametrize(
+    "section",
+    [
+        _LOCAL_CHECK_HEADER + "| Pick the retry knob | docs say 3 | proxy may cap it |  |\n",
+        "| Decision | Evidence |\n|---|---|\n| a | b |\n",
+        "we should probably check this later\n",
+    ],
+    ids=["empty-local-check", "wrong-columns", "prose-only"],
+)
+def test_ground_check_rejects_an_uncertainty_without_a_local_check(section: str) -> None:
+    assert _local_check_violations(section) == [("error", "LOCAL_CHECK")]
+
+
+def test_ground_check_ignores_a_report_without_the_section() -> None:
+    from easy_cheese.skills.briesearch import ground_check
+
+    violations, _ = ground_check.check_report("## Research: q\n\n### Finding\nA.\n")
+    assert all(v.kind != "LOCAL_CHECK" for v in violations)
+
+
+def test_long_form_and_skill_output_carry_the_local_checks() -> None:
+    synthesis = _read("synthesis.md")
+    skill = (REFERENCES.parent / "SKILL.md").read_text(encoding="utf-8")
+    assert "the `### Uncertainty and local checks` section, and the verification log" in synthesis
+    assert "the local checks for any remaining uncertainty" in skill

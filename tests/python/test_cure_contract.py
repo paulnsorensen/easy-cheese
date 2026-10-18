@@ -30,6 +30,14 @@ def _read(name: str) -> str:
     return (CURE / name).read_text(encoding="utf-8")
 
 
+@pytest.fixture(autouse=True)
+def _isolated_corpus(  # pyright: ignore[reportUnusedFunction]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "corpus"))
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "cure-contract-tests")
+
+
 @pytest.fixture(scope="module")
 def skill() -> str:
     return _read("SKILL.md")

@@ -18,12 +18,36 @@ The writer and parser require `baseline:` to fit one physical line (`src/easy_ch
 
 `src/easy_cheese/shared/write_handoff_artifact.py:106-109,164-197` writes preamble plus `--body-file` content and discards any existing file. A skill that writes its report first and then calls the writer without `--body-file` deletes its own `Applied`, `Checks`, or `Re-review` sections. Write the body to a temp file and pass `--body-file` in one step.
 
-## The phase registry gates the writer
+## The route table gates the writer
 
-`write_handoff_artifact` validates `phase -> next` against `src/easy_cheese_schemas/_compiled_phase_registry.py` and exits `3` for an undeclared transition. Two consequences:
+`write_handoff_artifact` calls `validate_route` from `src/easy_cheese/shared/phase_routes.py` before it writes.
+`validate_route` checks `phase -> next` against the private `_ROUTES` table.
+The table holds seven routes from five source phases: `age`, `cook`, `cure`, `mold`, and `press`.
+The writer exits `3` for an unknown source phase or an undeclared destination.
+It also exits `3` when a payload schema does not match the route, or when a transition to `done` carries a payload schema.
+Two consequences follow:
 
-- Affinage and Pasteurize are not registered phases. They cannot use the canonical writer until a `schemas`-owned registration and a `phase-contract.yaml` land; their handoffs stay ad hoc Markdown and must still follow the key rules above.
-- A same-phase loop is not expressible. `press -> press` exits `3`. Cook no longer declares `cook -> press`: Cook owns the Press loop and counts its rounds, and the fan orchestrator dispatches Press per curd (`src/easy_cheese/shared/fanout/run_fan.py`), per [acceptance-demonstration-press-fold-001](../adr/acceptance-demonstration-press-fold-001.md), which supersedes [outer-tdd-gates-003](../adr/outer-tdd-gates-003.md).
+- Affinage and Pasteurize are not source phases in `_ROUTES`. They cannot use the canonical writer until someone adds a route; their handoffs stay ad hoc Markdown and must still follow the key rules above.
+- A same-phase loop is not expressible. `press -> press` exits `3`. The table declares no `cook -> press` route: Cook owns the Press loop and counts its rounds, and the fan orchestrator dispatches Press per curd (`src/easy_cheese/shared/fanout/run_fan.py`). `press -> cook` carries a Press finding or `coverage_gap` back to Cook, per [acceptance-demonstration-press-fold-001](../adr/acceptance-demonstration-press-fold-001.md), which supersedes [outer-tdd-gates-003](../adr/outer-tdd-gates-003.md).
+
+The table replaced a build-compiled registry and the per-skill `phase-contract.yaml` declarations (PR #772).
+The repository no longer publishes the `phase-contract` schema root.
+
+## Phase writes name their read revision
+
+Since PR #776, a write to an existing Wheypoint record must pass `--base <revision_id>`, taken from the read before it.
+A missing base returns `base-revision-required`, and a stale base returns `stale-parent`.
+The writer writes nothing in either case.
+A genesis and a fork child need no base.
+`write-handoff-artifact --base` follows the same rule, and the earlier silent stale-parent retry is gone.
+One exception keeps a lost-response retry safe: the writer replays an identical phase write that names its original base.
+The replay exits `0`, prints the original revision with `replayed=true`, and writes nothing.
+The check runs under the record lock in `_replay_landed_write` (`src/easy_cheese/shared/wheypoint/phase_commit.py`).
+The kernel must hold a receipt for the same request against that base.
+The record must pin the artifact to that receipt with the same digest, and the file must hold those bytes.
+A lost genesis response cannot replay, because a genesis write names no base.
+Phase skills keep the revision from the phase-entry `resolve` as the base.
+The prose contract lives in the "Base revision" section of `skills/cheese/references/handback-contract.md`.
 
 ## Findings and slug helpers
 

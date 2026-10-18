@@ -10,14 +10,14 @@ from typing import cast
 import pytest
 from easy_cheese_schemas import (
     ArtifactLink,
-    IngressKind,
     WheypointDelta,
     WheypointRecord,
 )
 
-from easy_cheese.shared.wheypoint import canonical, commit, lint, records, refs, storage
+from easy_cheese.shared.wheypoint import canonical, commit, records, refs, storage
 
 from conftest import WORK_ID, Promotion, run_cli
+from work_check import check_work
 
 PROJECT = "paulnsorensen-easy-cheese"
 CAPTURED_AT = "2026-08-02T00:00:00Z"
@@ -343,10 +343,10 @@ def test_ac1_remove_artifact_links_accepts_a_path_or_a_ref(
     assert result.record.artifact_links == []
 
 
-# AC-2: a schema-3 record exposes path-only links as repo: refs, with receipts.
+# AC-2: a schema-3 record exposes path-only links as repo: refs.
 
 
-def test_ac2_v3_path_only_links_read_as_repo_refs_with_one_receipt_each(
+def test_ac2_v3_path_only_links_read_as_repo_refs(
     store: storage.WorkStore,
     make_promotion: Callable[..., Promotion],
     make_record: Callable[..., WheypointRecord],
@@ -363,30 +363,19 @@ def test_ac2_v3_path_only_links_read_as_repo_refs_with_one_receipt_each(
     record = store.read_record()
     assert record is not None
     digest_before = records.record_digest(record)
+    bytes_before = store.record_path.read_bytes()
 
-    links, receipts = records.normalize_links(record)
+    refs = [records.effective_ref(link) for link in record.artifact_links]
 
-    assert [link.ref for link in links] == ["repo:.cheese/cook/a.md", "repo:docs/b.md"]
-    assert [link.path for link in links] == [".cheese/cook/a.md", "docs/b.md"]
-    assert len(receipts) == 2
-    for stored, normalized, receipt in zip(stored_links, links, receipts, strict=True):
-        assert receipt.ingress_kind is IngressKind.LEGACY_ARTIFACT
-        assert receipt.normalizer_id == "wheypoint.refs.v3-path-to-ref"
-        assert receipt.source_digest == canonical.digest_bytes(
-            records.canonical_payload(stored)
-        )
-        assert receipt.canonical_digest == canonical.digest_bytes(
-            records.canonical_payload(normalized)
-        )
-        assert receipt.source_version is not None
-        assert receipt.source_version.major == "3"
+    assert refs == ["repo:.cheese/cook/a.md", "repo:docs/b.md"]
     # Read-side only: the stored record and its digest are unchanged.
     assert record.artifact_links == stored_links
     assert records.record_digest(record) == digest_before
+    assert store.record_path.read_bytes() == bytes_before
     assert digest_before == seed.revision.record_digest
 
 
-def test_ac2_lint_of_a_v3_record_reports_receipts_and_no_failure(
+def test_ac2_check_of_a_v3_record_has_no_failure(
     store: storage.WorkStore,
     make_promotion: Callable[..., Promotion],
     make_record: Callable[..., WheypointRecord],
@@ -400,28 +389,17 @@ def test_ac2_lint_of_a_v3_record_reports_receipts_and_no_failure(
         ),
     )
 
-    report = lint.lint_work(
-        store,
-        project_key=PROJECT,
-        git_object_exists=lambda _obj: True,
-        artifact_digest=lambda _ref: None,
-    )
-
-    assert report.findings == ()
-    assert len(report.normalizations) == 2
+    assert check_work(store, project_key=PROJECT).findings == ()
 
 
-def test_ac2_a_link_that_carries_a_ref_needs_no_receipt(
+def test_ac2_a_link_that_carries_a_ref_stays_unchanged(
     make_record: Callable[..., WheypointRecord],
 ) -> None:
     record = make_record(
         artifact_links=[ArtifactLink(path="a.md", ref="repo:a.md")],
     )
 
-    links, receipts = records.normalize_links(record)
-
-    assert links == tuple(record.artifact_links)
-    assert receipts == ()
+    assert records.effective_ref(record.artifact_links[0]) == "repo:a.md"
     assert records.effective_ref(ArtifactLink(path="x", ref="https://e.dev")) == (
         "https://e.dev"
     )
@@ -491,7 +469,7 @@ def test_ac3_checkpoint_reply_names_unpinnable_scheme(
         ["checkpoint"], stdin=_first_intent(artifact_links=[link])
     )
 
-    assert status == 1
+    assert status == 2
     error = cast(dict[str, str], payload["error"])
     assert "unpinnable-scheme: " in error["text"]
     assert not (corpus_root / "work" / WORK_ID / storage.RECORD_FILENAME).exists()
@@ -519,3 +497,45 @@ def test_ac3_coverage_on_an_unpinnable_ref_fails_the_claim(
     )
 
     assert [failure.reason for failure in report.failures] == ["unpinnable-scheme"]
+
+
+def test_locator_path_strips_line_pin_and_symbol_locators() -> None:
+    from easy_cheese.shared.wheypoint import ref_grammar
+
+    assert ref_grammar.locator_path("src/a.py:12") == "src/a.py"
+    assert ref_grammar.locator_path("src/a.py:12-20@abc1234") == "src/a.py"
+    assert ref_grammar.locator_path("src/a.py#main") == "src/a.py"
+    assert ref_grammar.locator_path("src/a.py") == "src/a.py"
+
+
+def test_local_reference_grammar_matches_only_bare_line_refs() -> None:
+    from easy_cheese.shared.wheypoint import ref_grammar
+
+    def found(text: str) -> list[str]:
+        return [m.group(0) for m in ref_grammar.LINE_REF_RE.finditer(text)]
+
+    assert found("a src/a.py:12, b.md:3-4.") == ["src/a.py:12", "b.md:3-4"]
+    assert found("src/a.py:12@abc1234 src/a.py#sym https://h/x.py:9") == []
+
+
+def test_a_line_or_symbol_locator_digests_the_whole_file(
+    checkout: Path, corpus_root: Path
+) -> None:
+    _ = (checkout / "a.py").write_text("x = 1\n", encoding="utf-8")
+    whole = refs.digest_ref("repo:a.py", checkout=checkout, corpus_home=corpus_root)
+
+    assert whole is not None
+    for ref in ("repo:a.py:3", "repo:a.py:3-9@abc1234", "repo:a.py#main"):
+        assert refs.digest_ref(ref, checkout=checkout, corpus_home=corpus_root) == whole
+
+
+def test_a_file_whose_name_holds_a_locator_shape_digests_that_file(
+    checkout: Path, corpus_root: Path
+) -> None:
+    _ = (checkout / "a#1.md").write_text("literal\n", encoding="utf-8")
+    _ = (checkout / "a.md").write_text("plain\n", encoding="utf-8")
+
+    literal = refs.digest_ref("repo:a#1.md", checkout=checkout, corpus_home=corpus_root)
+    plain = refs.digest_ref("repo:a.md", checkout=checkout, corpus_home=corpus_root)
+
+    assert literal is not None and literal != plain

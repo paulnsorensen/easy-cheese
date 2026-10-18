@@ -203,8 +203,8 @@ def test_mold_handoff_waits_for_user_selection_and_reconciliation() -> None:
         "Write the validated draft",
         "publish follow-ups only after their own approval",
         "after reconciliation",
-        "If the user selects Cook",
-        "Dispatch only a ready pointer",
+        "If the user selects bound curd execution",
+        "pass only ready direct inputs",
     )
 
     handoff = _section(MOLD, "Handoff")
@@ -212,7 +212,7 @@ def test_mold_handoff_waits_for_user_selection_and_reconciliation() -> None:
         handoff,
         "A draft offers no Cook command",
         "explicit Cook selection",
-        "consumer-valid canonical `HandoffPointer`",
+        "Bound curd work dispatches the printed finalize command",
     )
 
     followups = _section(HANDSHAKE, "Follow-up disposition (inside the non-goals audit)")
@@ -242,7 +242,7 @@ def test_mold_saves_draft_before_cook_consent_and_persists_typed_plan() -> None:
         "save a validated parent spec or early curd mini-spec",
         "Never start Cook from a saved spec",
         "user must select the exact curd",
-        "An explicit Cook selection plus `finalize` is enough",
+        "A failed bound finalization leaves a saved draft",
     )
 
     procedure = _section(CURDLE, "Typed planner dispatch")
@@ -266,7 +266,7 @@ def test_early_curd_route_selection_stays_separate_from_scope_approval() -> None
         "For **Cook in another worktree**",
     )
     assert "the selection covers the scope or plan, not the dispatch route" in selection.casefold()
-    assert "without starting local Cook or publishing a local execution pointer" in selection
+    assert "without starting local Cook or publishing local execution refs" in selection
 
 
 def test_mold_never_hardcodes_transient_spec_paths() -> None:

@@ -67,7 +67,7 @@ from typing import Annotated, Literal, TypedDict
 
 import fromargs
 
-from easy_cheese_schemas.phase_contracts import (
+from easy_cheese_schemas.handback_status import (
     RETRY,
     STOP,
     HandbackStatus,

@@ -6,7 +6,7 @@ Read this when `/mold` uses agent-invoked mini-spec mode. This mode is the tier-
    Check the leverage triggers in `../../cheese/references/routing-policy.md` first. A mini-spec always carries `leverage: []`. When any trigger fires, refuse the mint, name the trigger ids, and return the ask to `/cheese` for `/mold`'s user mode.
    2. **Write the resolver-owned `<spec-path>`** with the mini-spec schema below. Resolve it: run `python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>` and read `path` from its JSON reply. Never hardcode a repo-local spec path: the resolver anchors it at the durable corpus, matching the Curdle step.
 2. **Validate the minted spec** with `python3 skills/mold/scripts/mold.pyz validate-spec --strict <spec-path>`. Stop on a nonzero exit; no malformed or legacy-compatible artifact advances to Cook.
-3. **Return the resolved spec path** to `/cheese`. A saved draft is not a Cook command. After the spec validates, show it and ask one direct Cook question through [`../../cheese/references/ask-user-question.md`](../../cheese/references/ask-user-question.md). When the user selects Cook, finalize and return only a ready pointer. Otherwise offer Cook or keep shaping without dispatch.
+3. **Return the resolved spec path** to `/cheese`. A saved draft is not a Cook command. After the spec validates, show it and ask one direct Cook question through [`../../cheese/references/ask-user-question.md`](../../cheese/references/ask-user-question.md). When the user selects Cook, pass the spec path to standalone Cook. Do not require a pointer or planner for a clear mini-spec. Otherwise keep shaping without dispatch.
 4. **Append `--hard`** to a selected Cook command when the user passed the flag. Plate alone runs the gate.
 
 The full coherence checklist does not fire in this mode. Saving the mini-spec needs no user approval; Cook still needs the user's request. The agent-introduced-scope check still runs implicitly. Every distinguishing noun in the mini-spec must come from the user's input or the tier-2 `/culture` or `/briesearch` synthesis. Record that synthesis in `## Provenance`. Never add any other noun. The mini-spec records only the user's request. It never records the agent's interpretation.
@@ -53,7 +53,7 @@ Add exactly one row for each probe. Record the real outcome. Never invent a row.
 - AC-2: <verifiable check 2>
 
 ## Acceptance demonstration
-Required. Behavior work fills all seven rows, each non-empty. Non-behavior work writes one line instead: `n/a: <reason>`.
+Optional on a Quick-tier mini-spec (`source: agent-mini-spec`); include it when a realistic end-to-end check is not obvious from `## Acceptance`. Required on an early curd (`source: mold-curd-mini-spec`). When present, `validate-spec --strict` checks it: behavior work fills all seven rows, each non-empty, and non-behavior work writes one line instead: `n/a: <reason>`.
 Include one plausible false success and how the check rejects it. Keep rows independent of the implementation.
 
 | Field | Value |

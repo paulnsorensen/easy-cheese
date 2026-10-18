@@ -17,6 +17,8 @@ contract is the four-line preamble plus `.cheese/<source>/<slug>.md`.
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -41,6 +43,11 @@ def _run(script: Path, *args: str, cwd: Path) -> subprocess.CompletedProcess[str
         capture_output=True,
         text=True,
         cwd=str(cwd),
+        env={
+            **os.environ,
+            "EASY_CHEESE_HOME": str(cwd / "corpus"),
+            "EASY_CHEESE_PROJECT": "roundtrip-tests",
+        },
     )
 
 
@@ -78,7 +85,7 @@ class TestSlugifyToWriterRoundTrip:
             "--phase",
             "cook",
             "--next",
-            "age",
+            "press",
             "--artifact",
             "",
             "--orientation",
@@ -132,9 +139,7 @@ class TestWriterToReaderRoundTrip:
         )
         assert write_proc.returncode == 0, write_proc.stderr
 
-        read_proc = _run(
-            READER, "--phase", phase, "--slug", slug, cwd=tmp_path
-        )
+        read_proc = _run(READER, "--phase", phase, "--slug", slug, cwd=tmp_path)
         assert read_proc.returncode == 0, read_proc.stderr
         return cast("dict[str, object]", json.loads(read_proc.stdout))
 
@@ -144,13 +149,13 @@ class TestWriterToReaderRoundTrip:
             slug="cook-to-press",
             status="ok",
             phase="cook",
-            next_phase="age",
+            next_phase="press",
             artifact=".cheese/cook/cook-to-press.md",
             orientation="implemented widget",
         )
         assert payload == {
             "status": "ok",
-            "next": "age",
+            "next": "press",
             "artifact": ".cheese/cook/cook-to-press.md",
             "orientation": "implemented widget",
             "reason": None,
@@ -189,7 +194,7 @@ class TestWriterToReaderRoundTrip:
             slug="chain-head",
             status="ok",
             phase="cook",
-            next_phase="age",
+            next_phase="press",
             artifact="",
             orientation="first phase in the chain",
         )
@@ -198,7 +203,9 @@ class TestWriterToReaderRoundTrip:
     def test_orientation_with_punctuation_survives(self, tmp_path: Path) -> None:
         # Real orientation lines have colons, parens, slashes — none of
         # which should confuse the four-line parser.
-        orientation = "added 4 boundary tests (off-by-one, eof, empty, max); no defects exposed"
+        orientation = (
+            "added 4 boundary tests (off-by-one, eof, empty, max); no defects exposed"
+        )
         payload = self._write_and_read(
             tmp_path,
             slug="punct-orientation",
@@ -239,7 +246,7 @@ class TestThreeScriptChain:
             "--phase",
             "cook",
             "--next",
-            "age",
+            "press",
             "--artifact",
             "",
             "--orientation",
@@ -251,7 +258,7 @@ class TestThreeScriptChain:
         assert read_proc.returncode == 0, read_proc.stderr
         payload = cast("dict[str, object]", json.loads(read_proc.stdout))
         # The slug-derived artifact lives on disk and parses back cleanly.
-        assert payload["next"] == "age"
+        assert payload["next"] == "press"
         assert payload["orientation"] == "cook step complete"
         assert payload["status"] == "ok"
 
@@ -262,7 +269,12 @@ class TestThreeScriptChain:
         # next phase's read must fail loudly — not silently return an empty
         # payload that downstream skills would treat as a successful chain.
         slug_proc = _run(
-            SLUGIFY, "from-task", "--task", "Missing artifact path", "--json", cwd=tmp_path
+            SLUGIFY,
+            "from-task",
+            "--task",
+            "Missing artifact path",
+            "--json",
+            cwd=tmp_path,
         )
         slug = cast(str, json.loads(slug_proc.stdout)["slug"])
 
@@ -284,15 +296,23 @@ class TestThreeScriptChain:
         # 1. Cook writes its handoff to .cheese/cook/<slug>.md.
         cook_proc = _run(
             WRITER,
-            "--slug", slug,
-            "--status", "ok",
-            "--phase", "cook",
-            "--next", "age",
-            "--artifact", "",
-            "--orientation", "cook implemented widget",
+            "--slug",
+            slug,
+            "--status",
+            "ok",
+            "--phase",
+            "cook",
+            "--next",
+            "press",
+            "--artifact",
+            "",
+            "--orientation",
+            "cook implemented widget",
             cwd=tmp_path,
         )
         assert cook_proc.returncode == 0, cook_proc.stderr
+        cook_revision = re.search(r"revision_id=(rev-\w+)", cook_proc.stderr)
+        assert cook_revision is not None, cook_proc.stderr
         cook_path = tmp_path / ".cheese" / "cook" / f"{slug}.md"
         assert cook_path.exists(), f"cook artifact missing at {cook_path}"
 
@@ -300,7 +320,7 @@ class TestThreeScriptChain:
         press_read = _run(READER, "--phase", "cook", "--slug", slug, cwd=tmp_path)
         assert press_read.returncode == 0, press_read.stderr
         cook_payload = cast("dict[str, object]", json.loads(press_read.stdout))
-        assert cook_payload["next"] == "age"
+        assert cook_payload["next"] == "press"
         assert cook_payload["orientation"] == "cook implemented widget"
 
         # 3. Press writes its own handoff to .cheese/press/<slug>.md while the
@@ -308,12 +328,20 @@ class TestThreeScriptChain:
         #    land in .cheese/age/<slug>.md (the H1 defect).
         press_proc = _run(
             WRITER,
-            "--slug", slug,
-            "--status", "ok",
-            "--phase", "press",
-            "--next", "age",
-            "--artifact", str(cook_path.relative_to(tmp_path)),
-            "--orientation", "press hardened 4 boundary tests",
+            "--slug",
+            slug,
+            "--status",
+            "ok",
+            "--phase",
+            "press",
+            "--next",
+            "age",
+            "--artifact",
+            str(cook_path.relative_to(tmp_path)),
+            "--orientation",
+            "press hardened 4 boundary tests",
+            "--base",
+            cook_revision.group(1),
             cwd=tmp_path,
         )
         assert press_proc.returncode == 0, press_proc.stderr

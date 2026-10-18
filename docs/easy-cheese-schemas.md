@@ -29,22 +29,16 @@ The schema package does not provide compatibility re-exports.
 Runtime callback records and exceptions stay with their runtime module.
 Persisted semantic contracts stay in schemas.
 
-## Mold-to-Cook boundary contracts
+## Mold-to-Cook boundary values
 
-The phase-specific boundary uses three versioned schemas:
-
-| Schema URI | Model | Authority |
-| --- | --- | --- |
-| `https://schemas.easy-cheese.dev/mold-cook-handoff` | `MoldCookHandoff` | A ready, consumer-validated handoff. Full mode binds the planner result and `CurdPlan`; Light mode names exactly one curd and carries no planner artifacts. |
-| `https://schemas.easy-cheese.dev/mold-cook-approval` | `MoldCookApproval` | Exact runner approval evidence. The proposal and response digests must match the referenced bytes; only an approved decision can authorize the runner setup. |
-| `https://schemas.easy-cheese.dev/cook-preparation-result` | `CookPreparationResult` | A closed preparation outcome. Only `ready` carries a handoff; planning, preparation, blocker, and validation outcomes carry no execution authority. |
-
-These contracts contain references rather than copied plans or evidence. The
-producer and consumer resolve and validate every reference before publication
-or execution. `CookSetupAuthorization` is limited to its named prerequisite
-curd, authorized paths, and authorized commands; setup evidence does not clear
-unrelated holds. Partial coverage preserves the acknowledged unresolved work
-until it is completed or explicitly disposed.
+Mold hands bound work to Cook through direct references, not a published
+schema. A ready finalization carries `request_id`, `spec_ref`,
+`planner_result_ref`, `plan_ref`, and exact `MoldCookCoverage`. The host
+validates every reference before any writer runs. `CookSetupAuthorization` is
+limited to its named prerequisite curd, authorized paths, and authorized
+commands; setup evidence does not clear unrelated holds. Partial coverage
+preserves the acknowledged unresolved work until it is completed or explicitly
+disposed.
 
 ## What this is, and what it is not
 

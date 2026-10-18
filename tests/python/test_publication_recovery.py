@@ -1,7 +1,7 @@
 """Unit coverage for crash-then-retry recovery in the publication gateway.
 
-:func:`publish_canonical` writes payload and receipt files at digest-addressed
-paths before revealing the pointer, so an interrupted publication leaves
+:func:`publish_canonical` writes a payload at a digest-addressed path
+before revealing the index, so an interrupted publication leaves
 intact leftovers a retry can reuse. A leftover that was tampered with between
 the crash and the retry must be rejected as :class:`CorruptLeftoverError`,
 not silently overwritten -- and the rejection must clean the tampered file so
@@ -24,7 +24,6 @@ from easy_cheese_schemas import (
     CurdResult,
     EvidenceKind,
     EvidenceRef,
-    NormalizationReceipt,
     PublishedArtifact,
     SourceCurdRef,
     SourcePlanRef,
@@ -75,13 +74,12 @@ RESULT = CurdResult(
 )
 
 
-def _prepare() -> tuple[CanonicalArtifact, NormalizationReceipt | None]:
-    validated = validate_contract(
+def _prepare() -> CanonicalArtifact:
+    return validate_contract(
         canonical_bytes(RESULT),
         CURD_RESULT_SCHEMA_URI,
         supported_version_for(CURD_RESULT_SCHEMA_URI),
     )
-    return validated, None
 
 
 def _publish_canonical(
@@ -123,7 +121,7 @@ def test_crash_then_retry_succeeds_with_intact_leftovers(tmp_path: Path) -> None
 
     artifact = _publish_canonical(tmp_path, operation_id="op-crash")
     assert pointer_path.exists()
-    assert artifact.pointer.operation_id == "op-crash"
+    assert artifact.pointer_path == pointer_path
     assert payload_paths[0].read_bytes() == leftover_bytes
 
 
@@ -146,14 +144,14 @@ def test_crash_tamper_retry_raises_corrupt_leftover_and_cleans(tmp_path: Path) -
 
     artifact = _publish_canonical(tmp_path, operation_id="op-tamper")
     assert (tmp_path / "pointers" / "op-tamper.json").exists()
-    assert artifact.pointer.operation_id == "op-tamper"
+    assert artifact.pointer_path == tmp_path / "pointers" / "op-tamper.json"
     assert tampered_path.exists()
 
 
 def test_corrupt_repair_keeps_a_concurrent_valid_replacement(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    validated, _ = _prepare()
+    validated = _prepare()
     digest = canonical_digest(validated.value)
     payload_path = tmp_path / "payloads" / f"{digest.replace(':', '-')}.json"
     payload_path.parent.mkdir()
@@ -180,7 +178,7 @@ def test_corrupt_repair_keeps_a_concurrent_valid_replacement(
 def test_corrupt_repair_restores_a_valid_post_read_replacement(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    validated, _ = _prepare()
+    validated = _prepare()
     digest = canonical_digest(validated.value)
     payload_path = tmp_path / "payloads" / f"{digest.replace(':', '-')}.json"
     payload_path.parent.mkdir()

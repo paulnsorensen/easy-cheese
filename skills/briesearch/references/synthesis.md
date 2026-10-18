@@ -121,8 +121,22 @@ Short form (always returned to the caller):
 [^source-2]: <absolute URL or `.cheese/...` path> (fetched <YYYY-MM-DD>).
 ```
 
+### Library docs brief
+
+A run that uses the library docs brief method in `routing.md` adds one `### Library brief` section between `### Finding` and `### Evidence`:
+
+```markdown
+### Library brief
+- **Target and freshness:** <library id, docs version found, release marker and its date>
+- **What it offers:** <documented APIs, commands, modules, configuration knobs, or extension points for the use case>
+- **Documented practice:** <what the official docs recommend for the use case, with citations>
+- **Planning constraints:** <documented limits, required integration steps, deprecations, and version risks>
+```
+
+Report documented practice as evidence, not as a design choice. Each decision that the plan must make goes to `### Open questions`. Cite the docs index id and each extracted official URL in `## References`.
+
 Long form (when the question warranted a deep look):
 
 - Resolve each path with `python3 skills/briesearch/scripts/briesearch.pyz research-layout <slug>`. Use a slug with four to six kebab-case words. The command prints `corpus_root`, `dir`, `report`, `raw_dir`, `manifest`, and `artifact`. Write the complete report to `report`. Write raw bodies under `raw_dir`. Give `report` to a caller that records a link in another durable document. Keep `artifact` only as the corpus-relative storage identity. Do not construct these paths manually.
-- Include the complete claim table and the verification log. Cite each raw body with a path relative to `raw_dir`, such as `raw/01-example.md#Lstart-end`. Never put URL user information, query values, or a fragment in a persisted citation.
+- Include the complete claim table, the `### Uncertainty and local checks` section, and the verification log. `ground-check` rejects a local-check row with an empty cell. Cite each raw body with a path relative to `raw_dir`, such as `raw/01-example.md#Lstart-end`. Never put URL user information, query values, or a fragment in a persisted citation.
 - Return one summary paragraph, the report path, and the confidence line in chat. Do not paste the complete report in chat.
