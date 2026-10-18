@@ -41,6 +41,8 @@ function poll(state) {
 }
 
 const tab = (page, name) => page.getByRole('button', {name, exact: true});
+// A submit fsyncs while it holds the server lock, so wait for its response, not a fixed time budget.
+const submitResponse = page => page.waitForResponse(res => res.url().endsWith('/api/submit') && res.request().method() === 'POST');
 
 test('sketch example renders ledger, placement, diagram, trail, and revisions', async ({page}) => {
   const s = await serveExample('02-sketch.json');
@@ -144,7 +146,9 @@ test('send then send & end use distinct operation ids so the second submit is no
   try {
     await page.goto(s.url);
     await page.locator('fieldset.question').getByRole('radio').first().check();
+    const sent = submitResponse(page);
     await page.getByRole('button', {name: /^send to agent/}).click();
+    expect((await sent).ok()).toBeTruthy();
     await expect(page.getByText(/Submitted/)).toBeVisible();
     const origin = new URL(s.url).origin;
     const second = await request.post(`${origin}/api/submit`, {
@@ -170,7 +174,9 @@ test('send and end submits pins and an end_session flag', async ({page}) => {
     await page.getByLabel('Note text').fill('query should return an iterator, not a list.');
     await page.getByRole('button', {name: 'queue note'}).click();
     await page.locator('fieldset.question').getByRole('radio').first().check();
+    const sent = submitResponse(page);
     await page.getByRole('button', {name: 'send & end'}).click();
+    expect((await sent).ok()).toBeTruthy();
     await expect(page.getByText(/Submitted/)).toBeVisible();
     const submitted = poll(s.state);
     expect(submitted.feedback.end_session).toBe(true);
