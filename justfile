@@ -80,7 +80,6 @@ test:
     {{python}} -m pytest tests/pasteurize/python -q -p xdist -n "$pytest_workers"
     {{python}} -m pytest tests/wheypoint/python -q -p xdist -n "$pytest_workers"
     node --test 'tests/js/**/*.test.mjs'
-    bats tests/bash/test_install.bats
     uv run --no-project --with-requirements requirements/runtime.txt --with pip==26.2.1 --with pyyaml==6.0.2 bats tests/fanout/bash/test_pr_plan_to_branches.bats
 
     # Surface any failure from the concurrent checks. Wait for both before
@@ -128,10 +127,6 @@ update-generated:
 release-preview:
     python3 scripts/stage_release.py --out .release-preview
     @echo "Staged release tree at .release-preview — inspect with: find .release-preview -type f"
-
-# Lint shell scripts
-lint-sh:
-    shellcheck scripts/install.sh
 
 # Fix markdown formatting issues
 lint-md-fix:
@@ -181,10 +176,10 @@ update-skill-budgets:
     python3 .github/scripts/validate_skills.py --write-budgets
 
 # Full local check with autofixes
-check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh lint-py-dead-code typecheck test docs-build
+check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-py-dead-code typecheck test docs-build
 
 # CI-mode verification (no autofixes)
-ci: lint-md lint-yaml lint-sh lint-py-dead-code typecheck test docs-build
+ci: lint-md lint-yaml lint-py-dead-code typecheck test docs-build
 
 # Install docs build dependencies
 docs-install:

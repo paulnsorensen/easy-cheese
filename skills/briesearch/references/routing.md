@@ -79,6 +79,19 @@ Ask one focused question that includes the version. Resolve the library only whe
 
 Do not use a documentation provider for private application logic or repository architecture. It can also omit a new behavior. Route these parts to local code, repository knowledge, release notes, or the current web.
 
+#### Library docs brief
+
+Use this method when the research grounds a plan that depends on a library. Examples are a new integration, an API surface choice, or a migration path.
+
+1. **Pin the target.** Record the library, ecosystem, version constraint, and use case. Several libraries can match one name. Treat that match as an open question when it changes the source plan.
+2. **Split the scope into topics.** Select only the topics that the decision needs: install and quickstart, API or command surface, configuration, migration and version notes, security or operational caveats, and recommended practice. Send one version-scoped docs query for each topic. Do not request the complete library in one query.
+3. **Use the docs index as the spine.** Then verify its version against an official release marker through a `web-extract` route. Release notes, a changelog, and the registry page are release markers.
+4. **Climb the official-source ladder.** Prefer the official docs site. Then use the official repository docs, the official package registry page, and a maintainer release announcement. Use community examples only when official docs are missing.
+5. **Extract selectively.** Extract only pages that can change the plan, such as quickstarts, API references, migration guides, release notes, and security notes. Skip marketing pages and sections outside the use case. Do not mirror a docs site.
+6. **Reconcile the sources.** The docs index can lag the official docs on a version, a feature, or a major-version marker. When they disagree, the official current docs win. Record both sides as a conflicting row pair. Flag each renamed API, deprecated command, version mismatch, and missing page. Separate documented guarantees from examples and conventions.
+
+Return the result in the library docs brief shape in `synthesis.md`.
+
 ### Current-web discovery and extraction
 
 Use a durable two-step pattern:
