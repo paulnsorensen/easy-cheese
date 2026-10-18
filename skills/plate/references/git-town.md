@@ -1,6 +1,7 @@
 # Git Town publication
 
-Use when `git-town` is installed and `git-town.main-branch` is configured.
+Use when `git-town` is installed and a trunk is configured: the local
+`git-town.main-branch` key or `[branches] main` in a committed `git-town.toml`.
 Lineage lives in local `git-town-branch.<name>.parent` config.
 
 ## Mandatory agent mode
@@ -23,11 +24,15 @@ publication is not authorized. Never push one stack branch directly.
 
 - Install with `brew install git-town`, `choco install git-town`, or
   `scoop install git-town`; check `git town --version`.
-- Configure with `git town config setup`, or set trunk directly using
-  `git config --local git-town.main-branch <trunk>`.
+- The `git town init` wizard (older releases name it `git town config setup`)
+  is interactive, so only a person runs it. An agent sets trunk directly with
+  `git config --local git-town.main-branch <trunk>`. A committed
+  `git-town.toml` (also `.git-town.toml` or `.git-branches.toml`) with
+  `[branches] main` shares the trunk with every clone. Git Town reads only
+  the first of those files that exists, in that order.
 - On GitHub, prefer `git-town.github-connector gh` to reuse authenticated CLI
   access; environment tokens are preferable in ephemeral systems.
-- Usability requires the executable and a non-empty `git-town.main-branch`.
+- Usability requires the executable and a non-empty trunk from either source.
   Inspect parents with `git config --get-regexp '^git-town-branch\.'`.
 - Resolve repository metadata with `git rev-parse --git-dir` when inspecting
   git-owned state; never assume a literal metadata path.
