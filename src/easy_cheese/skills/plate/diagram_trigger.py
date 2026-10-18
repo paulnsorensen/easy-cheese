@@ -24,7 +24,7 @@ SOURCE_SUFFIXES = frozenset(
         ".c", ".h", ".cc", ".cpp", ".hpp", ".ex", ".exs", ".lua", ".dart", ".sh",
     }
 )
-DOC_SUFFIXES = frozenset({".md", ".mdx", ".rst", ".txt", ".adoc"})
+DOC_SUFFIXES = frozenset({".md", ".mdx", ".rst", ".adoc"})
 # Tests, fixtures, vendored code, and built assets hold no module a flow diagram draws.
 NON_MODULE_DIRS = frozenset(
     {"test", "tests", "__tests__", "spec", "fixtures", "testdata", "snapshots",
