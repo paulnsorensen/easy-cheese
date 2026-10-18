@@ -458,6 +458,9 @@ def _partly_merged_run(
 ) -> Callable[..., subprocess.CompletedProcess[str]]:
     bases = {"feature-three": "main", "feature-four": "feature-three"}
     numbers = {13: "feature-three", 14: "feature-four"}
+    # GitHub deletes a squash-merged layer's head branch, so only the trunk and
+    # the open layers resolve. A lookup of a skipped layer fails like the real one.
+    live = {"main", *bases}
 
     def run(
         args: list[str], _cwd: Path, _timeout: float = 10
@@ -471,9 +474,13 @@ def _partly_merged_run(
             return completed(args, stdout=json.dumps(stack_view))
         if key[:3] == ("git", "rev-parse", "--verify"):
             branch = key[3].removeprefix("refs/heads/")
+            if branch not in live:
+                return completed(args, returncode=128, stderr="fatal: bad revision\n")
             return completed(args, stdout=f"sha-{branch}\n")
         if key[:5] == ("git", "ls-remote", "--exit-code", "--heads", "origin"):
             branch = key[5].removeprefix("refs/heads/")
+            if branch not in live:
+                return completed(args, returncode=2)
             return completed(args, stdout=f"sha-{branch}\trefs/heads/{branch}\n")
         if key[:3] == ("gh", "pr", "view"):
             number = int(key[3])
