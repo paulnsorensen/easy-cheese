@@ -99,8 +99,9 @@ Do not create a preflight helper.
    `execute_fan` adapts the existing writer, review, diagnosis, and acceptance-check dispatches
    into `run_fan`, which owns the progress-aware state machine.
 
-   The host passes three callbacks to `execute_fan` and `execute_accepted_handoff`.
-   `dispatch_press` runs one Press round; a behavior curd with no `dispatch_press` fails fast at start.
+   The host passes three Press-related inputs to `execute_fan` and `execute_bound_plan`.
+   `dispatch_press` runs one Press round; a host without sub-agents runs that round inline, per [`press-loop.md`](press-loop.md) § Dispatch.
+   A behavior curd with no `dispatch_press` fails fast at start, before any Cook dispatch.
    `dispatch_acceptance` runs the integrated acceptance check.
    `non_behavior_curds` names the curd ids exempt from Press.
 

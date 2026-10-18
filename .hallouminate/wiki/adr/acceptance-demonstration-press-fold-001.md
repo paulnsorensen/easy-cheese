@@ -16,4 +16,4 @@ Cook owns first acceptance coverage as a reported obligation, not a RED gate. Af
 
 ## Consequences
 
-The handoff menus offer no Press option, and Cook emits `next: age | mold | done`. The `cook -> press` registry transition and the fan `NextStep` `press` value leave. Each behavior change costs one extra fresh-context dispatch per round. Commit 0009f3fa's removal of the RED gate stays in force.
+The handoff menus offer no Press option, and Cook emits `next: age | mold | done`. The `cook -> press` route and the fan `NextStep` `press` value leave. Each behavior change costs one extra fresh-context dispatch per round. Commit 0009f3fa's removal of the RED gate stays in force.

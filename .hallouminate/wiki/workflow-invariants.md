@@ -31,7 +31,7 @@ culture → mold → cook (⇄ press) → age → cure → plate
 Skipping forward is allowed (e.g. cook → age for non-behavior work) but
 the relative order never inverts: you do not cure before age. Each phase
 hands off through a gate (below), and writes a handoff slug the next phase
-reads. The phase registry has no `cook -> press` transition; Cook hands
+reads. The route table has no `cook -> press` route; Cook hands
 behavior work to Age after its Press loop is green.
 
 The retired `/cut` phase and its `GateReceipt` RED gate no longer exist
