@@ -6,7 +6,7 @@ This document is for LLMs, agents, and automation tools working in this reposito
 
 **Always run `just check` before declaring work done — before any commit, push, PR open, or hand-off.** Treat green from `just check` as the only signal that a change is shippable.
 
-`just check` autofixes lint (markdown, yaml, python via `ruff`) and runs the full local build: skill frontmatter validation (`validate_skills.py`), shell lint, the Wedge archive build, python + bash test suites, and `mkdocs build --strict`. CI runs `just ci` (same checks, no autofixes).
+`just check` autofixes lint (markdown, yaml, python via `ruff`) and runs the full local build: skill frontmatter validation (`validate_skills.py`), the Wedge archive build, python + bash test suites, and `mkdocs build --strict`. CI runs `just ci` (same checks, no autofixes).
 
 ```bash
 just check
@@ -18,7 +18,7 @@ Do NOT commit or push when `just check` fails. If CI fails, pull the branch loca
 
 - [`just`](https://github.com/casey/just) — recipe runner
 - [`uv`](https://github.com/astral-sh/uv) — `lint-py-fix` invokes `uvx ruff` (no global ruff install needed)
-- `yamllint`, `yamlfmt`, `markdownlint-cli2`, `shellcheck`, `bats` — see README for install hints
+- `yamllint`, `yamlfmt`, `markdownlint-cli2`, `bats` — see README for install hints
 
 ## Skills in this repo
 
@@ -56,12 +56,14 @@ them while enforcement is implemented separately.
   `just wedge-build` writes them as ignored build output, and `just test`
   builds them before any suite executes one. Hand-written Python never lives
   under `skills/`; archive metadata remains in `wedge.toml`.
-- `dist` is the default branch and the published tree. The `publish dist`
-  workflow builds the archives from each `main` commit and appends one commit
-  that holds the full `main` tree plus those archives. `scripts/publish_dist.py`
-  only fast-forwards `dist` and refuses a source that does not descend from
-  the last published one. Branch from `main` and target `main`; never push to
-  or branch from `dist`.
+- `dist` is the default branch and the published tree. Each `publish dist`
+  run (push to `main`, hourly schedule, or manual dispatch) builds the archives
+  from the `main` tip and appends one commit that holds the full `main` tree
+  plus those archives. `scripts/publish_dist.py` only fast-forwards `dist`. A
+  source older than the last published one is a no-op (`superseded`). A source
+  that diverges from it is refused. A `dist` tip without a `Source-Commit`
+  trailer is published over with a warning. Branch from `main` and target
+  `main`; never push to or branch from `dist`.
 
 The durable rationale and migration boundary live in
 [the skill Python bundle doctrine](.hallouminate/wiki/architecture/skill-python-bundle-doctrine.md).

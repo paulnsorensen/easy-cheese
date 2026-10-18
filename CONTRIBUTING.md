@@ -23,7 +23,7 @@ Install these prerequisites before you run the checks:
 ```sh
 git clone https://github.com/paulnsorensen/easy-cheese.git
 cd easy-cheese
-brew install just uv bats-core shellcheck yamllint yamlfmt markdownlint-cli2 node rust
+brew install just uv bats-core yamllint yamlfmt markdownlint-cli2 node rust
 corepack enable
 just check
 ```
