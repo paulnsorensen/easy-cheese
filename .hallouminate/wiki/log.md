@@ -107,3 +107,5 @@
 
 - 2026-10-15 · 5d06dbb1e665716c · merged · adr/culture-wheypoint-collaboration-001.md · Replace explicit altitude selection with user-approved conversational navigation. Frozen identity and natural-language probes return the page at rank 1.
 
+
+- 2026-10-18 · wiki-harvest · curated · fanout-engine-entities.md, architecture/workflow-contract-map.md · recorded two durable facts from legacy PR #426: the shared Wiring graph algorithm in `wiring_graph.py` (PR #414) and the optional `ReviewRequest.review_kind` field (PR #405). Dropped the Guard contract entry: `src/cut/` and `src/mold/taste_test.py` no longer exist.
