@@ -1,6 +1,6 @@
 # ADR: Press retains ownership of bounded corrective Cook continuations
 
-Status: accepted (2026-08-06)
+Status: superseded (2026-10-14) by [adr/acceptance-demonstration-press-fold-001](./acceptance-demonstration-press-fold-001.md); accepted 2026-08-06
 
 Spec: outer-tdd-gates (durable specs corpus).
 

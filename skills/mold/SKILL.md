@@ -101,7 +101,7 @@ See `../hard-cheese/references/composition.md`.
 
 ## Handoff
 
-**Pipeline:** culture → **[mold]** → cook → press → age → cure → plate
+**Pipeline:** culture → **[mold]** → cook (⇄ press) → age → cure → plate
 
 After Curdle's phase two finishes, run [`python3 skills/mold/scripts/mold.pyz curd-count`](references/curd-count.md) for the blast-radius digest. A draft offers no Cook command. On explicit Cook selection, retain the selected spec path for standalone work. Bound curd work dispatches the printed finalize command, `/cook --auto --result <result-path>`; the result carries `request_id`, `spec_ref`, `planner_result_ref`, `plan_ref`, and exact `coverage`. Prompt through the shared handoff gate ([policy](../cheese/references/handoff-gate.md)); never pre-select. Keep applicability, contract, and taste review metadata unchanged. Append `--hard` when the user passed it.
 
