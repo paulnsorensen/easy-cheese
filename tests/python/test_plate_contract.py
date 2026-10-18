@@ -543,7 +543,6 @@ def test_plate_routes_review_to_age_from_both_sides() -> None:
 
 def test_plate_is_installed_and_routed() -> None:
     assert '"./skills/plate"' in read(".claude-plugin/plugin.json")
-    assert " plate " in f" {read('scripts/install.sh')} "
     assert "`/plate`" in read("README.md")
     assert "`/plate`" in read("AGENTS.md")
     for path in (

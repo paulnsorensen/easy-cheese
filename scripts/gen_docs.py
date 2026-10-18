@@ -24,6 +24,7 @@ LICENSE_URL = f"{REPO_URL}/blob/main/LICENSE"
 
 LINK_RE = re.compile(r"(?<!\!)\[([^\]]+)\]\(([^)\s]+)(\s+\"[^\"]*\")?\)")
 NESTED_IMAGE_LINK_RE = re.compile(r"(\[!\[[^\]]*\]\([^)]+\)\]\()([^)\s]+)(\))")
+SKILL_ASSET_IMAGE_RE = re.compile(r"(!\[[^\]]*\]\()assets/([^)\s/]+)(\))")
 ADMONITION_RE = re.compile(
     r'^!!!\s+(\w+)(?:\s+"([^"]+)")?\n((?:    .*\n?|\s*\n)+)', re.MULTILINE
 )
@@ -399,6 +400,26 @@ def fold_references(skill_name: str, refs_dir: Path) -> tuple[str, dict[str, str
     return "\n\n".join(sections), titles
 
 
+def publish_skill_assets(body: str, assets_dir: Path, skill_name: str) -> str:
+    """Copy each `assets/<file>` image the body embeds beside the generated page.
+
+    The page renders at `skills/<name>.md`, so the copy lands in
+    `skills/<name>/<file>` and the link becomes `./<name>/<file>`.
+    """
+
+    def repl(match: re.Match[str]) -> str:
+        prefix, filename, suffix = match.group(1), match.group(2), match.group(3)
+        source = assets_dir / filename
+        if not source.is_file():
+            raise FileNotFoundError(f"skill {skill_name!r} embeds missing asset {source}")
+        target: Path = content_root / "skills" / skill_name / filename
+        target.parent.mkdir(parents=True, exist_ok=True)
+        _ = shutil.copyfile(source, target)
+        return f"{prefix}./{skill_name}/{filename}{suffix}"
+
+    return SKILL_ASSET_IMAGE_RE.sub(repl, body)
+
+
 def emit_skill_page(skill_dir: Path) -> GeneratedPage | None:
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.exists():
@@ -427,6 +448,7 @@ def emit_skill_page(skill_dir: Path) -> GeneratedPage | None:
     )
     body = apply_link_rewrite(body, lambda url: rewrite_skill_link(url, name))
     body = convert_mkdocs_admonitions(body)
+    body = publish_skill_assets(body, skill_dir / "assets", name)
 
     refs_dir = skill_dir / "references"
     folded, _ = fold_references(name, refs_dir)

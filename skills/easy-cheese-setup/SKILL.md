@@ -9,7 +9,6 @@ description: >
   Use it when the user requests repository tenant registration.
   Also use it when the user invokes /easy-cheese-setup.
   Use the wiki skills for general Hallouminate wiki work.
-  Use scripts/install.sh to install the MCP server.
 license: MIT
 ---
 
@@ -28,7 +27,7 @@ python3 skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz artifacts [--appl
 python3 skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz doctor    [--apply]                     # all three legs
 ```
 
-At installation, `install.sh` calls `global --apply` when `--mcp` includes `hallouminate`. This skill controls the interactive process.
+Install the Hallouminate MCP server first. See `README.md § Installing MCP servers`. This skill controls the interactive registration process.
 
 ## Flow
 

@@ -45,6 +45,7 @@ For each completed `/mold` Grill-mode run, verify:
 - **Over-batching** — a consequential item with a real tension gets swept into the "batch-reported as upheld" exception meant only for clean steelmans.
 - **Under-batching** — a below-the-line item (naming, internal scope, a trade-off that fires no trigger) gets its own user turn instead of a ledger line.
 - **Altitude drift** — three or more consecutive forks move no acceptance criterion, seam, or non-goal, and the decision map never renders. The rabbit hole this eval exists to catch: every noun traces to the user, so the noun-level scope gates stay green while the dialogue burrows.
+- **Terse fork** — a consequential question shows bare option labels with no fork card, no `Decides:` line, or no branch symbols or graph. Or it offers no `Explain more` choice, or it answers an unclear reply with a guess or a new fork. See `fork-questions.md`.
 - **Goal fade** — the `Goal:` line drops out of the ledger render or silently rewords. The taste test catches the terminal form as `goal-drift`; the per-round render is the early form.
 - **Quarter build** — the goal sentence survives and every noun traces, but Acceptance delivers a fraction of the clauses and the agent presents the slice as the whole. The pre-check catches the terminal form as `goal-coverage:G-n` or `goal-coverage-cap`; a missing narrowing delta at the handshake is the early form.
 

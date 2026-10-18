@@ -1,10 +1,10 @@
 ---
 name: age
 description: >-
-  Review a diff, PR, branch, or path across twelve dimensions. Emit a severity-grouped findings report.
+  Review a diff, PR, branch, or path across thirteen dimensions. Emit a severity-grouped findings report.
   Use when the user wants a code review. Trigger on "review this", "/age", "is this safe to merge", or "find bugs".
   Also trigger on "spot security issues", "check for slop", "review my PR", or "what's wrong with this code".
-  Review every requested dimension. Review all twelve dimensions by default.
+  Review every requested dimension. Review all thirteen dimensions by default.
   Do not apply fixes. Route them to /cure.
   Do not harden tests; route that work to /press.
 license: MIT
@@ -85,12 +85,14 @@ Use `--overall` for full subject fan-out across the review target.
 
 ## Review dimensions
 
-Review correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, telemetry, conventions, and altitude.
+Review correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, telemetry, conventions, altitude, and reframe.
 Assign one `blocker`, `high`, `medium`, or `low` severity to each finding.
 Use `references/dimensions.md` for severity rules and recommendation shapes.
 This workflow omits the git-history/precedent dimension.
 
 ## Flow
+
+![The /age review flow](assets/review-flow.svg)
 
 1. Identify the diff, scope, and relevant specification or issue.
    Read `references/fan-out.md` for the context checklist and deterministic planning contract.
