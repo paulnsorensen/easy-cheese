@@ -95,6 +95,37 @@ jobs:
       - name: Build skill archives
         run: just wedge-build
 
+      # Run the publish dist checks before merge, so a merged change cannot
+      # stall every later dist publish.
+      - name: Stage shippable tree
+        run: python3 scripts/stage_release.py --out "$RUNNER_TEMP/dist"
+
+      - name: Install latest gh CLI
+        run: |
+          set -euo pipefail
+          # The releases/latest redirect makes no API call, so the shared
+          # runner rate limit cannot fail this step with HTTP 403.
+          url=$(curl -fsSIL --retry 3 -o /dev/null -w '%{url_effective}' https://github.com/cli/cli/releases/latest)
+          latest="${url##*/}"
+          ver="${latest#v}"
+          curl -fsSL --retry 3 "https://github.com/cli/cli/releases/download/${latest}/gh_${ver}_linux_amd64.tar.gz" | tar -xz -C /tmp
+          sudo install -m 755 "/tmp/gh_${ver}_linux_amd64/bin/gh" /usr/local/bin/gh
+          gh --version
+
+      - name: Validate staged skills
+        working-directory: ${{ runner.temp }}/dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh skill publish --dry-run
+
+      - name: Run each staged archive
+        working-directory: ${{ runner.temp }}/dist
+        run: |
+          set -euo pipefail
+          for archive in skills/*/scripts/*.pyz; do
+            python3 "$archive" --help > /dev/null
+          done
+
       # This job is the workflow's critical path. The suites are
       # subprocess-heavy, so run them with xdist as `just test` does.
       - name: Run melt script tests

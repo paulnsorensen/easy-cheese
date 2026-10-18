@@ -117,4 +117,5 @@ for the durable-vs-transient boundary and the authoring loop.
 - Source-code work follows `skills/cheese/references/code-intelligence-routing.md`: route by question or edit shape, preserve search → fresh bounded read → stale-safe write sequencing, prefer semantic and anchored backends, and report precision loss when only weaker fallbacks exist. Optional integrations — hallouminate (repo-wiki grounding for `/mold` and `/age`) and milknado (mikado task-graph backend for `/cook`'s fan pathway) — are wired in as optional plugins per `skills/cheese/references/optional-plugins.md`: they degrade gracefully when absent and never block a skill run.
 - SKILL.md files must pass `validate_skills.py` (YAML frontmatter validation).
 - Conventional Commits format for all commits and PR titles (enforced by `validate.yml` for PRs).
+- Merge through the Mergify queue (`@mergifyio queue`); see `.mergify.yml`.
 - Cheese / Dune / Mad Max / LOTR / Princess Bride flavor is welcome in user-facing docs and `SKILL.md` files. Keep commit messages and YAML frontmatter neutral.

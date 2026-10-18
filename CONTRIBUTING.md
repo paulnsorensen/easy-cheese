@@ -100,6 +100,16 @@ Run `just check` before you open a pull request.
 4. Complete the pull request template. Explain why the change is necessary.
 5. Wait for CI to pass. Address the review comments.
 
+### Merge a pull request
+
+The [Mergify](https://mergify.com) merge queue merges every pull request into `main`.
+Do not use the merge button.
+When the pull request is approved and CI is green, comment `@mergifyio queue` on it.
+The queue merges `main` into the pull request, runs the required checks again, and squash-merges it.
+The queue merges one pull request at a time, so `main` receives only trees that CI tested.
+To remove a pull request from the queue, comment `@mergifyio dequeue`.
+The queue rules are in [`.mergify.yml`](./.mergify.yml).
+
 ## Code of Conduct
 
 The [Contributor Covenant](./CODE_OF_CONDUCT.md) governs participation in this project.
