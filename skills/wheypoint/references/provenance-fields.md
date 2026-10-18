@@ -23,16 +23,13 @@ Pre-provenance notes remain valid.
 - **`created: <UTC ISO-8601>`** gives the UTC capture time.
 - **`parents: [<slug>, ...]`** gives the lineage that the commands below write.
 
-## Record provenance since schema 4
+## Record provenance
 
 The runtime writes these fields; an intent never sets them.
 
-- **`origin`** on an entry names the parent entry that a `fork` moved or copied it from, as `wheypoint:<project_key>/<work_id>@<revision_id>#<entry_id>`.
-- **`successor`** on a `forked` entry names the child entry that took it over.
-- **`copies`** on an entry names each child entry that a fork copied from it.
 - **`edges`** on the record holds its typed edges, keyed by `(to, kind)`; see [`work-graph.md`](work-graph.md).
-
-The host sets `successor` and `copies` when the parent's next `checkpoint` reconciles a pending fork.
+- A fork child holds one `forked_from` edge that names the parent revision.
+- A pre-v5 `origin`, `successor`, or `copies` field loads as data and stays unchanged on disk.
 
 ## Lineage commands
 

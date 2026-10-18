@@ -88,7 +88,7 @@ def research_layout_cmd(slug: str) -> ResearchLayout:
     try:
         return research_layout(slug)
     except ValueError as exc:
-        raise fromargs.CliError(str(exc), exit_code=1) from exc
+        raise fromargs.CliError(str(exc), exit_code=2) from exc
 
 
 def build_app() -> fromargs.App:

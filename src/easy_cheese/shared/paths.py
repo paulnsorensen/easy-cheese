@@ -338,6 +338,23 @@ def git_toplevel() -> Path | None:
     return None
 
 
+def outside_git_repository() -> bool:
+    """True only when git reports `not a git repository`.
+
+    A timeout, a missing git, or a refusal such as `safe.directory` is not
+    proof that the working directory is outside a checkout.
+    """
+    try:
+        result: subprocess.CompletedProcess[str] = git_utils.run_git(
+            ["rev-parse", "--show-toplevel"],
+            timeout=5,
+            env={**os.environ, "LC_ALL": "C", "LANGUAGE": "C"},
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode != 0 and "not a git repository" in result.stderr
+
+
 def resolve_repo_root(repo_root: Path | str | None) -> Path:
     """Absolute repo root: the given value, else git toplevel, else cwd."""
     if repo_root is not None:

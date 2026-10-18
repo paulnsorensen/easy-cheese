@@ -15,7 +15,7 @@ import pytest
 
 from easy_cheese.shared.artifacts import ArtifactResolutionError, resolve_artifact
 from easy_cheese_schemas.contracts import ArtifactRef
-from easy_cheese_schemas.mold_cook import MOLD_COOK_HANDOFF_SCHEMA_URI
+from easy_cheese_schemas import CurdPlan, supported_version_for
 from easy_cheese_schemas.schema_runtime import (
     FORK_TASTE_VERDICT_SCHEMA_URI,
     TASTE_LEDGER_SCHEMA_URI,
@@ -175,13 +175,14 @@ def test_a_document_label_admits_a_bare_json_list(tmp_path: Path) -> None:
 
 def test_a_contract_label_still_requires_one_json_object(tmp_path: Path) -> None:
     """Only a document label drops the shape rule; a contract keeps it."""
-
-    content = b'["handoff"]'
-    source = tmp_path / "handoff.json"
+    content = b'["plan"]'
+    source = tmp_path / "plan.json"
     _ = source.write_bytes(content)
+    version = supported_version_for(CurdPlan)
+    assert version is not None
     reference = attrs.evolve(
         artifact_ref(source.as_uri(), content, media_type="application/json"),
-        schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI,
+        schema_uri=version.schema_uri,
     )
 
     with pytest.raises(ArtifactResolutionError, match="must contain a JSON object"):

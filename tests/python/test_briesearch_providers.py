@@ -550,7 +550,7 @@ def test_every_registry_route_serves_a_capability_its_provider_declares() -> Non
 
 
 def test_the_command_rejects_a_missing_directory(tmp_path: Path) -> None:
-    assert providers.main(["--cwd", str(tmp_path / "absent")]) == 1
+    assert providers.main(["--cwd", str(tmp_path / "absent")]) == 2
 
 
 def _warnings(result: dict[str, object]) -> list[str]:

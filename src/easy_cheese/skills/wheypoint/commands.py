@@ -48,13 +48,6 @@ def _show(argv: list[str]) -> int:
     return wheypoint.main(["show", *argv])
 
 
-@bundle_command("lint")
-def _lint(argv: list[str]) -> int:
-    from easy_cheese.cli import wheypoint
-
-    return wheypoint.main(["lint", *argv])
-
-
 @bundle_command("list")
 def _list(argv: list[str]) -> int:
     from easy_cheese.cli import wheypoint
@@ -83,32 +76,18 @@ def _fork(argv: list[str]) -> int:
     return wheypoint.main(["fork", *argv])
 
 
-@bundle_command("link")
-def _link(argv: list[str]) -> int:
+@bundle_command("export")
+def _export(argv: list[str]) -> int:
     from easy_cheese.cli import wheypoint
 
-    return wheypoint.main(["link", *argv])
+    return wheypoint.main(["export", *argv])
 
 
-@bundle_command("unlink")
-def _unlink(argv: list[str]) -> int:
+@bundle_command("import")
+def _import(argv: list[str]) -> int:
     from easy_cheese.cli import wheypoint
 
-    return wheypoint.main(["unlink", *argv])
-
-
-@bundle_command("shape")
-def _shape(argv: list[str]) -> int:
-    from easy_cheese.cli import wheypoint
-
-    return wheypoint.main(["shape", *argv])
-
-
-@bundle_command("backlinks")
-def _backlinks(argv: list[str]) -> int:
-    from easy_cheese.cli import wheypoint
-
-    return wheypoint.main(["backlinks", *argv])
+    return wheypoint.main(["import", *argv])
 
 
 @bundle_command("handoff")
@@ -122,17 +101,14 @@ COMMANDS = (
     derive_command(_checkpoint, "Checkpoint a semantic intent onto the current record"),
     derive_command(_validate, "Validate an intent against its schema without opening the store"),
     derive_command(_schema, "Print the JSON Schema for a registered contract slug"),
-    derive_command(_resolve, "Resolve a slug, work id, or path to the current record"),
+    derive_command(_resolve, "Resolve a slug (exact, unique prefix, or unique substring), work id, or path to the current record"),
     derive_command(_show, "Print the current record for a work id"),
-    derive_command(_lint, "Lint a generated projection against the record"),
-    derive_command(_list, "List and search work items and notes across worktrees"),
+    derive_command(_list, "List and search work items and notes across worktrees; outside a Git checkout the default scope falls back to machine"),
     derive_command(_log, "Walk the revisions of one work id, oldest first"),
     derive_command(_turns, "Print the user's own turns from a session transcript"),
     derive_command(_fork, "Fork a child record from a parent; only the child is written"),
-    derive_command(_link, "Add one typed edge from a record to a work item or document"),
-    derive_command(_unlink, "Remove the edge a record holds to a ref under one kind"),
-    derive_command(_shape, "Print the work graph as JSON, with a Graphviz string in dot"),
-    derive_command(_backlinks, "List every record whose edges or links name a ref"),
+    derive_command(_export, "Write a canonical JSON bundle of a record for another person"),
+    derive_command(_import, "Verify a bundle and write it as a fork child record"),
     derive_command(
         _handoff,
         "Render, parse, and dispatch-split handoff preambles",

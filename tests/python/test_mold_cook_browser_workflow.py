@@ -1,4 +1,4 @@
-"""Opt-in browser regression for the outer Cook acceptance interface."""
+"""Opt-in browser regression for direct Cook execution."""
 
 from __future__ import annotations
 
@@ -7,46 +7,36 @@ import hashlib
 import http.server
 import json
 import os
-import subprocess
 import shutil
+import subprocess
 import sys
 import threading
 from pathlib import Path
 from typing import cast, override
-from urllib.parse import unquote, urlparse
 
 import pytest
 
-from easy_cheese.skills.cook.preparation import (
-    PreparationEvidence,
-    SetupEvidence,
-    prepare,
-    resubmit,
-)
 from easy_cheese.shared.mold_cook_handoff import (
-    accept_mold_cook_handoff,
-    canonical_mold_cook_proposal,
+    SETUP_EVIDENCE_SCHEMA_URI,
+    SetupEvidence,
     materialize_artifact_ref,
+    validate_bound_execution,
+    validate_mold_cook_setup_evidence,
+    validate_runner_authority,
 )
-from easy_cheese_schemas import CurdPlan, MoldCookHandoff, canonical_bytes
-from easy_cheese_schemas.mold_cook import (
-    MOLD_COOK_APPROVAL_SCHEMA_URI,
-    CookPreparationOutcome,
-    CookSetupAuthorization,
-    MoldCookApprovalDecision,
-    MoldCookApprovalSource,
+from easy_cheese.skills.mold.producer import finalize_mold
+from easy_cheese_schemas import ArtifactRef, CurdPlan, MoldCookCoverage, canonical_bytes
+from easy_cheese_schemas.schema_runtime import (
+    structure_contract_value,
 )
-
+from easy_cheese_schemas.mold_cook import CookSetupAuthorization
 from tests.python.test_mold_cook_producer import (
     finalize_fixture,
     make_planner_result,
     make_spec,
 )
-from tests.python.mold_cook_helpers import bind_mold_cook_runner_approval
-
 
 ROOT = Path(__file__).resolve().parents[2]
-COOK_ARCHIVE = ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 pytestmark = pytest.mark.skipif(  # noqa: V107
     os.environ.get("MOLD_COOK_BROWSER") != "1",
@@ -61,12 +51,24 @@ class _QuietHandler(http.server.SimpleHTTPRequestHandler):
         return
 
 
-def test_outer_preparation_and_browser_interaction(tmp_path: Path) -> None:
-    """Drive Cook from RED to a produced feature, then observe it in Chromium."""
+def _retain_runner(
+    root: Path, content: bytes, *, role: str,
+    schema_uri: str | None = None,
+) -> ArtifactRef:
+    digest = hashlib.sha256(content).hexdigest()
+    path = root / f"sha256-{digest}"
+    _ = path.write_bytes(content)
+    return materialize_artifact_ref(
+        content, artifact_id=f"browser-{role}", role=role,
+        uri=path.as_uri(), schema_uri=schema_uri,
+    )
+
+
+def test_direct_execution_and_browser_interaction(tmp_path: Path) -> None:
+    """Drive Cook from missing planning to a feature, then observe Chromium."""
     repository = tmp_path / "repository"
     _ = repository.mkdir()
     spec = make_spec(repository)
-    cook_pyz = COOK_ARCHIVE
 
     browser_node_modules = Path(os.environ.get("MOLD_COOK_BROWSER_NODE_MODULES", ""))
     browser_path = os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "")
@@ -81,48 +83,27 @@ def test_outer_preparation_and_browser_interaction(tmp_path: Path) -> None:
         "LC_ALL": "C.UTF-8",
         "PLAYWRIGHT_BROWSERS_PATH": browser_path,
     }
-    red = subprocess.run(
-        [
-            sys.executable,
-            str(cook_pyz),
-            "prepare",
-            "--spec",
-            str(spec),
-            "--mode",
-            "full",
-            "--repository-root",
-            str(repository),
-            "--artifact-root",
-            str(repository / "artifacts"),
-        ],
-        cwd=str(cook_pyz.parent),
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
+    red = finalize_mold(
+        spec, artifact_root=repository / "artifacts",
+        operation_id="missing-plan", request_id="request-1",
     )
-    assert red.returncode == 0, red.stderr
-    red_result = cast(dict[str, object], json.loads(red.stdout))
-    assert red_result["outcome"] == "needs-planning"
+    assert red.status == "saved-not-ready"
+    assert "plan_ref" not in red.payload
     assert not (repository / "index.html").exists()
 
     planner = make_planner_result()
     plan = cast(CurdPlan, planner.plan)
     finalized = finalize_fixture(
-        tmp_path=repository,
-        spec_path=spec,
-        planner=planner,
+        tmp_path=repository, spec_path=spec, planner=planner,
     )
     assert finalized.status == "ready"
     artifact_root = repository / "artifacts"
-    pointer = artifact_root / "pointers" / "operation-1.json"
-    handoff = cast(
-        MoldCookHandoff,
-        accept_mold_cook_handoff(pointer, artifact_root=artifact_root).canonical.value,
-    )
-    spec_digest = handoff.spec_ref.digest
-    coverage = handoff.coverage
+    payload = finalized.payload
+    spec_ref = structure_contract_value(payload["spec_ref"], ArtifactRef, "spec_ref")
+    planner_ref = structure_contract_value(payload["planner_result_ref"], ArtifactRef, "planner_result_ref")
+    plan_ref = structure_contract_value(payload["plan_ref"], ArtifactRef, "plan_ref")
+    coverage = structure_contract_value(payload["coverage"], MoldCookCoverage, "coverage")
+    spec_digest = spec_ref.digest
 
     outer = Path(__file__).resolve().parents[1] / "fixtures" / "mold_cook_browser"
     browser_fixture = repository / "tests" / "browser"
@@ -144,64 +125,26 @@ def test_outer_preparation_and_browser_interaction(tmp_path: Path) -> None:
     (browser_fixture / "node_modules").symlink_to(
         browser_node_modules, target_is_directory=True
     )
-    runner_response = b"approved\n"
-    runner_response_path = artifact_root / "runner-response.txt"
-    _ = runner_response_path.write_bytes(runner_response)
-    runner_response_ref = materialize_artifact_ref(
-        runner_response,
-        artifact_id="browser-runner-response",
-        role="response",
-        uri=runner_response_path.as_uri(),
-        media_type="text/plain",
+    authorization_content = canonical_bytes(authorization)
+    runner_authorization_ref = _retain_runner(
+        artifact_root, authorization_content, role="runner_authorization",
     )
-    runner_proposal = canonical_mold_cook_proposal(
-        request_id="request-1",
-        spec_digest=spec_digest,
-        coverage=coverage,
-        setup_authorization=authorization,
+    authorization_digest = runner_authorization_ref.digest
+    runner_response = canonical_bytes({
+        "authorization_digest": authorization_digest,
+        "spec_digest": spec_digest,
+        "curd_ids": list(coverage.curd_ids),
+        "question": f"Approve runner limits {authorization_digest} for {spec_digest} and {coverage.curd_ids[0]}?",
+        "response": "approve",
+        "execution_authorized": True,
+    })
+    runner_response_ref = _retain_runner(
+        artifact_root, runner_response, role="dialogue",
     )
-    runner_proposal_path = artifact_root / "runner-proposal.json"
-    _ = runner_proposal_path.write_bytes(runner_proposal)
-    runner_proposal_ref = materialize_artifact_ref(
-        runner_proposal,
-        artifact_id="browser-runner-proposal",
-        role="proposal",
-        uri=runner_proposal_path.as_uri(),
-        media_type="application/json",
-    )
-    runner_approval = bind_mold_cook_runner_approval(
-        request_id="request-1",
-        decision=MoldCookApprovalDecision.APPROVED,
-        source=MoldCookApprovalSource.USER_RESPONSE,
-        spec_digest=spec_digest,
-        proposal_ref=runner_proposal_ref,
-        response_ref=runner_response_ref,
-        response_text=runner_response.decode(),
-        response_source="runner-response.txt",
-        coverage=coverage,
-        setup_authorization=authorization,
-    )
-    runner_approval_content = canonical_bytes(runner_approval)
-    runner_approval_path = artifact_root / "runner-approval.json"
-    _ = runner_approval_path.write_bytes(runner_approval_content)
-    runner_approval_ref = materialize_artifact_ref(
-        runner_approval_content,
-        artifact_id="browser-runner-approval",
-        role="runner_approval",
-        uri=runner_approval_path.as_uri(),
-        media_type="application/json",
-        schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
-    )
-    waiting = prepare(
-        pointer,
-        repository_root=repository,
-        artifact_root=artifact_root,
-        evidence=PreparationEvidence(
-            runner_approval=runner_approval_ref,
-            setup_authorization=authorization,
-        ),
-    )
-    assert waiting.outcome is CookPreparationOutcome.NEEDS_PREPARATION
+    assert validate_runner_authority(
+        runner_authorization_ref, runner_response_ref, artifact_root,
+        spec_digest=spec_digest, coverage=coverage,
+    ) == authorization
     setup = subprocess.run(
         ["bash", "-lc", setup_command],
         cwd=str(browser_fixture),
@@ -229,27 +172,22 @@ def test_outer_preparation_and_browser_interaction(tmp_path: Path) -> None:
         captured_output_digest=setup_output_digest,
     )
     setup_evidence_content = canonical_bytes(setup_evidence)
-    setup_evidence_path = artifact_root / "setup-evidence.json"
-    _ = setup_evidence_path.write_bytes(setup_evidence_content)
-    setup_evidence_ref = materialize_artifact_ref(
-        setup_evidence_content,
-        artifact_id="browser-setup-evidence",
-        role="setup_evidence",
-        uri=setup_evidence_path.as_uri(),
-        media_type="application/json",
-        schema_uri="https://schemas.easy-cheese.dev/setup-evidence",
+    setup_evidence_ref = _retain_runner(
+        artifact_root, setup_evidence_content, role="setup_evidence",
+        schema_uri=SETUP_EVIDENCE_SCHEMA_URI,
     )
-    ready = resubmit(
-        waiting,
-        evidence=PreparationEvidence(
-            runner_approval=runner_approval_ref,
-            setup_authorization=authorization,
-            setup_evidence=setup_evidence_ref,
-        ),
-    )
-    assert ready.outcome is CookPreparationOutcome.READY
-    assert ready.handoff_ref is not None
-    ready_pointer = Path(unquote(urlparse(ready.handoff_ref.uri).path))
+    assert validate_mold_cook_setup_evidence(
+        setup_evidence_ref, authorization=authorization, plan=plan,
+        artifact_root=artifact_root,
+    ) == setup_evidence
+    assert validate_bound_execution(
+        spec_ref=spec_ref, planner_result_ref=planner_ref, plan_ref=plan_ref,
+        coverage=coverage, artifact_root=artifact_root,
+        runner_authorization_ref=runner_authorization_ref,
+        runner_response_ref=runner_response_ref,
+        setup_evidence_refs=(setup_evidence_ref,),
+    ) == plan
+    result_path = cast(str, payload["result_path"])
     production_env = {
         **environment,
         "PYTHONPATH": str(ROOT / "src"),
@@ -258,9 +196,12 @@ def test_outer_preparation_and_browser_interaction(tmp_path: Path) -> None:
         [
             sys.executable,
             str(outer / "outer_workflow.py"),
-            str(ready_pointer),
+            result_path,
             str(repository),
-            str(repository / "artifacts"),
+            str(artifact_root),
+            str(Path(runner_authorization_ref.uri.removeprefix("file://"))),
+            str(Path(runner_response_ref.uri.removeprefix("file://"))),
+            str(Path(setup_evidence_ref.uri.removeprefix("file://"))),
         ],
         cwd=str(repository),
         env=production_env,
@@ -275,6 +216,8 @@ def test_outer_preparation_and_browser_interaction(tmp_path: Path) -> None:
         "feature": "index.html",
         "results": 1,
         "disposition": "passed",
+        "whole_task_complete": True,
+        "remainder": [],
     }
     document = repository / "index.html"
     assert document.is_file()

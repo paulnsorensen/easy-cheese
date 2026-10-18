@@ -357,7 +357,7 @@ def test_main_reports_a_violation_in_findings_but_still_exits_clean(
 
 def test_main_rejects_an_untrusted_manifest(tmp_path: Path) -> None:
     _ = _write_manifest(tmp_path, {"calls": [{"kind": "conjure", "provider": "x"}]})
-    assert budget.main([str(tmp_path)]) == 1
+    assert budget.main([str(tmp_path)]) == 4
 
 
 def test_main_reports_a_missing_manifest_as_a_usage_error(

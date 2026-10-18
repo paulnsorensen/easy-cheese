@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 
 [[package]]
@@ -26,7 +26,7 @@ wheels = [
 
 [[package]]
 name = "cyclopts"
-version = "4.25.3"
+version = "5.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
@@ -34,9 +34,9 @@ dependencies = [
     { name = "rich" },
     { name = "rich-rst" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c1/08/a444f3cca86cb27bc256831fc8c42b578390f4087bf6631cccb5334bd9ed/cyclopts-4.25.3.tar.gz", hash = "sha256:7d3a067bc7699a1a65fe2ea0b092a925855bb711a05adc1e65c5b9ba307acea4", size = 202814, upload-time = "2026-09-17T16:25:16.892Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/28/c1/3debeeb6e0eb74a51d6f8cf1f273ed7c479e3321631cbf89fb9700e65e28/cyclopts-5.2.0.tar.gz", hash = "sha256:b63c1b1beaadf3ead19214385a0f90b990f152c4107c174e1724c45dc71e9541", size = 246542, upload-time = "2026-10-06T15:02:39.212Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a9/cc/e879da3d54cf727f90e6d90118e132672c3913338b566740486f8797190d/cyclopts-4.25.3-py3-none-any.whl", hash = "sha256:40e76b3153ea90e885abd8d3a4d8184db5a5eec2fde8540025aae8d72fc973fc", size = 242748, upload-time = "2026-09-17T16:25:15.509Z" },
+    { url = "https://files.pythonhosted.org/packages/d4/dd/3f73d04c95f6acc6a54700011637e49362e337139b518be895edf4786f87/cyclopts-5.2.0-py3-none-any.whl", hash = "sha256:5da2a5d65164e03008621fc4795946b88a722b881398b5dfa58afa6218342cff", size = 289196, upload-time = "2026-10-06T15:02:37.57Z" },
 ]
 
 [[package]]
@@ -50,7 +50,7 @@ wheels = [
 
 [[package]]
 name = "easy-cheese-schemas"
-version = "2.0.0"
+version = "3.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "attrs" },
@@ -69,18 +69,18 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-runtime = [{ name = "fromargs", specifier = "==0.1.0" }]
+runtime = [{ name = "fromargs", specifier = "==0.2.0" }]
 
 [[package]]
 name = "fromargs"
-version = "0.1.0"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cyclopts" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9c/5a/d0861938ba24d3e6b4ba51d3ef86db36d30aa32c6db71b415f66cc9a02f9/fromargs-0.1.0.tar.gz", hash = "sha256:1ce6aa90e3f357e552eff570d15f5a185c3655fe8eb5b17e34f4089c3206816b", size = 37483, upload-time = "2026-09-26T09:45:02.095Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/12/dd/0c37cb959dbe9b8f9888a72ff2d0814d3a3aed02306909dfd3cc6d2e88cc/fromargs-0.2.0.tar.gz", hash = "sha256:9467253d82079143d221586035903be33e7a133bc9870bc391f5e04599ef7e77", size = 44681, upload-time = "2026-10-05T05:20:49.473Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d3/6a/ea6b15a52c719a7159a0f3e08f7dc861c4170a677258db4e1382e1e681d1/fromargs-0.1.0-py3-none-any.whl", hash = "sha256:164ab49373d9d044d16164b4b880934d12b80bef484e2c908d77accfc471dc4f", size = 14595, upload-time = "2026-09-26T09:45:00.953Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/40/23776d8376234fddbe0b1c830aeaa16b1b72e8a2a2178892c01237755fc4/fromargs-0.2.0-py3-none-any.whl", hash = "sha256:62ef933618c8568f9b36a0a41b95d275ec98d4493a6aeebb93b97cdc4c517f54", size = 17551, upload-time = "2026-10-05T05:20:48.66Z" },
 ]
 
 [[package]]

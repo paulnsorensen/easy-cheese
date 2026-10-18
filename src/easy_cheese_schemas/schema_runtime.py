@@ -6,6 +6,7 @@ import types
 from collections.abc import Mapping
 from enum import Enum
 from functools import cache
+from pathlib import Path
 from types import ModuleType
 from typing import (
     Any,
@@ -48,7 +49,6 @@ from easy_cheese_schemas.contracts import (
     DiagnosisResult,
     DiagnosisResultWriterView,
     EvidenceRef,
-    HandoffPointer,
     IdentityAction,
     IdentityLineage,
     PlannerResult,
@@ -202,14 +202,12 @@ class CanonicalArtifact:
 @attrs.define(frozen=True)
 class AcceptedArtifact:
     canonical: CanonicalArtifact
-    normalization_receipt: ArtifactRef | None = None
 
 
 @attrs.define(frozen=True)
 class PublishedArtifact:
-    pointer: HandoffPointer
+    pointer_path: Path
     canonical: CanonicalArtifact
-    normalization_receipt: ArtifactRef | None = None
 
 
 def _enum_schema(enum: type[Enum]) -> dict[str, object]:
@@ -320,7 +318,6 @@ _UNIQUE_COLLECTION_FIELDS = {
     "CurdPlan": {"curds"},
     "CurdResult": {"criterion_results", "deliverables"},
     "DiagnosisResult": {"hypotheses"},
-    "PhaseContract": {"outputs"},
     "ReviewResult": {"coverage", "findings"},
     "SemanticCurd": {"criteria", "inputs"},
 }
@@ -922,6 +919,14 @@ def _typed_host(value: object, type_: type[_T], path: str) -> _T:
     return cast(_T, _structure(value, type_, path))
 
 
+def structure_contract_value(value: object, type_: type[_T], path: str) -> _T:
+    """Structure one decoded JSON value as `type_`, or raise at `path`.
+
+    A value that is already a `type_` instance passes through unchanged.
+    """
+    return _typed_host(value, type_, path)
+
+
 def _host_mapping(invocation: Mapping[str, object], name: str) -> Mapping[str, object]:
     value = _invocation_value(invocation, name, {})
     if not isinstance(value, Mapping):
@@ -1398,6 +1403,7 @@ __all__ = [
     "normalize_agent_value",
     "require_contract_version",
     "schema_bytes",
+    "structure_contract_value",
     "supported_version_for",
     "validate_contract",
     "validate_curd_plan",

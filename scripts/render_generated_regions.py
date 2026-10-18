@@ -3,8 +3,8 @@
 Projects the mold-spec document contract and the cook writer-view payload
 shapes (both declared on the attrs models in
 ``src/easy_cheese_schemas/contracts.py``) into compact, BAML-inspired type
-blocks (Python type syntax), joins the phase registry with the schema catalog and the
-registered contract models into ``skills/cheese/references/schema-intertwine.md``,
+blocks (Python type syntax), joins the schema catalog with registered contract
+models into ``skills/cheese/references/schema-intertwine.md``,
 and projects each Python-backed bundle's static `COMMANDS` manifest into
 ``skills/<bundle>/references/commands.md``.
 
@@ -22,7 +22,7 @@ from enum import Enum
 from pathlib import Path
 from collections.abc import Callable
 from types import ModuleType
-from typing import TYPE_CHECKING, ClassVar, Protocol, TypedDict, cast
+from typing import TYPE_CHECKING, ClassVar, Protocol, cast
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -42,7 +42,6 @@ import runtime_gates  # noqa: E402
 from easy_cheese.shared.bundle_commands import Command, command_map  # noqa: E402
 from easy_cheese_schemas import contracts  # noqa: E402
 from easy_cheese_schemas._contract_modules import CONTRACT_MODULES  # noqa: E402
-from easy_cheese_schemas import COMPILED_TRANSITION_REGISTRY  # noqa: E402
 from easy_cheese_schemas import REGISTERED_CONTRACT_SCHEMA_URIS  # noqa: E402
 from easy_cheese_schemas import PrPlan  # noqa: E402
 from easy_cheese_schemas import registered_contracts  # noqa: E402
@@ -55,23 +54,6 @@ class _DocumentContract(Protocol):
     sections: ClassVar[tuple[contracts.Section, ...]]
     cross_field_rules: ClassVar[tuple[contracts.CrossFieldRule, ...]]
 
-
-class _ContractVersion(TypedDict):
-    major: str
-    minor: str
-    schema_uri: str
-
-
-class _PhaseOutput(TypedDict):
-    destination: str
-    payload_schema_uri: str
-
-
-class _Phase(TypedDict):
-    contract_version: _ContractVersion
-    input_schema_uris: list[str]
-    outputs: list[_PhaseOutput]
-    source: str
 
 
 CURDLE_PATH = REPO_ROOT / "skills" / "mold" / "references" / "curdle.md"
@@ -257,75 +239,30 @@ def _slug_from_uri(uri: str) -> str:
 
 
 def render_schema_intertwine() -> str:
-    # The package-level collector spans every contract-bearing module, not just
-    # contracts.py, so a model registered elsewhere (PrPlan) still renders.
     contract_slugs = {slug: cls.__name__ for slug, cls in registered_contracts()}
-    contract_slugs.update(
-        {slug: cls.__name__ for slug, cls in MOLD_COOK_CONTRACTS}
-    )
-    phases = cast(list[_Phase], COMPILED_TRANSITION_REGISTRY.to_data())
+    contract_slugs.update({slug: cls.__name__ for slug, cls in MOLD_COOK_CONTRACTS})
     catalog_slugs = sorted(
         _slug_from_uri(uri) for uri in REGISTERED_CONTRACT_SCHEMA_URIS
     )
     module_leaves = ", ".join(
         f"{name.rsplit('.', 1)[-1]}.py" for name in CONTRACT_MODULES
     )
-
     lines = [
         "# Schema intertwine",
         "",
         (
             "Run `scripts/render_generated_regions.py` to generate this file. Do not"
-            " edit it manually. The generator joins the phase registry"
-            " (`_compiled_phase_registry`), the schema catalog (`_schema_catalog`),"
-            f" and the registered contract models ({module_leaves}) for each phase"
-            " transition."
+            " edit it manually. The generator joins the schema catalog"
+            f" (`_schema_catalog`) with registered contract models ({module_leaves})."
         ),
         "",
-        "## Phase transitions",
+        "## Registered schema catalog",
         "",
-        "| Source phase | Contract version | Input schemas | Destination | Payload schema | Payload contract |",
-        "| --- | --- | --- | --- | --- | --- |",
+        "| Slug | Contract model |",
+        "| --- | --- |",
     ]
-    for phase in phases:
-        source = phase["source"]
-        version = (
-            f"{phase['contract_version']['major']}.{phase['contract_version']['minor']}"
-        )
-        inputs = ", ".join(
-            sorted(_slug_from_uri(uri) for uri in phase["input_schema_uris"])
-        )
-        outputs = sorted(
-            phase["outputs"], key=lambda o: (o["destination"], o["payload_schema_uri"])
-        )
-        for output in outputs:
-            slug = _slug_from_uri(output["payload_schema_uri"])
-            contract_cls = contract_slugs.get(slug, "—")
-            lines.append(
-                f"| {source} | {version} | {inputs} | {output['destination']} | {slug} | {contract_cls} |"
-            )
-    lines.append("")
-    lines.append("## Registered schema catalog")
-    lines.append("")
-    lines.append("| Slug | Contract model | Input to phase | Output of phase |")
-    lines.append("| --- | --- | --- | --- |")
     for slug in catalog_slugs:
-        input_phases = sorted(
-            phase["source"]
-            for phase in phases
-            if slug in (_slug_from_uri(uri) for uri in phase["input_schema_uris"])
-        )
-        output_phases = sorted(
-            phase["source"]
-            for phase in phases
-            if slug
-            in (_slug_from_uri(o["payload_schema_uri"]) for o in phase["outputs"])
-        )
-        contract_cls = contract_slugs.get(slug, "—")
-        lines.append(
-            f"| {slug} | {contract_cls} | {', '.join(input_phases) or '—'} |"
-            + f" {', '.join(output_phases) or '—'} |"
-        )
+        lines.append(f"| {slug} | {contract_slugs.get(slug, '—')} |")
     lines.append("")
     return "\n".join(lines)
 

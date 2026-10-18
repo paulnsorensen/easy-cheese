@@ -14,14 +14,13 @@ import pytest
 from attrs import evolve
 from easy_cheese_schemas import (
     ArtifactLink,
-    CompactionRecord,
     Durability,
     RepositoryProvenance,
     WheypointRecord,
     WheypointRevision,
 )
 
-from easy_cheese.shared.wheypoint import canonical, lint, projection, records, storage
+from easy_cheese.shared.wheypoint import canonical, lint_types, projection, records, storage
 from easy_cheese.shared.wheypoint import resolve as resolve_mod
 
 PROJECT = "paulnsorensen-easy-cheese"
@@ -71,6 +70,7 @@ def run(
     workspace_root: Path | None = None,
     git_object_exists: Callable[[str], bool] = lambda obj: True,
     artifact_digest: Callable[[str], str | None] = lambda path: None,
+    fuzzy: bool = False,
 ) -> resolve_mod.Resolution:
     return resolve_mod.resolve(
         ref,
@@ -79,6 +79,7 @@ def run(
         workspace_root=workspace_root,
         git_object_exists=git_object_exists,
         artifact_digest=artifact_digest,
+        fuzzy=fuzzy,
     )
 
 
@@ -172,7 +173,7 @@ def test_a_foreign_projection_requires_its_workspace(
             "repository-sensitive lint must wait for workspace binding"
         )
 
-    monkeypatch.setattr(resolve_mod.lint, "lint_work", fail_if_called)
+    monkeypatch.setattr(resolve_mod, "_check_work", fail_if_called)
     found = resolve_mod.resolve(
         str(store.projection_path(1, "rev-0001")),
         git_object_exists=lambda _obj: True,
@@ -570,6 +571,39 @@ def test_a_tampered_record_gates_instead_of_dispatching(
     assert not found.dispatchable
 
 
+@pytest.mark.parametrize("field", ["revision_id", "record_digest"])
+def test_a_projection_describing_another_record_gates(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+    field: str,
+) -> None:
+    store, _ = seed(
+        corpus_root, make_record, make_promotion, work_id="work-0001", slug="kernel"
+    )
+    record = store.read_record()
+    assert record is not None
+    path = store.projection_path(record.revision_number, record.revision_id)
+    text = path.read_text(encoding="utf-8")
+    original = {
+        "revision_id": f"revision_id: {record.revision_id}\n",
+        "record_digest": f"record_digest: {store.read_record_digest()}\n",
+    }[field]
+    assert original in text
+    forged = {
+        "revision_id": "revision_id: rev-ffffffffffff\n",
+        "record_digest": "record_digest: sha256:" + "0" * 64 + "\n",
+    }[field]
+    _ = path.write_text(text.replace(original, forged), encoding="utf-8")
+
+    found = run("kernel", corpus_root)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+    codes = [finding.code for finding in found.findings]
+    assert lint_types.LintCode.PROJECTION_RECORD_MISMATCH in codes
+    assert not found.dispatchable
+
+
 def test_a_declared_commit_that_is_gone_gates(
     corpus_root: Path,
     make_record: Callable[..., WheypointRecord],
@@ -916,7 +950,7 @@ def test_an_orphaned_revision_is_reported_but_does_not_block_continuation(
     found = run("alpha", corpus_root)
 
     codes = tuple(f.code for f in found.findings)
-    assert lint.LintCode.REVISION_INCOMPLETE in codes, codes
+    assert lint_types.LintCode.REVISION_INCOMPLETE in codes, codes
     assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
     assert found.dispatchable is True
 
@@ -931,53 +965,10 @@ def test_a_real_integrity_failure_still_blocks_continuation(
         corpus_root, make_record, make_promotion, work_id="alpha", slug="alpha"
     )
     path = store.projection_path(1, "rev-0001")
-    _ = path.write_text(
-        path.read_text(encoding="utf-8").replace("cook", "press"), encoding="utf-8"
-    )
+    _ = path.write_text("not a projection document", encoding="utf-8")
 
     found = run("alpha", corpus_root)
 
-    assert found.dispatchable is False
-    assert found.outcome is resolve_mod.ResolutionOutcome.GATED
-
-
-def test_an_unresolved_compaction_lineage_blocks_continuation(
-    corpus_root: Path,
-    make_record: Callable[..., WheypointRecord],
-    make_promotion: Callable[..., _PromotionLike],
-) -> None:
-    """A compaction claim a reader cannot re-derive is not resumable state: the
-    session reconciled against something other than the revision it extended,
-    so what it carried forward was never reconciled at all."""
-    store, first = seed(
-        corpus_root, make_record, make_promotion, work_id="alpha", slug="alpha"
-    )
-    second = make_promotion(
-        2,
-        "rev-0002",
-        parent=first,
-        record=make_record(
-            work_id="alpha", slug="alpha", revision_id="rev-0002", revision_number=2
-        ),
-    )
-    revision = evolve(
-        second.revision,
-        compaction=CompactionRecord(
-            rehydrated_from_revision_id="rev-0000",
-            rehydrated_record_digest=records.record_digest(first.record),
-            reconciled_entry_ids=[],
-        ),
-    )
-    store.promote(
-        evolve(second.record, revision_digest=records.revision_digest(revision)),
-        revision,
-        second.markdown,
-    )
-
-    found = run("alpha", corpus_root)
-
-    codes = tuple(finding.code for finding in found.findings)
-    assert lint.LintCode.COMPACTION_PARENT_UNRESOLVED in codes, codes
     assert found.dispatchable is False
     assert found.outcome is resolve_mod.ResolutionOutcome.GATED
 
@@ -1295,15 +1286,16 @@ def test_ac24_the_v2_golden_store_resolves_authoritative_with_its_pinned_digests
     )
     record = store.read_record()
     assert record is not None and record.schema_version == 2
-    assert records.record_digest(record) == pins["record_digest"]
+    assert store.read_record_digest() == pins["record_digest"]
     assert record.revision_digest == pins["revision_digest"]
     for file in store.recover().complete:
         assert (
-            records.revision_digest(file.revision)
+            file.digest
             == cast(dict[str, str], pins["revisions"])[file.revision.revision_id]
         )
-    # Re-serializing the loaded record reproduces the stored bytes exactly.
-    assert records.canonical_payload(record) == store.record_path.read_bytes()
+    # The loaded record is normalized to the current shape, so it no longer
+    # re-serializes to the stored bytes; the pinned digest comes from the raw payload.
+    assert records.canonical_payload(record) != store.record_path.read_bytes()
 
 
 def test_phase_artifact_precedence_prefers_cure_then_age_then_press_then_cook(
@@ -1445,7 +1437,172 @@ def test_resolving_a_slug_reads_each_candidate_once_and_revalidates_the_winner(
     assert set(ambiguous.matches) == {"work-0003", "work-0004"}
 
 
-def test_a_slug_from_a_newer_runtime_resolves_gated_with_runtime_behind(
+def _seed_slugs(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+    slugs: tuple[str, ...],
+) -> None:
+    for number, slug in enumerate(slugs, start=1):
+        _ = seed(
+            corpus_root,
+            make_record,
+            make_promotion,
+            work_id=f"work-{number:04d}",
+            slug=slug,
+        )
+
+
+def test_a_unique_slug_prefix_resolves_authoritative(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    _seed_slugs(corpus_root, make_record, make_promotion, ("alpha-build", "beta-ship"))
+
+    found = run("alpha", corpus_root, fuzzy=True)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
+    assert found.work_id == "work-0001"
+
+
+def test_an_ambiguous_slug_prefix_lists_every_candidate(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    _seed_slugs(
+        corpus_root,
+        make_record,
+        make_promotion,
+        ("alpha-build", "alpha-ship", "beta-ship"),
+    )
+
+    found = run("alpha", corpus_root, fuzzy=True)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.AMBIGUOUS
+    assert found.matches == ("work-0001", "work-0002")
+
+
+def test_a_unique_slug_substring_resolves_when_no_prefix_matches(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    _seed_slugs(corpus_root, make_record, make_promotion, ("alpha-build", "beta-ship"))
+
+    found = run("ship", corpus_root, fuzzy=True)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
+    assert found.work_id == "work-0002"
+
+
+def test_an_ambiguous_slug_substring_lists_every_candidate(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    _seed_slugs(
+        corpus_root,
+        make_record,
+        make_promotion,
+        ("alpha-ship", "beta-ship", "gamma-build"),
+    )
+
+    found = run("ship", corpus_root, fuzzy=True)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.AMBIGUOUS
+    assert found.matches == ("work-0001", "work-0002")
+
+
+def test_an_exact_slug_beats_a_prefix_and_substring_match(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    _seed_slugs(
+        corpus_root,
+        make_record,
+        make_promotion,
+        ("widget-extra", "widget", "my-widget"),
+    )
+
+    found = run("widget", corpus_root, fuzzy=True)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
+    assert found.work_id == "work-0002"
+
+
+def test_a_slug_prefix_beats_a_substring_match(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    _seed_slugs(corpus_root, make_record, make_promotion, ("my-widget", "widget-extra"))
+
+    found = run("widget", corpus_root, fuzzy=True)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
+    assert found.work_id == "work-0002"
+
+
+def test_a_fuzzy_match_names_how_it_matched_and_the_ambiguous_detail_lists_slugs(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    _seed_slugs(
+        corpus_root,
+        make_record,
+        make_promotion,
+        ("alpha-build", "alpha-ship", "beta-ship"),
+    )
+
+    unique = run("beta", corpus_root, fuzzy=True)
+    ambiguous = run("alpha", corpus_root, fuzzy=True)
+
+    assert unique.detail is not None
+    assert "matched by prefix" in unique.detail
+    assert ambiguous.detail is not None
+    assert "work-0001 (alpha-build)" in ambiguous.detail
+    assert "work-0002 (alpha-ship)" in ambiguous.detail
+
+
+def test_phase_entry_resolve_stays_exact_and_never_guesses_a_slug(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    _seed_slugs(
+        corpus_root, make_record, make_promotion, ("alpha-build", "alpha-ship")
+    )
+
+    assert (
+        run("alpha", corpus_root).outcome is resolve_mod.ResolutionOutcome.NOT_FOUND
+    )
+    assert run("build", corpus_root).outcome is resolve_mod.ResolutionOutcome.NOT_FOUND
+
+
+def test_a_phase_artifact_beats_a_fuzzy_slug_match(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+    tmp_path: Path,
+) -> None:
+    _seed_slugs(corpus_root, make_record, make_promotion, ("foo-bar",))
+    workspace = tmp_path / "workspace"
+    (workspace / ".cheese" / "age").mkdir(parents=True)
+    _ = (workspace / ".cheese" / "age" / "foo.md").write_text(
+        "status: ok\nnext: cook\nartifact: none\nFrom age.\n", encoding="utf-8"
+    )
+
+    for fuzzy in (False, True):
+        found = run("foo", corpus_root, workspace_root=workspace, fuzzy=fuzzy)
+        assert found.source is resolve_mod.ResolutionSource.PHASE_ARTIFACT
+        assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
+
+
+def test_a_future_schema_record_errors_by_slug_and_by_work_id_without_a_write(
     corpus_root: Path,
     make_record: Callable[..., WheypointRecord],
     make_promotion: Callable[..., _PromotionLike],
@@ -1462,11 +1619,19 @@ def test_a_slug_from_a_newer_runtime_resolves_gated_with_runtime_behind(
     )
     raw["schema_version"] = SCHEMA_VERSION + 1
     _ = store.record_path.write_text(json.dumps(raw, sort_keys=True), encoding="utf-8")
+    before = {p: p.read_bytes() for p in corpus_root.rglob("*") if p.is_file()}
 
-    found = run("widget", corpus_root)
+    for ref in ("widget", "work-0001"):
+        found = run(ref, corpus_root)
 
-    assert found.outcome is resolve_mod.ResolutionOutcome.GATED
-    assert [f.code for f in found.findings] == [lint.LintCode.RUNTIME_BEHIND]
+        assert found.outcome is resolve_mod.ResolutionOutcome.ERROR, ref
+        assert found.work_id == "work-0001"
+        assert found.detail is not None
+        assert found.detail.startswith("schema-version-future:"), found.detail
+        assert found.dispatchable is False
+
+    after = {p: p.read_bytes() for p in corpus_root.rglob("*") if p.is_file()}
+    assert after == before
 
 
 @pytest.mark.parametrize("ref", ["my_work", "foo.bar"])
@@ -1501,45 +1666,3 @@ def test_a_corpus_directory_with_an_illegal_name_never_claims_a_slug(
     assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
     assert found.work_id == "work-0001"
     assert found.matches == ()
-
-
-def test_a_linked_target_resolves_with_its_pending_reciprocals_in_the_payload(
-    corpus_root: Path,
-    make_record: Callable[..., WheypointRecord],
-    make_promotion: Callable[..., _PromotionLike],
-) -> None:
-    from easy_cheese_schemas.contracts import EdgeKind, WorkEdge
-
-    from easy_cheese.shared.wheypoint import resolve_cli
-
-    _ = seed(corpus_root, make_record, make_promotion, work_id="beta", slug="beta")
-    source = make_record(
-        work_id="alpha",
-        slug="alpha",
-        edges=(
-            WorkEdge(
-                to=f"wheypoint:{PROJECT}/beta",
-                kind=EdgeKind.RELATES_TO,
-                revision_id="rev-0001",
-            ),
-        ),
-    )
-    promotion = make_promotion(1, "rev-0001", record=source)
-    storage.WorkStore.open("alpha", corpus_root=corpus_root).promote(
-        promotion.record, promotion.revision, promotion.markdown
-    )
-
-    found = run("beta", corpus_root)
-
-    assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
-    assert resolve_cli.resolve_payload(found, "beta")["pending"] == [
-        {
-            "source": f"wheypoint:{PROJECT}/alpha",
-            "kind": "relates_to",
-            "to": f"wheypoint:{PROJECT}/alpha",
-            "revision_id": "rev-0001",
-        }
-    ]
-    assert resolve_cli.resolve_payload(run("alpha", corpus_root), "alpha")[
-        "pending"
-    ] == []

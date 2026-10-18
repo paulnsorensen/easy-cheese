@@ -2,7 +2,7 @@
 
 Schema (canonical rules: skills/cheese/references/handback-contract.md):
 
-    status: <one of easy_cheese_schemas.phase_contracts.HANDBACK_STATUSES>
+    status: <one of easy_cheese_schemas.handback_status.HANDBACK_STATUSES>
     next: <skill-name> | done
     mode: parallel                            (optional keyed line)
     artifact: <path-to-prior-report-if-any>
@@ -27,11 +27,11 @@ from typing import Annotated
 
 import fromargs
 
-from easy_cheese_schemas.handback_status import require_single_line
-from easy_cheese_schemas.phase_contracts import (
+from easy_cheese_schemas.handback_status import (
     StatusError,
     parse_status_field,
     render_status_field,
+    require_single_line,
     status_disposition,
 )
 
@@ -42,7 +42,7 @@ CHAIN_ONLY: frozenset[str] = frozenset({"--auto"})
 
 @dataclass(frozen=True, init=False)
 class HandoffSlug:
-    status: str  # a name from phase_contracts.HANDBACK_STATUSES
+    status: str  # a name from handback_status.HANDBACK_STATUSES
     reason: str | None  # the one-line reason every non-`ok` status carries
     next_skill: str  # bare skill name (no leading slash) or "done"
     artifact: str | None
@@ -265,7 +265,7 @@ def render(
     Parameters
     ----------
     status
-        Handback status; see phase_contracts.status_vocabulary().
+        Handback status; see handback_status.status_vocabulary().
     next_skill
         Next skill name (or 'done').
     orientation

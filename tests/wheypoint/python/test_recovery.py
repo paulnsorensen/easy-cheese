@@ -193,3 +193,54 @@ def test_cleanup_read_failure_preserves_artifact(
         )
 
     assert artifact_path.read_bytes() == b"preserve this artifact"
+
+
+def test_racing_commit_refuses_without_retry_and_leaves_record_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    corpus_root, _, project_key = _roots(tmp_path)
+    intent = _intent()
+    artifact_path = tmp_path / "cook" / "checkpoint.md"
+    rival = CheckpointIntent(
+        work_id=intent.work_id,
+        orientation="A rival writer got there first.",
+        working_context=["src/workflow.py"],
+        notes="Rival checkpoint.",
+        next=NextMove.COOK,
+        artifact="other/rival.md",
+        artifact_links=[ArtifactLink(path="other/rival.md")],
+    )
+    real_commit = cast(Callable[..., object], recovery.commit.commit)
+    raced = False
+
+    def commit_after_rival(delta: WheypointDelta, **kwargs: object) -> object:
+        nonlocal raced
+        if not raced:
+            raced = True
+            _ = recovery.persist_checkpoint(
+                rival,
+                artifact_path=tmp_path / "other" / "rival.md",
+                artifact_payload=b"rival payload",
+                repository_root=tmp_path,
+                corpus_root=corpus_root,
+                project_key=project_key,
+            )
+        return real_commit(delta, **kwargs)
+
+    monkeypatch.setattr(recovery.commit, "commit", commit_after_rival)
+
+    with pytest.raises(recovery.commit.GenesisConflictError):
+        _ = recovery.persist_checkpoint(
+            intent,
+            artifact_path=artifact_path,
+            artifact_payload=b"loser payload",
+            repository_root=tmp_path,
+            corpus_root=corpus_root,
+            project_key=project_key,
+        )
+
+    record = storage.WorkStore.open(intent.work_id, corpus_root=corpus_root).read_record()
+    assert record is not None
+    assert record.revision_number == 1
+    assert record.orientation == "A rival writer got there first."
+    assert not artifact_path.exists()
