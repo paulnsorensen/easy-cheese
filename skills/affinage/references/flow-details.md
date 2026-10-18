@@ -1,6 +1,6 @@
 # Flow command and reason details
 
-Use this file for `## Flow` steps 2, 5, 6, 7, 10, and 13.
+Use this file for `## Flow` steps 2, 3, 5, 6, 7, 10, and 13.
 It gives exact commands, exit codes, and grading rules.
 
 ## Step 2 — Fetch PR status
@@ -18,6 +18,17 @@ Each failed check summary includes approximately 10 final log lines.
   Exit 4 identifies a PR or API error.
   Exit 2 identifies a missing `gh` binary.
   Write `status: halt: pr-status-unavailable` and stop.
+
+## Step 3 — Check out the PR
+
+Compare `git branch --show-current` with the PR head from `gh pr view <pr> --json headRefName`.
+
+- **Same branch.** `gh pr checkout <pr>` fast-forwards it with `git merge --ff-only`.
+  Skip the checkout after the merge-conflict path.
+  Git refuses that merge while the uncommitted `/melt` merge leaves `MERGE_HEAD`.
+- **Different branch.** Run `git status --porcelain` first.
+  Git carries uncommitted edits across a branch switch, so they would reach terminal `/plate`.
+  Any output stops with `status: halt: pr-checkout-dirty-tree`.
 
 ## Step 5 — Thread state
 

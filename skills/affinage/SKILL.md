@@ -94,7 +94,7 @@ Read `references/flow-details.md` for exact commands, exit codes, and grading re
 3. **Check out the PR.** Run `gh pr checkout <pr>`.
    The fresh review and `/cure` read the PR head from the working tree.
    Skip this step when `## Merge-conflict resolution` already checked out the PR.
-   A second checkout fails while the uncommitted `/melt` merge is in progress.
+   Before a branch switch, stop with `status: halt: pr-checkout-dirty-tree` on a dirty tree.
    With `--safe`, ask before the checkout.
    A failed checkout stops with `status: halt: pr-checkout-failed`.
 4. **Fetch comments.** Fetch inline threads from `pulls/<pr>/comments`.
@@ -288,7 +288,7 @@ The gate therefore runs once at the publication boundary.
 
 Read each affinage reference when its trigger applies:
 
-- `references/flow-details.md` — read when you run Flow steps 2, 5, 6, 7, 10, or 13.
+- `references/flow-details.md` — read when you run Flow steps 2, 3, 5, 6, 7, 10, or 13.
 - `references/merge-conflict.md` — read when `pr-status` reports a conflicting or dirty merge state.
 - `references/report-template.md` — read when you write the report at Flow step 8.
 - `references/handoff-templates.md` — read when you render the cure selection gate or the reply gate.

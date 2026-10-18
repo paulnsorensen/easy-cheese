@@ -99,8 +99,17 @@ def test_checkout_precedes_every_working_tree_read() -> None:
         "Skip this step when `## Merge-conflict resolution` already checked out the PR."
         in skill
     )
+    # A branch switch keeps non-overlapping uncommitted edits, which would then
+    # reach terminal /plate inside the PR.
+    assert (
+        "Before a branch switch, stop with `status: halt: pr-checkout-dirty-tree`"
+        in skill
+    )
     flow = _read(REFERENCES / "flow-details.md")
     assert "Step 3 checks out the PR, so use `origin/<base>...HEAD`." in flow
+    step3 = flow.split("## Step 3 — Check out the PR", 1)[1].split("\n## ", 1)[0]
+    assert "Git refuses that merge while the uncommitted `/melt` merge leaves `MERGE_HEAD`." in step3
+    assert "Any output stops with `status: halt: pr-checkout-dirty-tree`." in step3
 
 
 def test_fresh_review_follows_the_thread_count_it_consumes() -> None:
