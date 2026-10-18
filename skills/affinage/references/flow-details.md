@@ -1,6 +1,6 @@
 # Flow command and reason details
 
-Use this file for `## Flow` steps 2, 3, 5, 6, 9, and 11.
+Use this file for `## Flow` steps 2, 3, 5, 6, 7, 10, and 13.
 It gives exact commands, exit codes, and grading rules.
 
 ## Step 2 — Fetch PR status
@@ -19,24 +19,16 @@ Each failed check summary includes approximately 10 final log lines.
   Exit 2 identifies a missing `gh` binary.
   Write `status: halt: pr-status-unavailable` and stop.
 
-## Step 3 — Fresh review
+## Step 3 — Check out the PR
 
-Score the PR diff with the `review-surface` command.
-Run `python3 skills/affinage/scripts/affinage.pyz review-surface --repo . <base>...HEAD`.
-Use the complete PR range against its base branch.
-After checkout, use `origin/<base>...HEAD`.
-Do not use the bare `HEAD` default because it scores only uncommitted changes.
+Compare `git branch --show-current` with the PR head from `gh pr view <pr> --json headRefName`.
 
-Build the evidence-bearing review context described in `../../age/references/fan-out.md`.
-Include all changed paths, even when their workload weight is zero.
-Use `entry="affinage"`, `comments=<unresolved-thread-count>`, and `ci_class=<"passing"|"failing"|"red"|"flaky"|null>` alongside `context`.
-The router preserves comment-count and CI workload escalation.
-Use normal review effort unless the user explicitly selects quick or deep.
-
-Run `python3 skills/affinage/scripts/affinage.pyz age-route <request.json>`.
-The command reads the contextual request and emits a deterministic subject plan.
-Pass the complete plan and its evidence to `/age`, not the old dimension-lens tuple.
-Then treat each `/age` finding as an additional claim.
+- **Same branch.** `gh pr checkout <pr>` fast-forwards it with `git merge --ff-only`.
+  Skip the checkout after the merge-conflict path.
+  Git refuses that merge while the uncommitted `/melt` merge leaves `MERGE_HEAD`.
+- **Different branch.** Run `git status --porcelain` first.
+  Git carries uncommitted edits across a branch switch, so they would reach terminal `/plate`.
+  Any output stops with `status: halt: pr-checkout-dirty-tree`.
 
 ## Step 5 — Thread state
 
@@ -54,7 +46,27 @@ A thread is answered when it is resolved.
 A thread is also answered when the handle wrote any comment after the root comment.
 A bot acknowledgement after the handle's reply does not reopen the thread.
 
-## Step 6 — Grading rules
+## Step 6 — Fresh review
+
+Score the PR diff with the `review-surface` command.
+Run `python3 skills/affinage/scripts/affinage.pyz review-surface --repo . <base>...HEAD`.
+Use the complete PR range against its base branch.
+Step 3 checks out the PR, so use `origin/<base>...HEAD`.
+Do not use the bare `HEAD` default because it scores only uncommitted changes.
+
+Build the evidence-bearing review context described in `../../age/references/fan-out.md`.
+Include all changed paths, even when their workload weight is zero.
+Use `entry="affinage"`, `comments=<unresolved-thread-count>`, and `ci_class=<"passing"|"failing"|"red"|"flaky"|null>` alongside `context`.
+Take the unresolved thread count from step 5.
+The router preserves comment-count and CI workload escalation.
+Use normal review effort unless the user explicitly selects quick or deep.
+
+Run `python3 skills/affinage/scripts/affinage.pyz age-route <request.json>`.
+The command reads the contextual request and emits a deterministic subject plan.
+Pass the complete plan and its evidence to `/age`, not the old dimension-lens tuple.
+Then treat each `/age` finding as an additional claim.
+
+## Step 7 — Grading rules
 
 - Grade every failed check, including build, compile, lint, type, and test failures.
 - Send failed checks to `/cure` like test failures.
@@ -82,9 +94,9 @@ Use these report sections:
   Defer a large claim.
 - Put a claim that the current head already fixes in `## Already-addressed`.
   Cite the fixing commit and the line that proves the fix.
-  Do not draft a reply. Resolve the thread at step 11.
+  Do not draft a reply. Resolve the thread at step 13.
 
-## Step 9 — Reply rules
+## Step 10 — Reply rules
 
 Post approved replies with `python3 skills/affinage/scripts/affinage.pyz post-reply`.
 Do not post with `gh api` because it omits the required attribution.
@@ -100,7 +112,7 @@ Do not post with `gh api` because it omits the required attribution.
 - Post the explicit follow-up note when the user declines.
 - Do not reply to `[from-check:<job>]` or `[from-age:<dimension>]` findings.
 
-## Step 11 — Resolve already-addressed threads
+## Step 13 — Resolve already-addressed threads
 
 Resolve each approved `## Already-addressed` thread with its step 5 node ID:
 
