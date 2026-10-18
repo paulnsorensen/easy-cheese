@@ -22,7 +22,7 @@ reach a teammate or a second machine.
 | --- | --- | --- | --- |
 | Account per CLI user | Graphite account | None | None beyond GitHub |
 | User-scope auth | `gt auth --token <token>` | `gh` connector or a token | `gh auth login` |
-| Repository config | `gt init` writes `.graphite_repo_config` in the git dir | `git town init` writes `git-town.toml` | GitHub enables the repository |
+| Repository config | `gt init` writes `.graphite_repo_config` in the git dir | `git town init` writes `git-town.toml` | None; GitHub holds the stack state |
 | Config scope | Clone | Shared, after commit | Shared, server-side |
 | Init on each clone | Yes | No | No |
 | Reviewer tooling | None | None | None |
@@ -47,8 +47,9 @@ organization-repository access with Graphite before the team adopts it.
 
 Git Town needs no account and no server.
 
-1. One maintainer runs the `git town init` wizard once and saves to a
-   config file. The maintainer then commits `git-town.toml`.
+1. One maintainer runs the interactive `git town init` wizard once and saves
+   to a config file. The maintainer then commits `git-town.toml`. An agent
+   never runs the wizard.
 2. On each machine, each teammate installs `git-town` and sets forge access:
    `git config --global git-town.github-connector gh` reuses `gh` login.
    A token in `git-town.github-token` or `GIT_TOWN_GITHUB_TOKEN` also works.
@@ -58,13 +59,13 @@ Keep forge tokens and the connector choice out of the committed file.
 
 ## `gh stack`
 
-`gh stack` is a GitHub preview. Enablement is per repository.
+Stacked pull requests are a GitHub public preview. GitHub opened the preview
+to all github.com repositories on 2026-07-30, so no access request is needed.
 
-1. A maintainer requests access at [gh.io/stacksbeta](https://gh.io/stacksbeta).
-   GitHub enables the repository. All collaborators then have access.
-2. On each machine, run `gh extension install github/gh-stack` and
+1. On each machine, run `gh extension install github/gh-stack` and
    `gh auth login`.
-3. A clone needs no init. GitHub holds the authoritative stack state.
+2. A clone needs no init. GitHub holds the authoritative stack state.
 
-The enablement preflight in [`gh-stack.md`](gh-stack.md) reports whether the
-repository is enabled. Stacks cannot be driven from a fork.
+The enablement preflight in [`gh-stack.md`](gh-stack.md) still decides for
+this repository. A `404` means Stacked PRs is not available to it.
+Stacks cannot be driven from a fork.
