@@ -39,8 +39,10 @@ Press emits a halt only from that round number.
 
 - A correction runs at most 2 times for one attack. A third finding halts with `halt: correction-cap`.
 - A `coverage_gap` retries once. A second `coverage_gap` in one Cook run halts with `halt: coverage-gap`.
+- A Cook run allows 6 Press rounds in total, on the linear and fan paths. A round that does not end green after round 6 halts with `halt: press-round-limit`.
 
-Each halt reports `next: done`.
+In the linear path each halt reports `status: halt: <name>` and `next: done`.
+In the fan path the orchestrator blocks the curd and routes to Mold.
 Cook never publishes `next: press`.
 
 ## Report

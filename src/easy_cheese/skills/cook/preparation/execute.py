@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 from typing import cast
 
@@ -24,7 +24,7 @@ from easy_cheese.shared.remediation_artifacts import (
     path_component,
 )
 from easy_cheese.shared.fanout.remediation_store import scope_state_path
-from easy_cheese.shared.fanout.run_fan import PressDispatcher
+from easy_cheese.shared.fanout.run_fan import AcceptanceChecker, PressDispatcher
 
 from .fan_execute import execute_fan
 from ._types import CookExecutionOutcome
@@ -48,7 +48,9 @@ def execute_bound_plan(
     dispatch_writer: workflow.WriterDispatch,
     dispatch_review: workflow.ReviewDispatch,
     dispatch_diagnosis: workflow.DiagnosisDispatch,
+    dispatch_acceptance: AcceptanceChecker | None = None,
     dispatch_press: PressDispatcher | None = None,
+    non_behavior_curds: Collection[str] = (),
     evidence: Mapping[str, EvidenceRef] | None = None,
     runner_authorization_ref: ArtifactRef | None = None,
     runner_response_ref: ArtifactRef | None = None,
@@ -99,7 +101,9 @@ def execute_bound_plan(
             evidence=evidence,
             selected=selected,
             execution_id=execution_id,
+            dispatch_acceptance=dispatch_acceptance,
             dispatch_press=dispatch_press,
+            non_behavior_curds=non_behavior_curds,
             results=reusable,
         )
         execution_results: workflow.ExecutionResults = ((), fan_outcome.results)

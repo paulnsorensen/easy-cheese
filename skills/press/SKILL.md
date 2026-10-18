@@ -137,12 +137,13 @@ Map the outcome to the terminal preamble:
 | second `coverage_gap` in one Cook run | `halt: coverage-gap` | `done` |
 | invalid evidence or production change (`blocked`) | `halt: <reason>` | `done` |
 | third finding on the same attack | `halt: correction-cap` | `done` |
+| sixth Press round that does not end green | `halt: press-round-limit` | `done` |
 
 `next: done` is terminal. It never starts another phase.
 
 A `next: cook` handoff is a Cook correction (`correction = true`), for a finding or a `coverage_gap`. Press then replays or reruns the same attack.
 
-Cook counts the rounds. Cook passes the round number and attack identity in the dispatch. Press emits `halt: correction-cap` or `halt: coverage-gap` only from that round number: at most 2 corrections for the same attack and one `coverage_gap` retry. A manual `/press <slug>` run reads prior rounds from `.cheese/press/<slug>.md`.
+Cook counts the rounds. Cook passes the round number and attack identity in the dispatch. Press emits `halt: correction-cap` or `halt: coverage-gap` only from that round number. A manual `/press <slug>` run reads prior rounds from `.cheese/press/<slug>.md`. `references/gap-analysis.md` holds the caps, including the 6-round `press-round-limit`.
 
 ## Handoff
 

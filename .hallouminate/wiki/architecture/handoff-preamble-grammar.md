@@ -28,7 +28,7 @@ It also exits `3` when a payload schema does not match the route, or when a tran
 Two consequences follow:
 
 - Affinage and Pasteurize are not source phases in `_ROUTES`. They cannot use the canonical writer until someone adds a route; their handoffs stay ad hoc Markdown and must still follow the key rules above.
-- A same-phase loop is not expressible. `press -> press` exits `3`, and `next: press` still makes Cook's router dispatch Age. The Press corrective loop therefore stays a typed local continuation (`src/easy_cheese/shared/fanout/press_route.py`, `outcome` plus `repair_cycles` 0-2) outside the route table, per [outer-tdd-gates-003](../adr/outer-tdd-gates-003.md).
+- A same-phase loop is not expressible. `press -> press` exits `3`. The table declares no `cook -> press` route: Cook owns the Press loop and counts its rounds, and the fan orchestrator dispatches Press per curd (`src/easy_cheese/shared/fanout/run_fan.py`). `press -> cook` carries a Press finding or `coverage_gap` back to Cook, per [acceptance-demonstration-press-fold-001](../adr/acceptance-demonstration-press-fold-001.md), which supersedes [outer-tdd-gates-003](../adr/outer-tdd-gates-003.md).
 
 The table replaced a build-compiled registry and the per-skill `phase-contract.yaml` declarations (PR #772).
 The repository no longer publishes the `phase-contract` schema root.

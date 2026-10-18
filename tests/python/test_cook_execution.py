@@ -14,8 +14,13 @@ import attrs
 import pytest
 
 import easy_cheese.shared.workflow as workflow
-from easy_cheese.shared.fanout.press_types import PressGateResult
-from easy_cheese.shared.fanout.run_fan import PressDispatcher
+from easy_cheese.shared.fanout.acceptance_types import (
+    AcceptanceCheckResult,
+    PressOutcome,
+    PressRequest,
+    PressRoundResult,
+)
+from easy_cheese.shared.fanout.run_fan import AcceptanceChecker, PressDispatcher
 from easy_cheese.shared.publication import PublicationError, atomic_write
 from easy_cheese.skills.cook import execute_bound_plan
 from easy_cheese_schemas import (
@@ -66,12 +71,17 @@ from easy_cheese_schemas.mold_cook import MoldCookCoverage
 from easy_cheese_schemas.schema_runtime import ContractValidationError
 
 
+def _green_press(_curd: object, _request: PressRequest) -> PressRoundResult:
+    return PressRoundResult(PressOutcome.GREEN)
+
+
 class ExecuteBoundPlanKwargs(TypedDict):
     artifact_root: str | Path
     repository_root: str | Path
     dispatch_writer: workflow.WriterDispatch
     dispatch_review: workflow.ReviewDispatch
     dispatch_diagnosis: workflow.DiagnosisDispatch
+    dispatch_acceptance: NotRequired[AcceptanceChecker | None]
     dispatch_press: NotRequired[PressDispatcher | None]
     evidence: NotRequired[Mapping[str, EvidenceRef] | None]
 
@@ -236,6 +246,7 @@ def _execute(
     dispatch_writer: workflow.WriterDispatch,
     dispatch_review: workflow.ReviewDispatch,
     dispatch_diagnosis: workflow.DiagnosisDispatch,
+    dispatch_acceptance: AcceptanceChecker | None = None,
     dispatch_press: PressDispatcher | None = None,
     evidence: Mapping[str, EvidenceRef] | None = None,
 ):
@@ -250,6 +261,7 @@ def _execute(
         dispatch_writer=dispatch_writer,
         dispatch_review=dispatch_review,
         dispatch_diagnosis=dispatch_diagnosis,
+        dispatch_acceptance=dispatch_acceptance,
         dispatch_press=dispatch_press,
         evidence=evidence,
     )
@@ -451,7 +463,7 @@ def test_execute_bound_plan_keeps_exact_partial_remainder(
         repository_root=tmp_path,
         dispatch_writer=_writer,
         dispatch_review=_review,
-        dispatch_diagnosis=_diagnosis,
+        dispatch_diagnosis=_diagnosis, dispatch_press=_green_press,
         evidence={"result.txt": evidence},
     )
 
@@ -483,7 +495,7 @@ def _route_fan_setup(
     calls: list[str] = []
     review_subjects: list[ArtifactRef] = []
     review_evidence: list[tuple[str, ...]] = []
-    press_evidence = attrs.evolve(evidence, evidence_id="press-gate")
+    acceptance_evidence = attrs.evolve(evidence, evidence_id="acceptance-gate")
 
     def traced_review(request: object) -> ReviewResultWriterView:
         review_request = cast("ReviewRequest", request)
@@ -502,30 +514,31 @@ def _route_fan_setup(
     import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
     monkeypatch.setattr(fan_execute, "run_fan_locked", traced_run_fan)
     return (
-        fixture, evidence, press_evidence, calls, review_subjects, review_evidence, traced_review
+        fixture, evidence, acceptance_evidence, calls, review_subjects, review_evidence, traced_review
     )
 
 
 def test_execute_bound_fan_plan_routes_through_run_fan(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fixture, evidence, press_evidence, calls, review_subjects, review_evidence, traced_review = (
+    fixture, evidence, acceptance_evidence, calls, review_subjects, review_evidence, traced_review = (
         _route_fan_setup(tmp_path, monkeypatch)
     )
     result = _execute(
         fixture, artifact_root=tmp_path / "fan", repository_root=tmp_path,
         dispatch_writer=_writer, dispatch_review=traced_review,
         dispatch_diagnosis=_diagnosis,
-        dispatch_press=lambda _scope, _round: PressGateResult(
-            True, "baseline-1", evidence=(press_evidence,)
+        dispatch_acceptance=lambda _scope, _round: AcceptanceCheckResult(
+            True, "baseline-1", evidence=(acceptance_evidence,)
         ),
+        dispatch_press=_green_press,
         evidence={"result.txt": evidence},
     )
     assert calls == ["run_fan"]
     assert result.completed_curds == ("root", "leaf")
     assert len(review_subjects) == 3
     assert review_subjects[-1].artifact_id == "cook-plan/postmerge-subject"
-    assert "press-gate" in review_evidence[-1]
+    assert "acceptance-gate" in review_evidence[-1]
 
 
 def _install_manifest_write_spy(
@@ -589,13 +602,15 @@ def test_execute_fan_rejects_concurrent_resume_before_manifest_write(
     kwargs: ExecuteBoundPlanKwargs = {
         "artifact_root": root, "repository_root": tmp_path,
         "dispatch_writer": _writer, "dispatch_review": _review,
-        "dispatch_diagnosis": _diagnosis, "dispatch_press": _passing_press(evidence),
+        "dispatch_diagnosis": _diagnosis, "dispatch_acceptance": _passing_acceptance(evidence),
+        "dispatch_press": _green_press,
         "evidence": {"result.txt": evidence},
     }
     result = _execute(
         fixture, artifact_root=root, repository_root=tmp_path,
         dispatch_writer=writer, dispatch_review=_review,
-        dispatch_diagnosis=_diagnosis, dispatch_press=_passing_press(evidence),
+        dispatch_diagnosis=_diagnosis, dispatch_acceptance=_passing_acceptance(evidence),
+        dispatch_press=_green_press,
         evidence={"result.txt": evidence},
     )
     assert result.fan_next_step == "done"
@@ -645,7 +660,7 @@ def test_execute_fan_stops_closed_when_state_publication_fails(
             repository_root=tmp_path,
             dispatch_writer=_writer,
             dispatch_review=fail_review,
-            dispatch_diagnosis=fail_diagnosis,
+            dispatch_diagnosis=fail_diagnosis, dispatch_press=_green_press,
             evidence={"result.txt": evidence},
         )
 
@@ -728,7 +743,8 @@ def test_execute_bound_fan_plan_runs_postmerge_cure_writer(tmp_path: Path) -> No
         dispatch_writer=_postmerge_writer(writer_calls),
         dispatch_review=_postmerge_review(review_calls, review_subjects),
         dispatch_diagnosis=_postmerge_diagnosis(diagnosis_calls),
-        dispatch_press=lambda _scope, _round: PressGateResult(True, "baseline-1", evidence=(evidence,)),
+        dispatch_acceptance=lambda _scope, _round: AcceptanceCheckResult(True, "baseline-1", evidence=(evidence,)),
+        dispatch_press=_green_press,
         evidence={"result.txt": evidence},
     )
     assert result.fan_next_step == "done"
@@ -800,7 +816,7 @@ def test_execute_fan_writer_failure_blocks_without_review_or_diagnosis(tmp_path:
         events.append("diagnosis")
         raise AssertionError("diagnosis must not run")
 
-    result = _execute(fixture, artifact_root=tmp_path / "writer-failure", repository_root=tmp_path, dispatch_writer=fail_writer, dispatch_review=review, dispatch_diagnosis=diagnosis, evidence={"result.txt": evidence})
+    result = _execute(fixture, artifact_root=tmp_path / "writer-failure", repository_root=tmp_path, dispatch_writer=fail_writer, dispatch_review=review, dispatch_diagnosis=diagnosis, dispatch_press=_green_press, evidence={"result.txt": evidence})
     assert result.fan_next_step == "mold"
     assert not result.whole_task_complete
     assert events == []
@@ -892,7 +908,7 @@ def test_execute_bound_fan_plan_recovers_writer_budget(
         repository_root=tmp_path,
         dispatch_writer=writer,
         dispatch_review=_review,
-        dispatch_diagnosis=_diagnosis,
+        dispatch_diagnosis=_diagnosis, dispatch_press=_green_press,
         evidence={"result.txt": evidence},
     )
 
@@ -962,7 +978,7 @@ def test_execute_bound_fan_plan_preserves_checkpoint_on_retry_failure(
         repository_root=tmp_path,
         dispatch_writer=writer,
         dispatch_review=_review,
-        dispatch_diagnosis=_diagnosis,
+        dispatch_diagnosis=_diagnosis, dispatch_press=_green_press,
         evidence={"result.txt": evidence},
     )
 
@@ -982,12 +998,12 @@ def test_execute_bound_fan_plan_preserves_checkpoint_on_retry_failure(
     assert curd_result.deliverables[0].digest == _digest(b"first repair\n")
 
 
-def _passing_press(evidence: EvidenceRef) -> PressDispatcher:
+def _passing_acceptance(evidence: EvidenceRef) -> AcceptanceChecker:
 
-    def press(_scope: RemediationScopeKey, _round: int) -> PressGateResult:
-        return PressGateResult(True, "baseline-1", evidence=(evidence,))
+    def acceptance(_scope: RemediationScopeKey, _round: int) -> AcceptanceCheckResult:
+        return AcceptanceCheckResult(True, "baseline-1", evidence=(evidence,))
 
-    return press
+    return acceptance
 
 
 def test_execute_bound_plan_resumes_from_persisted_results(
@@ -999,7 +1015,7 @@ def test_execute_bound_plan_resumes_from_persisted_results(
     )
     evidence = EvidenceRef(evidence_id="result.txt", kind=EvidenceKind.SOURCE, artifact=result_artifact)
     fixture = _full_fixture(tmp_path / "resume", coverage_ids=("root", "leaf"), partial=False)
-    counts = {"cook": 0, "age": 0, "press": 0}
+    counts = {"cook": 0, "age": 0, "acceptance": 0}
 
     def writer(context: Mapping[str, object]) -> CurdResultWriterView:
         counts["cook"] += 1
@@ -1009,14 +1025,15 @@ def test_execute_bound_plan_resumes_from_persisted_results(
         counts["age"] += 1
         return _review(request)
 
-    def press(scope: RemediationScopeKey, round_number: int) -> PressGateResult:
-        counts["press"] += 1
-        return _passing_press(evidence)(scope, round_number)
+    def acceptance(scope: RemediationScopeKey, round_number: int) -> AcceptanceCheckResult:
+        counts["acceptance"] += 1
+        return _passing_acceptance(evidence)(scope, round_number)
 
     kwargs: ExecuteBoundPlanKwargs = {
         "artifact_root": tmp_path / "resume", "repository_root": tmp_path,
         "dispatch_writer": writer, "dispatch_review": review,
-        "dispatch_diagnosis": _diagnosis, "dispatch_press": press,
+        "dispatch_diagnosis": _diagnosis, "dispatch_acceptance": acceptance,
+        "dispatch_press": _green_press,
         "evidence": {"result.txt": evidence},
     }
     first = _execute(fixture, **kwargs)
@@ -1113,7 +1130,7 @@ def test_execute_partial_coverage_routes_to_mold(tmp_path: Path) -> None:
     result = _execute(
         fixture, artifact_root=tmp_path / "partial-execution",
         repository_root=tmp_path, dispatch_writer=_writer,
-        dispatch_review=_review, dispatch_diagnosis=_diagnosis,
+        dispatch_review=_review, dispatch_diagnosis=_diagnosis, dispatch_press=_green_press,
         evidence={"result.txt": evidence},
     )
     assert result.fan_next_step == "mold"
@@ -1131,7 +1148,7 @@ def test_execute_persisted_stall_exposes_validated_remediation_request(
     result = _execute(
         fixture, artifact_root=tmp_path / "stall",
         repository_root=tmp_path, dispatch_writer=failing_writer,
-        dispatch_review=_review, dispatch_diagnosis=_diagnosis,
+        dispatch_review=_review, dispatch_diagnosis=_diagnosis, dispatch_press=_green_press,
     )
     assert result.fan_next_step == "mold"
     assert result.remediation_request_ref is not None
@@ -1156,7 +1173,8 @@ def _corrupt_resume_inputs(tmp_path: Path):
     kwargs: ExecuteBoundPlanKwargs = {
         "artifact_root": root, "repository_root": tmp_path,
         "dispatch_writer": _writer, "dispatch_review": _review,
-        "dispatch_diagnosis": _diagnosis, "dispatch_press": _passing_press(evidence),
+        "dispatch_diagnosis": _diagnosis, "dispatch_acceptance": _passing_acceptance(evidence),
+        "dispatch_press": _green_press,
         "evidence": {"result.txt": evidence},
     }
     _ = _execute(fixture, **kwargs)
@@ -1212,7 +1230,8 @@ def test_execute_rejects_missing_checkpoint_commit_marker(tmp_path: Path) -> Non
     kwargs: ExecuteBoundPlanKwargs = {
         "artifact_root": root, "repository_root": tmp_path,
         "dispatch_writer": _writer, "dispatch_review": _review,
-        "dispatch_diagnosis": _diagnosis, "dispatch_press": _passing_press(evidence),
+        "dispatch_diagnosis": _diagnosis, "dispatch_acceptance": _passing_acceptance(evidence),
+        "dispatch_press": _green_press,
         "evidence": {"result.txt": evidence},
     }
     _ = _execute(fixture, **kwargs)
@@ -1238,7 +1257,8 @@ def test_execute_rejects_invalid_checkpoint_commit_marker(tmp_path: Path) -> Non
     kwargs: ExecuteBoundPlanKwargs = {
         "artifact_root": root, "repository_root": tmp_path,
         "dispatch_writer": _writer, "dispatch_review": _review,
-        "dispatch_diagnosis": _diagnosis, "dispatch_press": _passing_press(evidence),
+        "dispatch_diagnosis": _diagnosis, "dispatch_acceptance": _passing_acceptance(evidence),
+        "dispatch_press": _green_press,
         "evidence": {"result.txt": evidence},
     }
     _ = _execute(fixture, **kwargs)
@@ -1277,7 +1297,8 @@ def _productive_cure_fixture(tmp_path: Path):
         "artifact_root": tmp_path / "awaiting", "repository_root": tmp_path,
         "dispatch_writer": writer, "dispatch_review": review,
         "dispatch_diagnosis": _diagnosis,
-        "dispatch_press": lambda _scope, _round: PressGateResult(
+        "dispatch_press": _green_press,
+        "dispatch_acceptance": lambda _scope, _round: AcceptanceCheckResult(
             True, "baseline-1", evidence=(evidence,)
         ),
         "evidence": {"result.txt": evidence},
@@ -1382,10 +1403,10 @@ def test_fan_context_path_isolated_by_scope_kind(tmp_path: Path) -> None:
     assert curd != postmerge
 
 
-def test_press_resume_requires_manifest_refs(tmp_path: Path) -> None:
+def test_acceptance_resume_requires_manifest_refs(tmp_path: Path) -> None:
     import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
 
-    loader = cast(Callable[..., tuple[object, ...]], getattr(fan_execute, "_load_persisted_press_results"))
+    loader = cast(Callable[..., tuple[object, ...]], getattr(fan_execute, "_load_persisted_acceptance_results"))
     with pytest.raises(TypeError):
         _ = loader(tmp_path, "run-1")
 
@@ -1422,7 +1443,8 @@ def test_manifest_reload_separates_curd_named_postmerge_from_postmerge(
     kwargs: ExecuteBoundPlanKwargs = {
         "artifact_root": root, "repository_root": tmp_path,
         "dispatch_writer": _writer, "dispatch_review": _review,
-        "dispatch_diagnosis": _diagnosis, "dispatch_press": _passing_press(evidence),
+        "dispatch_diagnosis": _diagnosis, "dispatch_acceptance": _passing_acceptance(evidence),
+        "dispatch_press": _green_press,
         "evidence": {"result.txt": evidence},
     }
     _ = _execute(fixture, **kwargs)
@@ -1430,11 +1452,11 @@ def test_manifest_reload_separates_curd_named_postmerge_from_postmerge(
     ids = _manifest_artifact_ids(root, run_id)
     assert f"{run_id}/curd/postmerge/state" in ids
     assert f"{run_id}/postmerge/postmerge/state" in ids
-    assert "postmerge-press-1" in ids
+    assert "postmerge-acceptance-1" in ids
     assert _execute(fixture, **kwargs).fan_next_step == "done"
-    assert "postmerge-press-1" in _manifest_artifact_ids(root, run_id)
+    assert "postmerge-acceptance-1" in _manifest_artifact_ids(root, run_id)
     assert _execute(fixture, **kwargs).fan_next_step == "done"
-    assert "postmerge-press-1" in _manifest_artifact_ids(root, run_id)
+    assert "postmerge-acceptance-1" in _manifest_artifact_ids(root, run_id)
 
 
 def _tracked_resume_setup(
@@ -1475,7 +1497,8 @@ def test_resume_accepts_writer_snapshot_then_rejects_external_edit(
     kwargs: ExecuteBoundPlanKwargs = {
         "artifact_root": artifact_root, "repository_root": root,
         "dispatch_writer": writer, "dispatch_review": _review,
-        "dispatch_diagnosis": _diagnosis, "dispatch_press": _passing_press(evidence),
+        "dispatch_diagnosis": _diagnosis, "dispatch_acceptance": _passing_acceptance(evidence),
+        "dispatch_press": _green_press,
         "evidence": {"result.txt": evidence},
     }
     _ = _execute(fixture, **kwargs)

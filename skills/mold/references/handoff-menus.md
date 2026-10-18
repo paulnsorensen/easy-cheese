@@ -16,7 +16,7 @@ After explicit Cook selection, render the branch selected by the sizing digest's
 
 **Non-decomposable, high-blast-radius specs (`decomposable: false`, verdict `high` only, `mode: linear`):**
 
-- **Run the full pipeline in fresh-context isolation** *(recommended)* — use the auto command. Behavior work continues `cook → press → age → cure → age → cure → age`; non-behavior work skips Press and continues `cook → age → cure → age → cure → age`.
+- **Run the full pipeline in fresh-context isolation** *(recommended)* — use the auto command. Behavior work continues `cook (Press loop) → age → cure → age → cure → age`; non-behavior work skips Press and continues `cook → age → cure → age → cure → age`.
 - **Implement manually, one phase at a time** — use the manual command.
 - **Compact and resume by hand** — dispatch none; clear context, then use the manual command. `/cheese --continue` scans phase handoff slugs, so a fresh spec must be resumed through its explicit path.
 - **Stop** — dispatch none; leave the spec for later.
