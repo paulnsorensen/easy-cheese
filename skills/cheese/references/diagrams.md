@@ -1,8 +1,33 @@
 # Diagram vocabulary
 
-Use this reference when a skill adds an architecture or flow diagram to a spec, a pull request body, or an explanation.
-The vocabulary comes from the [C4 model](https://c4model.com/).
+Use this reference when a skill adds an architecture, flow, data, or behavior diagram to a spec, a pull request body, a wiki page, or an explanation.
+The architecture vocabulary comes from the [C4 model](https://c4model.com/).
 C4 defines the abstractions and the zoom levels. It does not fix a notation, so draw C4 views in Mermaid.
+Copy a starting diagram from [`diagram-templates.md`](diagram-templates.md).
+
+## When to draw
+
+Work through this checklist before you write a spec Approach, a pull request body, or an architecture wiki page.
+Draw the diagram for each item that applies. Draw no diagram when no item applies.
+
+- [ ] The change spans two or more software systems that the organization owns. Draw a **System Landscape** view.
+- [ ] The change adds a user type or an external system that the whole system depends on. Draw a **System Context** view.
+- [ ] The change adds, removes, or rewires an application, a data store, a queue, or an external system. Draw a **Container** view.
+- [ ] The change moves a responsibility between components, or adds a component, inside one container. Draw a **Component** view.
+- [ ] The change adds, removes, or reorders messages between two or more elements. Draw a **sequence** diagram or a **Dynamic** view.
+- [ ] The change adds a queue, a retry, a callback, or a background job. Draw an **asynchronous sequence** diagram.
+- [ ] The change alters the handoff order between skills, agents, or sub-agents. Draw an **agent handoff sequence** diagram.
+- [ ] The change moves a container to a new runtime, host, cluster, region, or environment. Draw a **Deployment** view.
+- [ ] The change adds or alters tables, columns, keys, or relationships. Draw a **database** diagram.
+- [ ] The change adds a status field, a lifecycle, or a transition. Draw a **state** diagram.
+- [ ] A data or control flow crosses three or more modules. Draw a **flow** diagram.
+
+Draw no diagram for a small fix, a docs-only change, a test-only change, or a rename that keeps every boundary.
+Each artifact keeps its own diagram limit:
+
+- A spec opens Approach with one diagram. It adds one diagram for each other checklist item that applies.
+- A pull request body holds one diagram at most. Pick the item that a reviewer most needs. See the `/plate` body contract.
+- A `/mold` fork card shows the one view that the fork changes.
 
 ## Pick one view
 
@@ -10,11 +35,13 @@ Ask which question the reader has. Draw the one view that answers it.
 
 | Reader question | View | Mermaid form |
 | --- | --- | --- |
+| Which systems does the organization own, and how do they connect? | C4 System Landscape | `flowchart` |
 | Who uses the system, and which external systems does it depend on? | C4 System Context | `flowchart` |
 | Which runnable or deployable units exist, and how do they talk? | C4 Container | `flowchart` |
 | Which components inside one container change, and how do they connect? | C4 Component | `flowchart` |
-| In which order do messages move between elements? | C4 Dynamic | `sequenceDiagram` |
+| In which order do messages move between elements? | C4 Dynamic or UML sequence | `sequenceDiagram` |
 | Where does each container run? | C4 Deployment | `flowchart` with one `subgraph` per node |
+| Which tables, keys, and relationships exist? | entity relationship or UML tables | `erDiagram` or `classDiagram` |
 | How does data or control move through modules? | flow | `flowchart` |
 | Which states and transitions does one element have? | state | `stateDiagram-v2` |
 
@@ -44,6 +71,7 @@ A Component view also shows the containers and external systems that connect to 
 - Draw each relationship in one direction.
   Label it with its intent, and add the protocol or technology between containers.
 - Add a legend when a shape, a color, or a line style carries meaning.
+  Mermaid has no legend element, so put a one-line `Legend:` under the diagram.
 - Show only the elements that the change touches, plus their direct neighbors.
   Keep a diagram to 15 nodes or fewer.
 
@@ -56,27 +84,13 @@ A Component view also shows the containers and external systems that connect to 
 - Quote a label that holds punctuation.
 - Never use `end` as a node id. Use `<br>` for a line break.
 - Do not add theme or style directives.
+- Use these shapes: `[(...)]` for a data store, `[[...]]` for a queue, and `-.->` for an asynchronous message.
+- Do not start a label with `1.` because Mermaid can read it as a list. Write `(1)` instead.
 
-## Example
+## Templates
 
-This example is synthetic.
-
-```mermaid
-flowchart LR
-  Buyer["Buyer<br>[Person]"]
-  subgraph Shop["Shop [Software system]"]
-    Web["Storefront<br>[Container: React SPA]<br>Shows the cart"]
-    API["Orders API<br>[Container: Go service]<br>Places orders"]
-    DB[("Orders DB<br>[Container: PostgreSQL]<br>Stores orders")]
-  end
-  Pay["Payment provider<br>[Software system]<br>Charges cards"]
-  Buyer -->|"checks out"| Web
-  Web -->|"submits order<br>[JSON/HTTPS]"| API
-  API -->|"writes order<br>[SQL]"| DB
-  API -->|"charges card<br>[HTTPS]"| Pay
-```
-
-Title: `Container view: Shop checkout`.
+[`diagram-templates.md`](diagram-templates.md) holds one tested template for each view in the table above.
+It covers the C4 views that Structurizr draws, three sequence diagrams, two database diagrams, and a state diagram.
 
 ## Alternatives
 
