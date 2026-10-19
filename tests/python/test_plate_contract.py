@@ -312,6 +312,43 @@ def test_gh_stack_wrong_trunk_recovery_preserves_pr_identity_or_halts() -> None:
     assert "Do not create replacement PRs automatically" in flat
 
 
+def test_gh_stack_partly_merged_stack_recovery_reimports_and_restacks() -> None:
+    gh_stack = read("skills/plate/references/gh-stack.md")
+    assert "- [Partly merged native stack](#partly-merged-native-stack)" in gh_stack
+    recovery = gh_stack.split("## Partly merged native stack", maxsplit=1)[1].split(
+        "\n## ", maxsplit=1
+    )[0]
+    flat = " ".join(recovery.split())
+
+    # Stale local tracking: re-import the whole remote stack from its top PR.
+    assert "local stack composition differs from remote" in flat
+    assert "is already part of a stack" in flat
+    assert "guarded `gh stack unstack --local`" in flat
+    assert "`gh stack checkout <top-PR-URL>`" in flat
+    # `rebase` loses the base after a squash merge: restack manually.
+    assert "could not determine the previous base" in flat
+    assert "old head SHA" in flat
+    assert "before any change" in flat
+    assert "`git rebase --onto <new-parent> <old-parent-head-SHA> <branch>`" in flat
+    assert "bottom to top" in flat
+    assert "guarded `gh stack push --remote origin`" in flat
+    # The manual restack never resumes a provider rebase with bare Git.
+    assert "git rebase --continue" not in flat
+    assert "`git rebase --abort`" in flat
+    # A branch checked out in two worktrees belongs to the environment owner.
+    assert "checked out in multiple worktrees" in flat
+    assert "environment-owned" in flat
+
+    conflict = gh_stack.split("## Conflict recovery", maxsplit=1)[1].split(
+        "\n## ", maxsplit=1
+    )[0]
+    assert "[Partly merged native stack](#partly-merged-native-stack)" in conflict
+    lower_layer = gh_stack.split("### Update a lower layer", maxsplit=1)[1].split(
+        "\n### ", maxsplit=1
+    )[0]
+    assert "[Partly merged native stack](#partly-merged-native-stack)" in lower_layer
+
+
 def test_plate_stack_flow_is_per_layer_and_metadata_is_resolved() -> None:
     skill = read("skills/plate/SKILL.md")
     stacks = read("skills/plate/references/stacks.md")

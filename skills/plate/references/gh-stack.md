@@ -16,6 +16,7 @@ preflight reports `available`. Run every command from the repository root.
 - [Exit handling](#exit-handling)
 - [Conflict recovery](#conflict-recovery)
 - [Wrong-trunk recovery](#wrong-trunk-recovery)
+- [Partly merged native stack](#partly-merged-native-stack)
 - [Plate recipes](#plate-recipes)
 
 ## Inspect the installed command
@@ -200,6 +201,8 @@ Run `gh stack rebase --continue` or `gh stack rebase --abort`.
 Do not run `git rebase --continue`. The provider must update its recovery state.
 For modify conflicts, run `gh stack modify --continue` or
 `gh stack modify --abort`.
+This rule covers provider rebases. The manual restack in
+[Partly merged native stack](#partly-merged-native-stack) is a separate path.
 
 ## Wrong-trunk recovery
 
@@ -225,6 +228,36 @@ Preserve PR identity when the stack is safe to rebuild.
 If unstacking, re-adoption, PR identity, or final mapping differs from the
 snapshot, halt at `publish`. Do not create replacement PRs automatically.
 
+## Partly merged native stack
+
+Use this recovery when the bottom layers of an existing native stack were
+squash-merged and the open layers need an update.
+
+1. Save `gh stack view --json`, the remote stack response, and every PR's
+   number, base, head, and state. Record each layer's old head SHA before any
+   change.
+2. Re-import the stack when local tracking differs from the remote. The
+   signals are `init` exit 5 with `is already part of a stack`, or `checkout`
+   exit 3 with `local stack composition differs from remote`. That exit 3 is
+   not a rebase conflict. Run guarded `gh stack unstack --local`. Then run
+   `gh stack checkout <top-PR-URL>` directly, because the guard rejects
+   `checkout`. Confirm that `gh stack view --json` lists every remote layer.
+3. Run guarded `gh stack rebase --remote origin`.
+4. When `rebase` exits 1 with `could not determine the previous base`, restack
+   manually. `--no-trunk` does not fix this failure. Run
+   `git rebase --onto <new-parent> <old-parent-head-SHA> <branch>` for each open
+   layer, bottom to top. The new parent of the lowest open layer is the updated trunk.
+   Use the old head SHA that step 1 recorded for each parent.
+5. When a manual restack conflicts, run `git rebase --abort`. Halt at
+   `publish` for a user decision.
+6. Publish with guarded `gh stack push --remote origin`. Inspect the stack.
+   Apply the `gh-stack-verify` rule in
+   [After a bottom PR merges](#after-a-bottom-pr-merges).
+
+A `rebase` exit 1 with `checked out in multiple worktrees` is
+environment-owned. The named branch can be outside the stack. Do not remove
+the other worktree. Halt and report the branch to the environment owner.
+
 ## Plate recipes
 
 ### Create a two-layer stack
@@ -242,6 +275,8 @@ snapshot, halt at `publish`. Do not create replacement PRs automatically.
 Navigate to the lower layer and create a new commit. Run guarded
 `gh stack rebase --remote origin`. Inspect the stack. Use guarded `push` or
 `submit` according to whether PR metadata changes. Then verify publication.
+When merged bottom layers remain in the stack, use
+[Partly merged native stack](#partly-merged-native-stack) instead.
 
 ### Link externally managed branches
 
