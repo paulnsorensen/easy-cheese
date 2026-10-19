@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "status": "draft",
+  "skill": "culture",
+  "invocation": "/culture",
+  "kinds": {
+    "journey": {
+      "grader": "journey",
+      "argv": [
+        "python3",
+        "-I",
+        "-c",
+        "import json, pathlib, re\n\n\ndef load_events():\n    path = pathlib.Path(\"trace/events.jsonl\")\n    if not path.is_file():\n        return []\n    found = []\n    for line in path.read_text(encoding=\"utf-8\").splitlines():\n        try:\n            event = json.loads(line)\n        except ValueError:\n            continue\n        if isinstance(event, dict):\n            found.append(event)\n    return found\n\n\nEVENTS = load_events()\n\n\ndef blocks(role, kind):\n    for event in EVENTS:\n        if event.get(\"type\") != role:\n            continue\n        content = (event.get(\"message\") or {}).get(\"content\")\n        for block in content if isinstance(content, list) else []:\n            if isinstance(block, dict) and block.get(\"type\") == kind:\n                yield block\n\n\nCALLS = list(blocks(\"assistant\", \"tool_use\"))\nBASH = [str((call.get(\"input\") or {}).get(\"command\", \"\")) for call in CALLS if call.get(\"name\") == \"Bash\"]\nWRITES = [str((call.get(\"input\") or {}).get(\"file_path\", \"\")) for call in CALLS\n          if call.get(\"name\") in (\"Write\", \"Edit\", \"MultiEdit\", \"NotebookEdit\")]\nTEXT = \"\\n\".join(str(block.get(\"text\", \"\")) for block in blocks(\"assistant\", \"text\"))\nOUTPUT = {str(p.relative_to(\"output\")): p for p in pathlib.Path(\"output\").rglob(\"*\") if p.is_file()} if pathlib.Path(\"output\").is_dir() else {}\nFIXTURES = {str(p): p for p in pathlib.Path(\".\").rglob(\"*\") if p.is_file() and p.parts[0] not in (\"output\", \"trace\", \"home\", \"tmp\")}\nfails = []\n\nif not EVENTS:\n    fails.append(\"no-trace\")\n\n# --- skill invariants: /culture writes knowledge records only; no code, no spec, no commit ---\nCODE = r\"\\.(py|js|jsx|ts|tsx|go|rs|java|rb|c|h|cpp|sh|kt|swift|php)\"\n\nif any(re.search(r\"\\bgit\\s+(commit|push)\\b\", command) for command in BASH):\n    fails.append(\"git-commit-or-push\")\n\nif any(re.search(CODE + r\"$\", path) for path in WRITES):\n    fails.append(\"write-tool-source-file\")\n\nif any(re.search(r\"(>|\\btee\\s+(-a\\s+)?)\\s*[\\\"']?[\\w./-]+\" + CODE + r\"\\b\", command) for command in BASH):\n    fails.append(\"bash-writes-source-file\")\n\nfor name, path in OUTPUT.items():\n    if re.search(CODE + r\"$\", name):\n        fixture = FIXTURES.get(name)\n        if fixture is None:\n            fails.append(\"new-source-file:\" + name)\n        elif fixture.read_text(encoding=\"utf-8\", errors=\"replace\") != path.read_text(encoding=\"utf-8\", errors=\"replace\"):\n            fails.append(\"fixture-source-changed:\" + name)\n    elif name.endswith(\".md\") and name not in FIXTURES:\n        head = path.read_text(encoding=\"utf-8\", errors=\"replace\")[:600]\n        if head.startswith(\"---\") and re.search(r\"^source:\\s*(mold|agent-mini-spec)\", head, re.M):\n            fails.append(\"spec-written:\" + name)\n\nif any(re.search(r\"/specs/[\\w.-]+\\.md\", path) for path in WRITES):\n    fails.append(\"spec-written-by-tool\")\n\nif any(re.search(r\"artifact-path\\s+specs|mold\\.pyz\\s+(validate-spec|finalize)|(>|\\btee\\s)\\s*[\\\"']?\\S*/specs/[\\w.-]+\\.md\", command) for command in BASH):\n    fails.append(\"spec-written-by-bash\")\n\nprint(json.dumps({\"score\": 0 if fails else 1, \"fails\": fails}))\n"
+      ],
+      "rubric": "You grade one multi-turn journey of the /culture skill. `reference.must` lists behaviors the agent must show; `reference.must_not` lists behaviors that must not happen. Judge only from the transcript, the final answer, and the output files. Score 0 when any `reference.must_not` item happened. Otherwise score round(100 * satisfied / total) over the `reference.must` items. Count a `must` item as unsatisfied when the evidence does not show it."
+    }
+  },
+  "surface": {
+    "tools": [
+      "Write",
+      "Edit"
+    ]
+  }
+}
