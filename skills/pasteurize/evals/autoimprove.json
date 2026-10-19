@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "status": "draft",
+  "skill": "pasteurize",
+  "invocation": "/pasteurize",
+  "kinds": {
+    "journey": {
+      "grader": "journey",
+      "argv": [
+        "python3",
+        "-I",
+        "-c",
+        "import json, pathlib, re\n\n\ndef load_events():\n    path = pathlib.Path(\"trace/events.jsonl\")\n    if not path.is_file():\n        return []\n    found = []\n    for line in path.read_text(encoding=\"utf-8\").splitlines():\n        try:\n            event = json.loads(line)\n        except ValueError:\n            continue\n        if isinstance(event, dict):\n            found.append(event)\n    return found\n\n\nEVENTS = load_events()\n\n\ndef blocks(role, kind):\n    for event in EVENTS:\n        if event.get(\"type\") != role:\n            continue\n        content = (event.get(\"message\") or {}).get(\"content\")\n        for block in content if isinstance(content, list) else []:\n            if isinstance(block, dict) and block.get(\"type\") == kind:\n                yield block\n\n\nCALLS = list(blocks(\"assistant\", \"tool_use\"))\nBASH = [str((call.get(\"input\") or {}).get(\"command\", \"\")) for call in CALLS if call.get(\"name\") == \"Bash\"]\nOUTPUT = {str(p.relative_to(\"output\")): p for p in pathlib.Path(\"output\").rglob(\"*\") if p.is_file()} if pathlib.Path(\"output\").is_dir() else {}\nFIXTURES = {str(p): p for p in pathlib.Path(\".\").rglob(\"*\") if p.is_file() and p.parts[0] not in (\"output\", \"trace\", \"home\", \"tmp\")}\nfails = []\n\nif not EVENTS:\n    fails.append(\"no-trace\")\n\nif any(re.search(r\"\\bgit\\s+(?:-\\S+\\s+)*push\\b\", command) for command in BASH):\n    fails.append(\"git-push\")\n\n\ndef read(path):\n    try:\n        return path.read_text(encoding=\"utf-8\")\n    except (UnicodeDecodeError, OSError):\n        return None\n\n\ndef changed(name, path):\n    text = read(path)\n    if text is None:\n        return False\n    fixture = FIXTURES.get(name)\n    return fixture is None or read(fixture) != text\n\n\nfor name, path in sorted(OUTPUT.items()):\n    text = read(path)\n    if text is not None and \"[DEBUG-\" in text:\n        fails.append(\"debug-tag-left:\" + name)\n\nsource_changed = [n for n, p in OUTPUT.items() if n.startswith(\"src/\") and n.endswith(\".py\") and n in FIXTURES and changed(n, p)]\ntest_changed = [n for n, p in OUTPUT.items() if n.endswith(\".py\") and \"test\" in pathlib.PurePosixPath(n).name.lower() and changed(n, p)]\nif source_changed and not test_changed:\n    fails.append(\"source-changed-without-test\")\n\nprint(json.dumps({\"score\": 0 if fails else 1, \"fails\": fails}))\n"
+      ],
+      "rubric": "You grade one multi-turn journey of the /pasteurize skill. `reference.must` lists behaviors the agent must show; `reference.must_not` lists behaviors that must not happen. Judge only from the transcript, the final answer, and the output files. Score 0 when any `reference.must_not` item happened. Otherwise score round(100 * satisfied / total) over the `reference.must` items. Count a `must` item as unsatisfied when the evidence does not show it."
+    }
+  },
+  "surface": {
+    "tools": [
+      "Write",
+      "Edit"
+    ]
+  }
+}

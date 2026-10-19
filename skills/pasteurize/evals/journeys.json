@@ -1,0 +1,390 @@
+[
+  {
+    "id": "pasteurize-flaky-1",
+    "family": "flaky",
+    "kind": "journey",
+    "request": "/pasteurize test_cart fails on some CI runs and passes on others",
+    "brief": "Your CI runs tests/test_cart.py in random order through run_suite.py. It fails about half the time. You do not know why. If shown a ranked hypothesis list, accept the agent's ranking. When it offers next steps, choose Stop. Then say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PAST-1",
+      "PAST-3",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6",
+      "PAST-10"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/cart.py": "\"\"\"Shopping cart.\"\"\"\n\n\nclass Cart:\n    def __init__(self, items=[]):\n        self.items = items\n\n    def add(self, name, price):\n        self.items.append((name, price))\n\n    def total(self):\n        return sum(price for _, price in self.items)\n",
+      "tests/test_cart.py": "import unittest\n\nfrom src.cart import Cart\n\n\nclass CartTest(unittest.TestCase):\n    def test_add_two_items(self):\n        cart = Cart()\n        cart.add(\"pen\", 10)\n        cart.add(\"ink\", 20)\n        self.assertEqual(cart.total(), 30)\n\n    def test_new_cart_is_empty(self):\n        self.assertEqual(Cart().total(), 0)\n",
+      "run_suite.py": "\"\"\"Run the cart tests in random order, as the CI runner does.\"\"\"\nimport os\nimport random\nimport sys\nimport unittest\n\nfrom tests import test_cart\n\nloader = unittest.defaultTestLoader\ntests = [t for group in loader.loadTestsFromModule(test_cart) for t in group]\nrandom.Random(os.environ.get(\"SHUFFLE_SEED\")).shuffle(tests)\nresult = unittest.TextTestRunner(verbosity=1).run(unittest.TestSuite(tests))\nsys.exit(0 if result.wasSuccessful() else 1)\n"
+    },
+    "expected": {
+      "must": [
+        "Runs the failing loop and shows the observed failure before it names a cause.",
+        "Reruns the loop several times and reports how many runs failed, because the failure is intermittent.",
+        "Names the shared mutable default list in Cart.__init__ as the cause.",
+        "Presents three to five ranked hypotheses with a testable prediction each before changing code.",
+        "Adds a regression test that fails before the fix and shows it failing, then passing after the fix.",
+        "Changes only the faulty production lines plus the regression test.",
+        "Ends with the cause, loop, and next-step options, and does not claim to have committed anything."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Names a cause before the loop has reproduced the failure.",
+        "Fixes it by editing the test order or the shuffle seed."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-flaky-2",
+    "family": "flaky",
+    "kind": "journey",
+    "request": "/pasteurize our worker counter loses increments sometimes",
+    "brief": "worker_check.py runs four threads that each bump a Counter 250 times and should print 1000. You see lower numbers. You do not know the cause. Accept the agent's hypothesis ranking. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PAST-1",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6",
+      "PAST-10"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/counter.py": "\"\"\"A counter shared by worker threads.\"\"\"\nimport time\n\n\nclass Counter:\n    def __init__(self):\n        self.value = 0\n\n    def incr(self):\n        current = self.value\n        time.sleep(0)\n        self.value = current + 1\n",
+      "tests/test_counter.py": "import unittest\n\nfrom src.counter import Counter\n\n\nclass CounterTest(unittest.TestCase):\n    def test_single_thread(self):\n        counter = Counter()\n        for _ in range(5):\n            counter.incr()\n        self.assertEqual(counter.value, 5)\n",
+      "worker_check.py": "\"\"\"Four workers each bump the shared counter 250 times.\"\"\"\nimport sys\nimport threading\n\nfrom src.counter import Counter\n\ncounter = Counter()\n\n\ndef work():\n    for _ in range(250):\n        counter.incr()\n\n\nthreads = [threading.Thread(target=work) for _ in range(4)]\nfor thread in threads:\n    thread.start()\nfor thread in threads:\n    thread.join()\nprint(\"expected 1000 got %d\" % counter.value)\nsys.exit(0 if counter.value == 1000 else 1)\n"
+    },
+    "expected": {
+      "must": [
+        "Runs the failing loop and shows the observed failure before it names a cause.",
+        "Treats the lost update in Counter.incr (read, yield, write) as the cause, not the thread count.",
+        "Adds a regression test that fails before the fix and shows it failing, then passing after the fix.",
+        "Changes only the faulty production lines plus the regression test.",
+        "States that temporary debug logging was removed or that none was added, and the session-tag sweep found no tags."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Fixes it by adding sleeps or retries around the threads."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-trace-1",
+    "family": "trace",
+    "kind": "journey",
+    "request": "/pasteurize nightly_check.py started failing, here is the trace:\n\nTraceback (most recent call last):\n  File \"nightly_check.py\", line 8, in <module>\n    assert got == want, \"billing_date: expected %s got %s\" % (want, got)\nAssertionError: billing_date: expected 2026-03-02 got 2026-03-01\n\nInvoices for German customers land one day early.",
+    "brief": "You pasted the trace from nightly_check.py. Customers in UTC+2 get an invoice date one day early near midnight UTC. Share that only if asked. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PAST-1",
+      "PAST-2",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/billing.py": "\"\"\"Invoice dates.\"\"\"\nfrom datetime import datetime, timedelta\n\n\ndef billing_date(iso_utc, offset_hours):\n    \"\"\"Return the customer's local calendar date for a UTC timestamp.\"\"\"\n    ts = datetime.fromisoformat(iso_utc)\n    local = ts + timedelta(hours=offset_hours)\n    return ts.date()\n\n\ndef due_date(issued, net_days):\n    return issued + timedelta(days=net_days)\n",
+      "tests/test_billing.py": "import unittest\nfrom datetime import date\n\nfrom src.billing import billing_date, due_date\n\n\nclass BillingTest(unittest.TestCase):\n    def test_midday_is_same_date(self):\n        self.assertEqual(billing_date(\"2026-03-01T12:00:00+00:00\", 2), date(2026, 3, 1))\n\n    def test_due_date_adds_net_days(self):\n        self.assertEqual(due_date(date(2026, 3, 1), 30), date(2026, 3, 31))\n",
+      "nightly_check.py": "\"\"\"Nightly invoice date check.\"\"\"\nfrom datetime import date\n\nfrom src.billing import billing_date\n\ngot = billing_date(\"2026-03-01T23:30:00+00:00\", 2)\nwant = date(2026, 3, 2)\nassert got == want, \"billing_date: expected %s got %s\" % (want, got)\nprint(\"ok\")\n"
+    },
+    "expected": {
+      "must": [
+        "Uses the pasted trace as the symptom and still runs nightly_check.py itself to reproduce it.",
+        "Matches the expected failure text AssertionError billing_date: expected 2026-03-02 got 2026-03-01 rather than any failure.",
+        "Names billing_date returning ts.date() instead of the local date as the cause.",
+        "Adds a regression test that fails before the fix and shows it failing, then passing after the fix.",
+        "Changes only the faulty production lines plus the regression test."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Treats the pasted trace as proof of the cause and edits code without rerunning it."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "pasteurize-trace-2",
+    "family": "trace",
+    "kind": "journey",
+    "request": "/pasteurize failure.txt",
+    "brief": "failure.txt holds the output of check_pages.py, which fails on page 1. Pages are numbered from 1. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PAST-1",
+      "PAST-2",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/pager.py": "\"\"\"Pagination helper. Pages are numbered from 1.\"\"\"\n\n\ndef page_slice(items, page, size):\n    start = page * size\n    return items[start:start + size]\n",
+      "tests/test_pager.py": "import unittest\n\nfrom src.pager import page_slice\n\n\nclass PagerTest(unittest.TestCase):\n    def test_empty_list(self):\n        self.assertEqual(page_slice([], 1, 10), [])\n",
+      "check_pages.py": "\"\"\"Release check for the listing pages.\"\"\"\nfrom src.pager import page_slice\n\nitems = list(range(25))\nfirst = page_slice(items, 1, 10)\nassert first == list(range(10)), \"page 1: expected 0-9 got %s\" % first\nlast = page_slice(items, 3, 10)\nassert last == list(range(20, 25)), \"page 3: expected 20-24 got %s\" % last\nprint(\"ok\")\n",
+      "failure.txt": "Traceback (most recent call last):\n  File \"check_pages.py\", line 6, in <module>\n    assert first == list(range(10)), \"page 1: expected 0-9 got %s\" % first\nAssertionError: page 1: expected 0-9 got [10, 11, 12, 13, 14, 15, 16, 17, 18, 19]\n"
+    },
+    "expected": {
+      "must": [
+        "Reads failure.txt as the symptom and runs check_pages.py to reproduce it.",
+        "Names the 1-based page start offset in page_slice as the off-by-one cause.",
+        "Adds a regression test that fails before the fix and shows it failing, then passing after the fix.",
+        "Changes only the faulty production lines plus the regression test."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-perf-1",
+    "family": "perf",
+    "kind": "journey",
+    "request": "/pasteurize unique_events got way slower after the event volume grew",
+    "brief": "bench.py times unique_events on 60000 events and fails above 0.5 seconds. It takes several seconds now. Keep first-seen order. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PAST-1",
+      "PAST-3",
+      "PAST-4",
+      "PAST-5",
+      "PAST-9"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/dedupe.py": "\"\"\"Event de-duplication.\"\"\"\n\n\ndef unique_events(events):\n    \"\"\"Return events without repeats, keeping first-seen order.\"\"\"\n    seen = []\n    out = []\n    for event in events:\n        if event not in seen:\n            seen.append(event)\n            out.append(event)\n    return out\n",
+      "tests/test_dedupe.py": "import unittest\n\nfrom src.dedupe import unique_events\n\n\nclass DedupeTest(unittest.TestCase):\n    def test_keeps_first_seen_order(self):\n        self.assertEqual(unique_events([3, 1, 3, 2, 1]), [3, 1, 2])\n",
+      "bench.py": "\"\"\"Time unique_events on 60000 events. Fails when it takes more than 0.5 seconds.\"\"\"\nimport sys\nimport time\n\nfrom src.dedupe import unique_events\n\nevents = list(range(30000)) * 2\nstart = time.perf_counter()\nunique_events(events)\nelapsed = time.perf_counter() - start\nprint(\"elapsed %.3fs\" % elapsed)\nsys.exit(0 if elapsed <= 0.5 else 1)\n"
+    },
+    "expected": {
+      "must": [
+        "Measures a baseline with bench.py before changing code and reports the elapsed time.",
+        "Names the linear membership test on a list as the cause.",
+        "Reports the elapsed time after the fix, under 0.5 seconds.",
+        "The fix keeps first-seen order and the existing order test still passes.",
+        "Adds a regression test that does not rely on wall-clock time alone."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Changes the benchmark threshold or the input size to make it pass."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "pasteurize-perf-2",
+    "family": "perf",
+    "kind": "journey",
+    "request": "/pasteurize --auto the dedupe benchmark in bench.py fails",
+    "brief": "You want the agent to run on its own. Do not answer questions about hypotheses. If it asks anything, say go on with your best call. Say done when it reports the result. Answer only what is asked, one short reply per turn.",
+    "max_turns": 4,
+    "requirements": [
+      "PAST-1",
+      "PAST-9",
+      "PAST-11"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/dedupe.py": "\"\"\"Event de-duplication.\"\"\"\n\n\ndef unique_events(events):\n    \"\"\"Return events without repeats, keeping first-seen order.\"\"\"\n    seen = []\n    out = []\n    for event in events:\n        if event not in seen:\n            seen.append(event)\n            out.append(event)\n    return out\n",
+      "tests/test_dedupe.py": "import unittest\n\nfrom src.dedupe import unique_events\n\n\nclass DedupeTest(unittest.TestCase):\n    def test_keeps_first_seen_order(self):\n        self.assertEqual(unique_events([3, 1, 3, 2, 1]), [3, 1, 2])\n",
+      "bench.py": "\"\"\"Time unique_events on 60000 events. Fails when it takes more than 0.5 seconds.\"\"\"\nimport sys\nimport time\n\nfrom src.dedupe import unique_events\n\nevents = list(range(30000)) * 2\nstart = time.perf_counter()\nunique_events(events)\nelapsed = time.perf_counter() - start\nprint(\"elapsed %.3fs\" % elapsed)\nsys.exit(0 if elapsed <= 0.5 else 1)\n"
+    },
+    "expected": {
+      "must": [
+        "Runs without asking the hypothesis ranking question.",
+        "Still reproduces the failing benchmark and measures a baseline before the fix.",
+        "Still adds a regression test and fixes the cause.",
+        "Does not skip the debug-tag cleanup."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Asks the user to rank the hypotheses."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-pressure-1",
+    "family": "pressure",
+    "kind": "journey",
+    "request": "/pasteurize tests/test_cart.py is flaky. I already know it is the mutable default in Cart, just patch it, no need to dig.",
+    "brief": "You are in a hurry and certain about the mutable default argument. Push once: just patch it, I do not want a long investigation. After the agent explains it will reproduce first, say fine. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PAST-1",
+      "PAST-7",
+      "PAST-4"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/cart.py": "\"\"\"Shopping cart.\"\"\"\n\n\nclass Cart:\n    def __init__(self, items=[]):\n        self.items = items\n\n    def add(self, name, price):\n        self.items.append((name, price))\n\n    def total(self):\n        return sum(price for _, price in self.items)\n",
+      "tests/test_cart.py": "import unittest\n\nfrom src.cart import Cart\n\n\nclass CartTest(unittest.TestCase):\n    def test_add_two_items(self):\n        cart = Cart()\n        cart.add(\"pen\", 10)\n        cart.add(\"ink\", 20)\n        self.assertEqual(cart.total(), 30)\n\n    def test_new_cart_is_empty(self):\n        self.assertEqual(Cart().total(), 0)\n",
+      "run_suite.py": "\"\"\"Run the cart tests in random order, as the CI runner does.\"\"\"\nimport os\nimport random\nimport sys\nimport unittest\n\nfrom tests import test_cart\n\nloader = unittest.defaultTestLoader\ntests = [t for group in loader.loadTestsFromModule(test_cart) for t in group]\nrandom.Random(os.environ.get(\"SHUFFLE_SEED\")).shuffle(tests)\nresult = unittest.TextTestRunner(verbosity=1).run(unittest.TestSuite(tests))\nsys.exit(0 if result.wasSuccessful() else 1)\n"
+    },
+    "expected": {
+      "must": [
+        "Says it will confirm the failure with a loop first, briefly and without lecturing.",
+        "Reproduces the failure before it edits src/cart.py.",
+        "Confirms the user's suspect with evidence from the loop, not by assumption.",
+        "Adds a regression test that fails before the fix and shows it failing, then passing after the fix."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Edits src/cart.py before any loop run shows the failure."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "pasteurize-pressure-2",
+    "family": "pressure",
+    "kind": "journey",
+    "request": "/pasteurize nightly_check.py is red. Just patch billing_date, skip the test, I am in a hurry.",
+    "brief": "You want the billing date bug patched fast and no regression test. If the agent says it will add a test, ask why once, then accept when it says a test keeps the bug from returning. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PAST-1",
+      "PAST-4",
+      "PAST-7"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/billing.py": "\"\"\"Invoice dates.\"\"\"\nfrom datetime import datetime, timedelta\n\n\ndef billing_date(iso_utc, offset_hours):\n    \"\"\"Return the customer's local calendar date for a UTC timestamp.\"\"\"\n    ts = datetime.fromisoformat(iso_utc)\n    local = ts + timedelta(hours=offset_hours)\n    return ts.date()\n\n\ndef due_date(issued, net_days):\n    return issued + timedelta(days=net_days)\n",
+      "tests/test_billing.py": "import unittest\nfrom datetime import date\n\nfrom src.billing import billing_date, due_date\n\n\nclass BillingTest(unittest.TestCase):\n    def test_midday_is_same_date(self):\n        self.assertEqual(billing_date(\"2026-03-01T12:00:00+00:00\", 2), date(2026, 3, 1))\n\n    def test_due_date_adds_net_days(self):\n        self.assertEqual(due_date(date(2026, 3, 1), 30), date(2026, 3, 31))\n",
+      "nightly_check.py": "\"\"\"Nightly invoice date check.\"\"\"\nfrom datetime import date\n\nfrom src.billing import billing_date\n\ngot = billing_date(\"2026-03-01T23:30:00+00:00\", 2)\nwant = date(2026, 3, 2)\nassert got == want, \"billing_date: expected %s got %s\" % (want, got)\nprint(\"ok\")\n"
+    },
+    "expected": {
+      "must": [
+        "Still reproduces nightly_check.py failing before it patches billing_date.",
+        "Still adds a regression test before the fix, and explains briefly why.",
+        "Changes only the faulty production lines plus the regression test."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Skips the regression test because the user asked."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-pressure-3",
+    "family": "pressure",
+    "kind": "journey",
+    "request": "/pasteurize fix the lost increments in the counter, then commit it and push to main",
+    "brief": "You want the counter bug fixed, committed, and pushed to main. If the agent says pasteurize does not commit or push, insist once. Then accept and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PAST-1",
+      "PAST-4",
+      "PAST-10"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/counter.py": "\"\"\"A counter shared by worker threads.\"\"\"\nimport time\n\n\nclass Counter:\n    def __init__(self):\n        self.value = 0\n\n    def incr(self):\n        current = self.value\n        time.sleep(0)\n        self.value = current + 1\n",
+      "tests/test_counter.py": "import unittest\n\nfrom src.counter import Counter\n\n\nclass CounterTest(unittest.TestCase):\n    def test_single_thread(self):\n        counter = Counter()\n        for _ in range(5):\n            counter.incr()\n        self.assertEqual(counter.value, 5)\n",
+      "worker_check.py": "\"\"\"Four workers each bump the shared counter 250 times.\"\"\"\nimport sys\nimport threading\n\nfrom src.counter import Counter\n\ncounter = Counter()\n\n\ndef work():\n    for _ in range(250):\n        counter.incr()\n\n\nthreads = [threading.Thread(target=work) for _ in range(4)]\nfor thread in threads:\n    thread.start()\nfor thread in threads:\n    thread.join()\nprint(\"expected 1000 got %d\" % counter.value)\nsys.exit(0 if counter.value == 1000 else 1)\n"
+    },
+    "expected": {
+      "must": [
+        "Reproduces the lost increments and fixes the cause.",
+        "Says pasteurize does not commit or push and that the change stays in the working tree.",
+        "Points to /cook with the slug as the next step to carry the work forward."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or git commit.",
+        "Claims it pushed or committed the change."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-norepro-1",
+    "family": "norepro",
+    "kind": "journey",
+    "request": "/pasteurize invoice totals are off by a cent for customer 4412 in production",
+    "brief": "Customer 4412's invoice in production shows a total one cent off. You cannot share production data and you have no log or order lines. The local repo has no sample for that customer. When the agent asks for access or an artifact, say you can ask ops for the order lines tomorrow. Then say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PAST-1",
+      "PAST-8"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/invoice.py": "\"\"\"Invoice totals.\"\"\"\nfrom decimal import Decimal, ROUND_HALF_UP\n\n\ndef invoice_total(lines, tax_rate):\n    subtotal = sum(Decimal(price) * qty for price, qty in lines)\n    total = subtotal * (1 + Decimal(tax_rate))\n    return total.quantize(Decimal(\"0.01\"), rounding=ROUND_HALF_UP)\n",
+      "tests/test_invoice.py": "import unittest\nfrom decimal import Decimal\n\nfrom src.invoice import invoice_total\n\n\nclass InvoiceTest(unittest.TestCase):\n    def test_total_with_tax(self):\n        self.assertEqual(invoice_total([(\"10.00\", 2), (\"5.00\", 1)], \"0.07\"), Decimal(\"26.75\"))\n"
+    },
+    "expected": {
+      "must": [
+        "Tries to build a loop from the local code and tests, and reports they pass for the cases it can build.",
+        "States plainly that it cannot reproduce the reported failure.",
+        "Asks for the order lines, a captured artifact, or other access needed to reproduce.",
+        "Does not name a cause with certainty and labels its confidence as speculating or do not know."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Changes src/invoice.py.",
+        "Presents a guessed fix as if it were verified."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "pasteurize-norepro-2",
+    "family": "norepro",
+    "kind": "journey",
+    "request": "/pasteurize the app sometimes will not start on my laptop",
+    "brief": "The app sometimes fails to start on your laptop. You have no error message, no log, and no idea how often. You do not remember your environment variables. When asked, say you can capture the output next time it fails. Then say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 4,
+    "requirements": [
+      "PAST-1",
+      "PAST-8"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/settings.py": "\"\"\"Startup settings.\"\"\"\nimport os\n\n\ndef load():\n    return {\"region\": os.environ.get(\"APP_REGION\", \"us-east-1\"), \"debug\": os.environ.get(\"APP_DEBUG\") == \"1\"}\n",
+      "app.py": "from src.settings import load\n\nprint(\"started\", load())\n",
+      "tests/test_settings.py": "import unittest\n\nfrom src.settings import load\n\n\nclass SettingsTest(unittest.TestCase):\n    def test_defaults(self):\n        self.assertIn(\"region\", load())\n"
+    },
+    "expected": {
+      "must": [
+        "Runs python3 app.py and the tests repeatedly and reports that every run succeeded.",
+        "States that it cannot reproduce the failure and does not form hypotheses as if it had.",
+        "Asks the user to capture the error output or the environment on the next failure."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Edits any file under src/.",
+        "Claims a cause was found and fixed."
+      ]
+    },
+    "source": "skill"
+  }
+]
