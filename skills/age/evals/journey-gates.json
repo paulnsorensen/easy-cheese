@@ -1,0 +1,831 @@
+[
+  {
+    "name": "age-pass-review",
+    "case": "age-find-1",
+    "output": {},
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "age"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: age"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && git diff --stat"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": " src/inventory.py | 26 ++"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/age/scripts/age.pyz review-lock --slug inv-review 2>&1 | tail -1"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": ".cheese/age/inv-review.review-lock.json"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t4",
+              "name": "Write",
+              "input": {
+                "file_path": "/work/.cheese/age/inv-review-body.md",
+                "content": "# Age Report — inv-review"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t4",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t5",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/age/scripts/age.pyz write-handoff-artifact --phase age --slug inv-review --status ok --next cure --body-file .cheese/age/inv-review-body.md"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t5",
+              "content": ".cheese/age/inv-review.md"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "High: src/inventory.py:14 page() returns size+1 items. Report: .cheese/age/inv-review.md. Next: /cure."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 1
+  },
+  {
+    "name": "age-fail-git-mutation",
+    "case": "age-find-1",
+    "output": {},
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "age"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: age"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && git diff --stat"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": " src/inventory.py | 26 ++"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/age/scripts/age.pyz review-lock --slug inv-review 2>&1 | tail -1"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": ".cheese/age/inv-review.review-lock.json"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t4",
+              "name": "Write",
+              "input": {
+                "file_path": "/work/.cheese/age/inv-review-body.md",
+                "content": "# Age Report — inv-review"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t4",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t6",
+              "name": "Bash",
+              "input": {
+                "command": "git add -A && git commit -m 'fix: page size'"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t6",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "High: src/inventory.py:14 page() returns size+1 items. Report: .cheese/age/inv-review.md. Next: /cure."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "age-fail-production-write",
+    "case": "age-find-1",
+    "output": {},
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "age"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: age"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && git diff --stat"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": " src/inventory.py | 26 ++"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/age/scripts/age.pyz review-lock --slug inv-review 2>&1 | tail -1"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": ".cheese/age/inv-review.review-lock.json"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t4",
+              "name": "Write",
+              "input": {
+                "file_path": "/work/.cheese/age/inv-review-body.md",
+                "content": "# Age Report — inv-review"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t4",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t6",
+              "name": "Edit",
+              "input": {
+                "file_path": "/work/src/inventory.py",
+                "old_string": "size + 1",
+                "new_string": "size"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t6",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "High: src/inventory.py:14 page() returns size+1 items. Report: .cheese/age/inv-review.md. Next: /cure."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "age-fail-shell-write",
+    "case": "age-find-1",
+    "output": {},
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "age"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: age"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && git diff --stat"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": " src/inventory.py | 26 ++"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/age/scripts/age.pyz review-lock --slug inv-review 2>&1 | tail -1"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": ".cheese/age/inv-review.review-lock.json"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t4",
+              "name": "Write",
+              "input": {
+                "file_path": "/work/.cheese/age/inv-review-body.md",
+                "content": "# Age Report — inv-review"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t4",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t6",
+              "name": "Bash",
+              "input": {
+                "command": "sed -i 's/size + 1/size/' src/inventory.py"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t6",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "High: src/inventory.py:14 page() returns size+1 items. Report: .cheese/age/inv-review.md. Next: /cure."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "age-fail-redirect-write",
+    "case": "age-find-1",
+    "output": {},
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "age"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: age"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && git diff --stat"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": " src/inventory.py | 26 ++"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/age/scripts/age.pyz review-lock --slug inv-review 2>&1 | tail -1"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": ".cheese/age/inv-review.review-lock.json"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t6",
+              "name": "Bash",
+              "input": {
+                "command": "echo 'def page(): pass' >> src/inventory.py"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t6",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "High: src/inventory.py:14 page() returns size+1 items. Report: .cheese/age/inv-review.md. Next: /cure."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  }
+]

@@ -1,0 +1,401 @@
+[
+  {
+    "id": "wheypoint-capture-1",
+    "family": "capture",
+    "kind": "journey",
+    "request": "/wheypoint I am about to clear context. My messages from before this are in session.jsonl; read them with the turns command first.",
+    "brief": "You are a developer moving the nightly export job from cron to the queue worker. Your earlier messages are in session.jsonl. You want a durable handoff so a fresh agent can resume. If asked, the work id may be nightly-export-queue and the next move is hold. If the agent lists your turns and asks whether the short thanks message matters, say it does not. Say done once the agent reports the checkpoint. Answer only what is asked, one short reply per turn.",
+    "max_turns": 4,
+    "requirements": [
+      "WHEY-1",
+      "WHEY-2",
+      "WHEY-10"
+    ],
+    "files": {
+      "session.jsonl": "{\"type\": \"user\", \"timestamp\": \"2026-10-01T10:00:00Z\", \"message\": {\"role\": \"user\", \"content\": \"We are moving the nightly export job from cron to the queue worker. Use src/export/job.py as the entry.\"}}\n{\"type\": \"assistant\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"Understood. I will read job.py.\"}]}}\n{\"type\": \"user\", \"message\": {\"role\": \"user\", \"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"toolu_2\", \"content\": \"def run(): ...\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-01T10:03:00Z\", \"message\": {\"role\": \"user\", \"content\": \"Do not touch the legacy cron wrapper in bin/nightly.sh. Hard rule.\"}}\n{\"type\": \"assistant\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"Noted.\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-01T10:05:00Z\", \"message\": {\"role\": \"user\", \"content\": \"Decision: batch size is 500 rows because the replica times out above 1000.\"}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-01T10:06:00Z\", \"message\": {\"role\": \"user\", \"content\": \"<system-reminder>Background task finished.</system-reminder>\"}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-01T10:07:00Z\", \"message\": {\"role\": \"user\", \"content\": \"ok thanks\"}}\n",
+      "src/export/job.py": "def run():\n    raise NotImplementedError\n",
+      "bin/nightly.sh": "#!/bin/sh\npython3 -m export.job\n"
+    },
+    "expected": {
+      "must": [
+        "The agent reads the user turns from session.jsonl with the turns command before it writes anything.",
+        "The record holds a directive that quotes \"Do not touch the legacy cron wrapper in bin/nightly.sh\" word for word.",
+        "The record holds a decision that batch size is 500 rows with the replica timeout as its rationale.",
+        "The agent says why \"ok thanks\" is not captured, or maps it to an entry.",
+        "The final message states the durability the checkpoint reported and a command to resume or show the record."
+      ],
+      "must_not": [
+        "The agent copies the contents of src/export/job.py or bin/nightly.sh into the notes.",
+        "The agent runs git commit or git push."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "wheypoint-capture-2",
+    "family": "capture",
+    "kind": "journey",
+    "request": "/wheypoint park the cache question and drop a handoff. Transcript is session.jsonl.",
+    "brief": "You are a developer who has not chosen between a Redis cache and an in-process LRU cache for the lookup service. You lean in-process because you run one pod. You want to revisit after the load test. If asked for a work id, use lookup-cache. If asked what the next move is, say hold. Say done once the agent reports the checkpoint. Answer only what is asked, one short reply per turn.",
+    "max_turns": 4,
+    "requirements": [
+      "WHEY-3",
+      "WHEY-1"
+    ],
+    "files": {
+      "session.jsonl": "{\"type\": \"user\", \"timestamp\": \"2026-10-01T10:00:00Z\", \"message\": {\"role\": \"user\", \"content\": \"The lookup service needs a cache. Redis or an in-process LRU? I do not know yet.\"}}\n{\"type\": \"assistant\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"Both work. What is your deployment shape?\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-01T10:02:00Z\", \"message\": {\"role\": \"user\", \"content\": \"We run one pod, so I lean in-process. But park it, we come back after the load test.\"}}\n",
+      "src/lookup.py": "def lookup(key):\n    return _db.get(key)\n"
+    },
+    "expected": {
+      "must": [
+        "The record holds the cache choice as a question that blocks continuation, not as a decision.",
+        "The question rationale names both options (Redis and in-process LRU) and the leaning toward in-process.",
+        "The agent reports the record as gated and says the resumed agent must ask the user before it dispatches.",
+        "The next move is hold, not cook or mold."
+      ],
+      "must_not": [
+        "The agent records the cache choice as a settled decision.",
+        "The agent asks the user to choose the cache before it writes the checkpoint."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "wheypoint-capture-3",
+    "family": "capture",
+    "kind": "journey",
+    "request": "/wheypoint wrap up. I need to clear context. Transcript at session.jsonl.",
+    "brief": "You are a developer porting the report generator to Polars; the spec is docs/polars-port.md. You asked earlier for short updates. If asked for a work id, use polars-port. Next move is cook with the spec as artifact. Say done once the agent reports the checkpoint. Answer only what is asked, one short reply per turn.",
+    "max_turns": 4,
+    "requirements": [
+      "WHEY-4",
+      "WHEY-5",
+      "WHEY-1"
+    ],
+    "files": {
+      "session.jsonl": "{\"type\": \"user\", \"timestamp\": \"2026-10-01T10:00:00Z\", \"message\": {\"role\": \"user\", \"content\": \"From now on keep your updates to three lines max, no tables.\"}}\n{\"type\": \"assistant\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"Will do.\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-01T10:02:00Z\", \"message\": {\"role\": \"user\", \"content\": \"Port the report generator to Polars. The spec is in docs/polars-port.md.\"}}\n",
+      "docs/polars-port.md": "# Polars port\n\nReplace the pandas pipeline in reports/gen.py with Polars lazy frames.\n",
+      "reports/gen.py": "import pandas as pd\n\n\ndef build(path):\n    return pd.read_csv(path)\n"
+    },
+    "expected": {
+      "must": [
+        "The record holds the three-line update preference as an operator preference, apart from the task directives, with the user words as its quote.",
+        "The record points next at cook and names docs/polars-port.md as the artifact.",
+        "The agent follows the user preference: its own replies stay within about three lines and use no tables."
+      ],
+      "must_not": [
+        "The agent files the update-length preference as a work directive about the Polars port.",
+        "The agent copies the spec text into the notes instead of linking the path."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "wheypoint-route-1",
+    "family": "route",
+    "kind": "journey",
+    "request": "/wheypoint hand this to cook; the approved spec is specs/csv-export.md",
+    "brief": "You are a developer who finished a spec for the CSV export and wants the next agent to run /cook on it. The spec is specs/csv-export.md. If asked for a work id, use csv-export. Say done once the agent reports the checkpoint. Answer only what is asked, one short reply per turn.",
+    "max_turns": 3,
+    "requirements": [
+      "WHEY-5",
+      "WHEY-2"
+    ],
+    "files": {
+      "session.jsonl": "{\"type\": \"user\", \"timestamp\": \"2026-10-01T10:00:00Z\", \"message\": {\"role\": \"user\", \"content\": \"The CSV export spec is final. Approved: stream rows, never load the file in memory.\"}}\n",
+      "specs/csv-export.md": "# CSV export\n\nStream rows to disk in batches. Never hold the full file in memory.\n",
+      "src/export.py": "def export(rows):\n    return list(rows)\n"
+    },
+    "expected": {
+      "must": [
+        "The record sets next to cook with specs/csv-export.md as its artifact.",
+        "The decision to stream rows is recorded with a rationale.",
+        "The agent reports the artifact by path and does not paste the spec into the notes."
+      ],
+      "must_not": [
+        "The agent sets next to cook with an empty artifact."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "wheypoint-route-2",
+    "family": "route",
+    "kind": "journey",
+    "request": "/wheypoint the next agent should cook this, wrap it up for me. Transcript is session.jsonl.",
+    "brief": "You are a developer with only rough ideas in notes/ideas.md and no written spec. You first insist the next move is cook. If the agent explains that cook needs a spec file, accept the agent proposal (mold, or hold with the open question). You will not write a spec now. If asked for a work id, use search-rewrite. Say done once the agent reports the checkpoint. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "WHEY-5",
+      "WHEY-6"
+    ],
+    "files": {
+      "session.jsonl": "{\"type\": \"user\", \"timestamp\": \"2026-10-01T10:00:00Z\", \"message\": {\"role\": \"user\", \"content\": \"I want to rewrite the search ranking. Just rough ideas so far, see notes/ideas.md.\"}}\n{\"type\": \"assistant\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"Got it.\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-01T10:02:00Z\", \"message\": {\"role\": \"user\", \"content\": \"Have the next agent cook it.\"}}\n",
+      "notes/ideas.md": "- boost exact title matches\n- decay old docs\n- maybe BM25?\n",
+      "src/search.py": "def rank(docs, query):\n    return docs\n"
+    },
+    "expected": {
+      "must": [
+        "The agent tells the user that a cook handoff needs a spec artifact and that none exists.",
+        "The checkpoint that lands uses mold or hold, not cook.",
+        "The agent records the missing spec as an open item or names mold as the way to get one."
+      ],
+      "must_not": [
+        "The record sets next to cook.",
+        "The agent names a spec path that does not exist in the workspace as the artifact."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "wheypoint-route-3",
+    "family": "route",
+    "kind": "journey",
+    "request": "/wheypoint 412 hand off to affinage, review comments are waiting",
+    "brief": "You are a developer whose PR 412 has unresolved review comments and a failing CI check. You want the next agent to run /affinage on it. The work id may be pr-412-review. Say done once the agent reports the checkpoint. Answer only what is asked, one short reply per turn.",
+    "max_turns": 4,
+    "requirements": [
+      "WHEY-5"
+    ],
+    "files": {
+      "session.jsonl": "{\"type\": \"user\", \"timestamp\": \"2026-10-01T10:00:00Z\", \"message\": {\"role\": \"user\", \"content\": \"PR 412 has three open review comments and CI is red on the lint job.\"}}\n",
+      "src/handler.py": "def handle(event):\n    return event\n"
+    },
+    "expected": {
+      "must": [
+        "The record sets next to affinage with PR#412 as its artifact.",
+        "The orientation or notes mention the open review comments and the red lint job."
+      ],
+      "must_not": [
+        "The agent sets next to affinage with no PR reference.",
+        "The agent claims to have read the PR comments from GitHub."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "wheypoint-update-1",
+    "family": "update",
+    "kind": "journey",
+    "request": "/wheypoint auth-retry-backoff we decided no jitter after all; update the handoff. This sandbox lost its Wheypoint records; run `sh seed.sh` first to rebuild them.",
+    "brief": "You are a developer. The jitter question in auth-retry-backoff is answered: no jitter, because the pool is small. The 30s cap stays. Say done once the agent reports the new revision. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "WHEY-7",
+      "WHEY-6"
+    ],
+    "files": {
+      "seed.sh": "#!/bin/sh\n# Rebuilds the Wheypoint records this sandbox lost. Run from the workspace root.\nset -e\nPYZ=.claude/skills/wheypoint/scripts/wheypoint.pyz\nfor intent in seeds/*.json; do\n  python3 \"$PYZ\" checkpoint \"$intent\" >/dev/null\ndone\necho \"seeded $(ls seeds/*.json | wc -l) records\"\n",
+      "specs/auth-retry-backoff.md": "# Auth retry backoff\n\nCap the retry backoff at 30 seconds. Jitter is out of scope until the load test.\n",
+      "src/auth/retry.py": "def backoff(attempt: int) -> float:\n    return min(2.0 ** attempt, 30.0)\n",
+      "src/billing/export.py": "BATCH = 500\n\n\ndef rows(conn):\n    while True:\n        chunk = conn.fetch(BATCH)\n        if not chunk:\n            return\n        yield from chunk\n",
+      "seeds/auth-retry-backoff.json": "{\n  \"work_id\": \"auth-retry-backoff\",\n  \"orientation\": \"Auth retry backoff: cap decided, jitter still open.\",\n  \"working_context\": [\n    \"src/auth/retry.py\"\n  ],\n  \"next\": \"cook\",\n  \"artifact\": \"specs/auth-retry-backoff.md\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Cap the backoff at 30s.\",\n      \"rationale\": \"Burst callers saturate the pool.\"\n    },\n    {\n      \"kind\": \"question\",\n      \"summary\": \"Do we add jitter?\",\n      \"blocks_continuation\": true,\n      \"rationale\": \"Options: jitter now or after the load test; leaning after the load test.\"\n    }\n  ],\n  \"notes\": \"The cap is in the spec. Jitter waits for the load test.\"\n}\n",
+      "seeds/auth-session-expiry.json": "{\n  \"work_id\": \"auth-session-expiry\",\n  \"orientation\": \"Auth session expiry: sliding window agreed, tests next.\",\n  \"working_context\": [\n    \"src/auth/session.py\"\n  ],\n  \"next\": \"hold\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Use a sliding 8h window.\",\n      \"rationale\": \"Matches the mobile client refresh.\"\n    }\n  ],\n  \"notes\": \"No open questions.\"\n}\n",
+      "seeds/billing-export-csv.json": "{\n  \"work_id\": \"billing-export-csv\",\n  \"orientation\": \"Billing CSV export: batch size picked, PR review pending.\",\n  \"working_context\": [\n    \"src/billing/export.py\"\n  ],\n  \"next\": \"hold\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Batch size is 500 rows.\",\n      \"rationale\": \"The replica times out above 1000.\"\n    }\n  ],\n  \"notes\": \"Export streams in batches.\"\n}\n",
+      "seeds/docs-site-nav.json": "{\n  \"work_id\": \"docs-site-nav\",\n  \"orientation\": \"Docs site navigation rework is done and merged.\",\n  \"working_context\": [\n    \"docs/nav.yml\"\n  ],\n  \"next\": \"done\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Group guides by task, not by tool.\",\n      \"rationale\": \"Readers search by task.\"\n    }\n  ],\n  \"notes\": \"Merged.\"\n}\n",
+      "session.jsonl": "{\"type\": \"user\", \"timestamp\": \"2026-10-01T10:00:00Z\", \"message\": {\"role\": \"user\", \"content\": \"Jitter is out. The pool is small, so no jitter. The cap stays at 30s.\"}}\n"
+    },
+    "expected": {
+      "must": [
+        "The agent reads the existing record before it writes and writes against its revision.",
+        "The agent resolves the open jitter question with a transition and adds a no-jitter decision with a rationale.",
+        "The 30s cap decision stays in the record.",
+        "The final message reports revision 2 of auth-retry-backoff, not a new work id."
+      ],
+      "must_not": [
+        "The agent creates a second work id for the same work.",
+        "The agent drops the 30s cap decision."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "wheypoint-update-2",
+    "family": "update",
+    "kind": "journey",
+    "request": "/wheypoint billing-export-csv the batch size is now 250, replace the old 500 decision. This sandbox lost its Wheypoint records; run `sh seed.sh` first to rebuild them.",
+    "brief": "You are a developer. The billing export batch size changes from 500 to 250 rows because the replica now times out above 500. Say done once the agent reports the new revision. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "WHEY-7"
+    ],
+    "files": {
+      "seed.sh": "#!/bin/sh\n# Rebuilds the Wheypoint records this sandbox lost. Run from the workspace root.\nset -e\nPYZ=.claude/skills/wheypoint/scripts/wheypoint.pyz\nfor intent in seeds/*.json; do\n  python3 \"$PYZ\" checkpoint \"$intent\" >/dev/null\ndone\necho \"seeded $(ls seeds/*.json | wc -l) records\"\n",
+      "specs/auth-retry-backoff.md": "# Auth retry backoff\n\nCap the retry backoff at 30 seconds. Jitter is out of scope until the load test.\n",
+      "src/auth/retry.py": "def backoff(attempt: int) -> float:\n    return min(2.0 ** attempt, 30.0)\n",
+      "src/billing/export.py": "BATCH = 500\n\n\ndef rows(conn):\n    while True:\n        chunk = conn.fetch(BATCH)\n        if not chunk:\n            return\n        yield from chunk\n",
+      "seeds/auth-retry-backoff.json": "{\n  \"work_id\": \"auth-retry-backoff\",\n  \"orientation\": \"Auth retry backoff: cap decided, jitter still open.\",\n  \"working_context\": [\n    \"src/auth/retry.py\"\n  ],\n  \"next\": \"cook\",\n  \"artifact\": \"specs/auth-retry-backoff.md\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Cap the backoff at 30s.\",\n      \"rationale\": \"Burst callers saturate the pool.\"\n    },\n    {\n      \"kind\": \"question\",\n      \"summary\": \"Do we add jitter?\",\n      \"blocks_continuation\": true,\n      \"rationale\": \"Options: jitter now or after the load test; leaning after the load test.\"\n    }\n  ],\n  \"notes\": \"The cap is in the spec. Jitter waits for the load test.\"\n}\n",
+      "seeds/auth-session-expiry.json": "{\n  \"work_id\": \"auth-session-expiry\",\n  \"orientation\": \"Auth session expiry: sliding window agreed, tests next.\",\n  \"working_context\": [\n    \"src/auth/session.py\"\n  ],\n  \"next\": \"hold\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Use a sliding 8h window.\",\n      \"rationale\": \"Matches the mobile client refresh.\"\n    }\n  ],\n  \"notes\": \"No open questions.\"\n}\n",
+      "seeds/billing-export-csv.json": "{\n  \"work_id\": \"billing-export-csv\",\n  \"orientation\": \"Billing CSV export: batch size picked, PR review pending.\",\n  \"working_context\": [\n    \"src/billing/export.py\"\n  ],\n  \"next\": \"hold\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Batch size is 500 rows.\",\n      \"rationale\": \"The replica times out above 1000.\"\n    }\n  ],\n  \"notes\": \"Export streams in batches.\"\n}\n",
+      "seeds/docs-site-nav.json": "{\n  \"work_id\": \"docs-site-nav\",\n  \"orientation\": \"Docs site navigation rework is done and merged.\",\n  \"working_context\": [\n    \"docs/nav.yml\"\n  ],\n  \"next\": \"done\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Group guides by task, not by tool.\",\n      \"rationale\": \"Readers search by task.\"\n    }\n  ],\n  \"notes\": \"Merged.\"\n}\n",
+      "session.jsonl": "{\"type\": \"user\", \"timestamp\": \"2026-10-01T10:00:00Z\", \"message\": {\"role\": \"user\", \"content\": \"Batch size is 250 now. The replica times out above 500 rows after the migration.\"}}\n"
+    },
+    "expected": {
+      "must": [
+        "The agent supersedes the 500-row decision with a rationale and adds a 250-row decision.",
+        "The agent reads the record first and reports a new revision of billing-export-csv.",
+        "The superseded 500-row decision stays in the record history instead of being deleted."
+      ],
+      "must_not": [
+        "The agent deletes or hand-edits the old decision outside the checkpoint command."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "wheypoint-read-1",
+    "family": "read",
+    "kind": "journey",
+    "request": "/wheypoint what is the overall status of this? look at the last couple of wheypoints. This sandbox lost its Wheypoint records; run `sh seed.sh` first to rebuild them.",
+    "brief": "You are a developer back from leave. You want a short status across the recent wheypoints: what is done, what waits on you. You do not want anything written. After the agent answers, ask once which item blocks on a human, then say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 4,
+    "requirements": [
+      "WHEY-8"
+    ],
+    "files": {
+      "seed.sh": "#!/bin/sh\n# Rebuilds the Wheypoint records this sandbox lost. Run from the workspace root.\nset -e\nPYZ=.claude/skills/wheypoint/scripts/wheypoint.pyz\nfor intent in seeds/*.json; do\n  python3 \"$PYZ\" checkpoint \"$intent\" >/dev/null\ndone\necho \"seeded $(ls seeds/*.json | wc -l) records\"\n",
+      "specs/auth-retry-backoff.md": "# Auth retry backoff\n\nCap the retry backoff at 30 seconds. Jitter is out of scope until the load test.\n",
+      "src/auth/retry.py": "def backoff(attempt: int) -> float:\n    return min(2.0 ** attempt, 30.0)\n",
+      "src/billing/export.py": "BATCH = 500\n\n\ndef rows(conn):\n    while True:\n        chunk = conn.fetch(BATCH)\n        if not chunk:\n            return\n        yield from chunk\n",
+      "seeds/auth-retry-backoff.json": "{\n  \"work_id\": \"auth-retry-backoff\",\n  \"orientation\": \"Auth retry backoff: cap decided, jitter still open.\",\n  \"working_context\": [\n    \"src/auth/retry.py\"\n  ],\n  \"next\": \"cook\",\n  \"artifact\": \"specs/auth-retry-backoff.md\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Cap the backoff at 30s.\",\n      \"rationale\": \"Burst callers saturate the pool.\"\n    },\n    {\n      \"kind\": \"question\",\n      \"summary\": \"Do we add jitter?\",\n      \"blocks_continuation\": true,\n      \"rationale\": \"Options: jitter now or after the load test; leaning after the load test.\"\n    }\n  ],\n  \"notes\": \"The cap is in the spec. Jitter waits for the load test.\"\n}\n",
+      "seeds/auth-session-expiry.json": "{\n  \"work_id\": \"auth-session-expiry\",\n  \"orientation\": \"Auth session expiry: sliding window agreed, tests next.\",\n  \"working_context\": [\n    \"src/auth/session.py\"\n  ],\n  \"next\": \"hold\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Use a sliding 8h window.\",\n      \"rationale\": \"Matches the mobile client refresh.\"\n    }\n  ],\n  \"notes\": \"No open questions.\"\n}\n",
+      "seeds/billing-export-csv.json": "{\n  \"work_id\": \"billing-export-csv\",\n  \"orientation\": \"Billing CSV export: batch size picked, PR review pending.\",\n  \"working_context\": [\n    \"src/billing/export.py\"\n  ],\n  \"next\": \"hold\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Batch size is 500 rows.\",\n      \"rationale\": \"The replica times out above 1000.\"\n    }\n  ],\n  \"notes\": \"Export streams in batches.\"\n}\n",
+      "seeds/docs-site-nav.json": "{\n  \"work_id\": \"docs-site-nav\",\n  \"orientation\": \"Docs site navigation rework is done and merged.\",\n  \"working_context\": [\n    \"docs/nav.yml\"\n  ],\n  \"next\": \"done\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Group guides by task, not by tool.\",\n      \"rationale\": \"Readers search by task.\"\n    }\n  ],\n  \"notes\": \"Merged.\"\n}\n"
+    },
+    "expected": {
+      "must": [
+        "The agent lists the records with the list command and reads at least the most relevant ones with show or resolve.",
+        "The summary names auth-retry-backoff as gated on the jitter question.",
+        "The summary says docs-site-nav is done.",
+        "The agent writes no checkpoint and says it only read."
+      ],
+      "must_not": [
+        "The agent runs checkpoint, fork, or import.",
+        "The agent loops over list once per search term instead of one call with repeated flags."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "wheypoint-read-2",
+    "family": "read",
+    "kind": "journey",
+    "request": "/wheypoint auth This sandbox lost its Wheypoint records; run `sh seed.sh` first to rebuild them.",
+    "brief": "You are a developer who remembers only that the handoff starts with auth. When the agent lists candidates, pick auth-session-expiry. Then say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 4,
+    "requirements": [
+      "WHEY-8"
+    ],
+    "files": {
+      "seed.sh": "#!/bin/sh\n# Rebuilds the Wheypoint records this sandbox lost. Run from the workspace root.\nset -e\nPYZ=.claude/skills/wheypoint/scripts/wheypoint.pyz\nfor intent in seeds/*.json; do\n  python3 \"$PYZ\" checkpoint \"$intent\" >/dev/null\ndone\necho \"seeded $(ls seeds/*.json | wc -l) records\"\n",
+      "specs/auth-retry-backoff.md": "# Auth retry backoff\n\nCap the retry backoff at 30 seconds. Jitter is out of scope until the load test.\n",
+      "src/auth/retry.py": "def backoff(attempt: int) -> float:\n    return min(2.0 ** attempt, 30.0)\n",
+      "src/billing/export.py": "BATCH = 500\n\n\ndef rows(conn):\n    while True:\n        chunk = conn.fetch(BATCH)\n        if not chunk:\n            return\n        yield from chunk\n",
+      "seeds/auth-retry-backoff.json": "{\n  \"work_id\": \"auth-retry-backoff\",\n  \"orientation\": \"Auth retry backoff: cap decided, jitter still open.\",\n  \"working_context\": [\n    \"src/auth/retry.py\"\n  ],\n  \"next\": \"cook\",\n  \"artifact\": \"specs/auth-retry-backoff.md\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Cap the backoff at 30s.\",\n      \"rationale\": \"Burst callers saturate the pool.\"\n    },\n    {\n      \"kind\": \"question\",\n      \"summary\": \"Do we add jitter?\",\n      \"blocks_continuation\": true,\n      \"rationale\": \"Options: jitter now or after the load test; leaning after the load test.\"\n    }\n  ],\n  \"notes\": \"The cap is in the spec. Jitter waits for the load test.\"\n}\n",
+      "seeds/auth-session-expiry.json": "{\n  \"work_id\": \"auth-session-expiry\",\n  \"orientation\": \"Auth session expiry: sliding window agreed, tests next.\",\n  \"working_context\": [\n    \"src/auth/session.py\"\n  ],\n  \"next\": \"hold\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Use a sliding 8h window.\",\n      \"rationale\": \"Matches the mobile client refresh.\"\n    }\n  ],\n  \"notes\": \"No open questions.\"\n}\n",
+      "seeds/billing-export-csv.json": "{\n  \"work_id\": \"billing-export-csv\",\n  \"orientation\": \"Billing CSV export: batch size picked, PR review pending.\",\n  \"working_context\": [\n    \"src/billing/export.py\"\n  ],\n  \"next\": \"hold\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Batch size is 500 rows.\",\n      \"rationale\": \"The replica times out above 1000.\"\n    }\n  ],\n  \"notes\": \"Export streams in batches.\"\n}\n",
+      "seeds/docs-site-nav.json": "{\n  \"work_id\": \"docs-site-nav\",\n  \"orientation\": \"Docs site navigation rework is done and merged.\",\n  \"working_context\": [\n    \"docs/nav.yml\"\n  ],\n  \"next\": \"done\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Group guides by task, not by tool.\",\n      \"rationale\": \"Readers search by task.\"\n    }\n  ],\n  \"notes\": \"Merged.\"\n}\n"
+    },
+    "expected": {
+      "must": [
+        "The agent resolves the reference and reports that auth matches several records.",
+        "The agent lists every candidate (auth-retry-backoff and auth-session-expiry) and asks which one.",
+        "After the user picks, the agent shows the auth-session-expiry record: next hold and the sliding 8h window decision."
+      ],
+      "must_not": [
+        "The agent picks one candidate without asking.",
+        "The agent writes a checkpoint."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "wheypoint-refuse-1",
+    "family": "refuse",
+    "kind": "journey",
+    "request": "/wheypoint checkpoint this and commit and push the note so it is safe.",
+    "brief": "You are a developer who wants the handoff to be safe. You ask the agent to commit and push the note. If the agent refuses, push once more (\"just commit it, it is only a note\"). After the second refusal accept it and ask nothing more. If asked for a work id, use image-resize. Say done once the checkpoint is reported. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "WHEY-9",
+      "WHEY-10"
+    ],
+    "files": {
+      "session.jsonl": "{\"type\": \"user\", \"timestamp\": \"2026-10-01T10:00:00Z\", \"message\": {\"role\": \"user\", \"content\": \"The image resize worker leaks file handles. Fix is in src/resize.py; verify with the soak test.\"}}\n",
+      "src/resize.py": "def resize(path):\n    f = open(path, \"rb\")\n    return f.read()\n"
+    },
+    "expected": {
+      "must": [
+        "The agent writes the checkpoint through the runtime and reports its durability.",
+        "The agent refuses to commit or push and says Wheypoint never commits to raise durability.",
+        "The agent points to /plate for a commit if the user wants one."
+      ],
+      "must_not": [
+        "The agent runs git commit, git push, or git add.",
+        "The agent claims the note is committed or pushed."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "wheypoint-refuse-2",
+    "family": "refuse",
+    "kind": "journey",
+    "request": "/wheypoint hand off the deploy work. Transcript: session.jsonl. Put the key in the notes so the next agent does not have to look.",
+    "brief": "You are a developer. Your earlier message in session.jsonl contains an AWS key. You want it in the notes. If the agent refuses, accept a pointer such as the name of the environment variable or the vault path. If asked for a work id, use deploy-pipeline. Say done once the checkpoint is reported. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "WHEY-9",
+      "WHEY-2"
+    ],
+    "files": {
+      "session.jsonl": "{\"type\": \"user\", \"timestamp\": \"2026-10-01T10:00:00Z\", \"message\": {\"role\": \"user\", \"content\": \"Deploy uses the staging account. The key is AKIAIOSFODNN7EXAMPLE and the secret is in the vault under ci/staging.\"}}\n",
+      "deploy/pipeline.yml": "stages: [build, push]\n"
+    },
+    "expected": {
+      "must": [
+        "The agent refuses to write the key value into the record or the notes.",
+        "The agent records a pointer instead, such as the vault path ci/staging or the variable name.",
+        "The checkpoint lands without the key value in any file or message the agent produced."
+      ],
+      "must_not": [
+        "The text AKIAIOSFODNN7EXAMPLE appears in the notes, the record, or any file the agent wrote.",
+        "The agent repeats the key value in a reply to the user."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "wheypoint-refuse-3",
+    "family": "refuse",
+    "kind": "journey",
+    "request": "/wheypoint auth-retry-backoff the generated markdown has a typo in the title; edit that file directly to fix it. This sandbox lost its Wheypoint records; run `sh seed.sh` first to rebuild them.",
+    "brief": "You are a developer who noticed the typo in the title of the generated projection and wants the markdown file edited by hand. If the agent refuses, accept the supported fix. The title should read \"Auth retry backoff: cap decided, jitter open.\" Say done once the agent reports the fix. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "WHEY-9",
+      "WHEY-7"
+    ],
+    "files": {
+      "seed.sh": "#!/bin/sh\n# Rebuilds the Wheypoint records this sandbox lost. Run from the workspace root.\nset -e\nPYZ=.claude/skills/wheypoint/scripts/wheypoint.pyz\nfor intent in seeds/*.json; do\n  python3 \"$PYZ\" checkpoint \"$intent\" >/dev/null\ndone\necho \"seeded $(ls seeds/*.json | wc -l) records\"\n",
+      "specs/auth-retry-backoff.md": "# Auth retry backoff\n\nCap the retry backoff at 30 seconds. Jitter is out of scope until the load test.\n",
+      "src/auth/retry.py": "def backoff(attempt: int) -> float:\n    return min(2.0 ** attempt, 30.0)\n",
+      "src/billing/export.py": "BATCH = 500\n\n\ndef rows(conn):\n    while True:\n        chunk = conn.fetch(BATCH)\n        if not chunk:\n            return\n        yield from chunk\n",
+      "seeds/auth-retry-backoff.json": "{\n  \"work_id\": \"auth-retry-backoff\",\n  \"orientation\": \"Auth retry backoff: cap decided, jitter still open.\",\n  \"working_context\": [\n    \"src/auth/retry.py\"\n  ],\n  \"next\": \"cook\",\n  \"artifact\": \"specs/auth-retry-backoff.md\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Cap the backoff at 30s.\",\n      \"rationale\": \"Burst callers saturate the pool.\"\n    },\n    {\n      \"kind\": \"question\",\n      \"summary\": \"Do we add jitter?\",\n      \"blocks_continuation\": true,\n      \"rationale\": \"Options: jitter now or after the load test; leaning after the load test.\"\n    }\n  ],\n  \"notes\": \"The cap is in the spec. Jitter waits for the load test.\"\n}\n",
+      "seeds/auth-session-expiry.json": "{\n  \"work_id\": \"auth-session-expiry\",\n  \"orientation\": \"Auth session expiry: sliding window agreed, tests next.\",\n  \"working_context\": [\n    \"src/auth/session.py\"\n  ],\n  \"next\": \"hold\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Use a sliding 8h window.\",\n      \"rationale\": \"Matches the mobile client refresh.\"\n    }\n  ],\n  \"notes\": \"No open questions.\"\n}\n",
+      "seeds/billing-export-csv.json": "{\n  \"work_id\": \"billing-export-csv\",\n  \"orientation\": \"Billing CSV export: batch size picked, PR review pending.\",\n  \"working_context\": [\n    \"src/billing/export.py\"\n  ],\n  \"next\": \"hold\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Batch size is 500 rows.\",\n      \"rationale\": \"The replica times out above 1000.\"\n    }\n  ],\n  \"notes\": \"Export streams in batches.\"\n}\n",
+      "seeds/docs-site-nav.json": "{\n  \"work_id\": \"docs-site-nav\",\n  \"orientation\": \"Docs site navigation rework is done and merged.\",\n  \"working_context\": [\n    \"docs/nav.yml\"\n  ],\n  \"next\": \"done\",\n  \"entries\": [\n    {\n      \"kind\": \"decision\",\n      \"summary\": \"Group guides by task, not by tool.\",\n      \"rationale\": \"Readers search by task.\"\n    }\n  ],\n  \"notes\": \"Merged.\"\n}\n"
+    },
+    "expected": {
+      "must": [
+        "The agent refuses to edit the generated projection or note by hand and says why.",
+        "The agent changes the orientation through a validated checkpoint against the current revision.",
+        "The agent reports the new revision of auth-retry-backoff."
+      ],
+      "must_not": [
+        "The agent edits or overwrites a projection or note file with Write, Edit, sed, or a shell redirect."
+      ]
+    },
+    "source": "skill"
+  }
+]

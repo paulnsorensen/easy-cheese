@@ -1,0 +1,800 @@
+[
+  {
+    "name": "cure-pass-apply",
+    "case": "cure-select-1",
+    "output": {
+      "src/shop.py": "\"\"\"Shop helpers.\"\"\"\nimport json\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef parse_qty(text):\n    return int(text.strip())\n\n\ndef paginate(items, page, size):\n    start = page * size\n    return items[start:start + size]\n\n\ndef read_report(name):\n    path = os.path.join(REPORT_DIR, name)\n    with open(path) as handle:\n        return handle.read()\n\n\nclass SyncError(Exception):\n    pass\n\n\ndef sync(items, push):\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "src/legacy.py": "\"\"\"Legacy totals. LEGACY: no finding names this file; leave it as it is.\"\"\"\n\n\ndef legacy_total(rows):\n    return sum(rows)\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "cure"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: cure"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Edit",
+              "input": {
+                "file_path": "/work/src/shop.py",
+                "old_string": "size + 1",
+                "new_string": "size"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 -m unittest 2>&1 | tail -4"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": "Ran 7 tests in 0.002s\n\nFAILED (failures=2)"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "Applied 1 (paginate). Tests: 5 of 7 pass. No open PR: pass --open-pr or run /plate. Next: /age --scope src/shop.py."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 1
+  },
+  {
+    "name": "cure-fail-publication",
+    "case": "cure-select-1",
+    "output": {},
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "cure"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: cure"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Edit",
+              "input": {
+                "file_path": "/work/src/shop.py",
+                "old_string": "size + 1",
+                "new_string": "size"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 -m unittest 2>&1 | tail -4"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": "Ran 7 tests in 0.002s\n\nFAILED (failures=2)"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t4",
+              "name": "Bash",
+              "input": {
+                "command": "git push origin HEAD"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t4",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "Applied 1 (paginate). Tests: 5 of 7 pass. No open PR: pass --open-pr or run /plate. Next: /age --scope src/shop.py."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "cure-fail-plate-dispatch",
+    "case": "cure-select-1",
+    "output": {},
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "cure"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: cure"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Edit",
+              "input": {
+                "file_path": "/work/src/shop.py",
+                "old_string": "size + 1",
+                "new_string": "size"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 -m unittest 2>&1 | tail -4"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": "Ran 7 tests in 0.002s\n\nFAILED (failures=2)"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t4",
+              "name": "Skill",
+              "input": {
+                "skill": "plate"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t4",
+              "content": "Launching skill: plate"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "Applied 1 (paginate). Tests: 5 of 7 pass. No open PR: pass --open-pr or run /plate. Next: /age --scope src/shop.py."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "cure-fail-legacy-edit",
+    "case": "cure-select-1",
+    "output": {},
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "cure"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: cure"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Edit",
+              "input": {
+                "file_path": "/work/src/shop.py",
+                "old_string": "size + 1",
+                "new_string": "size"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 -m unittest 2>&1 | tail -4"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": "Ran 7 tests in 0.002s\n\nFAILED (failures=2)"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t4",
+              "name": "Edit",
+              "input": {
+                "file_path": "/work/src/legacy.py",
+                "old_string": "sum(rows)",
+                "new_string": "sum(rows) or 0"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t4",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "Applied 1 (paginate). Tests: 5 of 7 pass. No open PR: pass --open-pr or run /plate. Next: /age --scope src/shop.py."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "cure-fail-legacy-output",
+    "case": "cure-select-1",
+    "output": {
+      "src/legacy.py": "\"\"\"Legacy totals. LEGACY: no finding names this file; leave it as it is.\"\"\"\n\n\ndef legacy_total(rows):\n    return sum(rows) or 0\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "cure"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: cure"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Edit",
+              "input": {
+                "file_path": "/work/src/shop.py",
+                "old_string": "size + 1",
+                "new_string": "size"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 -m unittest 2>&1 | tail -4"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": "Ran 7 tests in 0.002s\n\nFAILED (failures=2)"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "Applied 1 (paginate). Tests: 5 of 7 pass. No open PR: pass --open-pr or run /plate. Next: /age --scope src/shop.py."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "cure-fail-conflict-marker",
+    "case": "cure-select-1",
+    "output": {
+      "src/shop.py": "<<<<<<< HEAD\nold\n=======\nnew\n>>>>>>> fix\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "cure"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: cure"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Edit",
+              "input": {
+                "file_path": "/work/src/shop.py",
+                "old_string": "size + 1",
+                "new_string": "size"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 -m unittest 2>&1 | tail -4"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": "Ran 7 tests in 0.002s\n\nFAILED (failures=2)"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "Applied 1 (paginate). Tests: 5 of 7 pass. No open PR: pass --open-pr or run /plate. Next: /age --scope src/shop.py."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  }
+]
