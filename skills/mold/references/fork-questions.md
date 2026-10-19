@@ -85,7 +85,7 @@ On an `Explain more` selection:
 2. Add the context that the card left out. Use one or more of these angles:
    - background: why the fork exists, with ledger and evidence citations;
    - example: one concrete input that runs through each branch to its observable result;
-   - graph: a larger diagram of the affected path;
+   - graph: a larger diagram of the affected path, at the C4 level that the fork changes (see [`diagrams.md`](../../cheese/references/diagrams.md));
    - downstream: what each branch makes easy or hard later, and which follow-up it forecloses.
 3. Ask the same fork again with the same options and `Explain more`.
    Its description becomes "Explain from a different angle."

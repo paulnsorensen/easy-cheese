@@ -154,6 +154,8 @@ A spec captures a design decision and its rationale before code is written.
 - **Length budget:** 50–200 lines. Past 300 lines means a decision is buried; split or cut.
 
 Specs that touch existing systems open Approach with one diagram (flowchart or sequence) of the end state before any subsections.
+A spec that adds, removes, or rewires a container or an external system uses a C4 Container view.
+Pick the view and its notation from [`diagrams.md`](diagrams.md).
 
 ### Findings report
 
