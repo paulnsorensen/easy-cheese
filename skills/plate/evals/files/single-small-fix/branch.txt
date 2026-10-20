@@ -10,6 +10,10 @@ $ git diff --stat main...HEAD
  tests/python/test_melt_status.py        | 14 ++++++++++++++
  2 files changed, 17 insertions(+), 1 deletion(-)
 
+$ git diff --name-status --find-renames main...HEAD
+M	src/easy_cheese/skills/melt/status.py
+M	tests/python/test_melt_status.py
+
 $ git diff main...HEAD -- src/easy_cheese/skills/melt/status.py
 -    if paths is None or len(paths) == 0:
 -        raise ConflictStateError("no unmerged paths")
