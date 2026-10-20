@@ -10,7 +10,8 @@ Copy a starting diagram from [`diagram-templates.md`](diagram-templates.md).
 ## When to draw
 
 Work through this checklist before you write a spec Approach, a pull request body, or an architecture wiki page.
-Draw the diagram for each item that applies. Draw no diagram when no item applies.
+Mark each item that applies. Draw no diagram when no item applies.
+Then reduce the marked items to the smallest set in [Draw the smallest set](#draw-the-smallest-set).
 
 - [ ] The change spans two or more software systems that the organization owns. Draw a **System Landscape** view.
 - [ ] The change adds a user type or an external system that the whole system depends on. Draw a **System Context** view.
@@ -26,12 +27,29 @@ Draw the diagram for each item that applies. Draw no diagram when no item applie
 
 Draw no diagram for a small fix, a docs-only pull request, or a test-only change.
 Also draw none for a rename that keeps every boundary.
-These rules do not apply to the spec opening diagram.
-Each artifact keeps its own diagram limit:
+A spec that touches existing systems always draws its opening diagram, even when no item applies.
 
-- A spec follows the spec diagram rule in [`formatting.md`](formatting.md).
-- A pull request body holds one diagram at most. The `/plate` diagram table decides whether the PR gets one.
+## Draw the smallest set
+
+The templates are a menu. Do not draw every view that the checklist marks.
+Each diagram answers one reader question. Never draw two diagrams of the same path.
+Resolve overlapping items before you draw:
+
+- An asynchronous sequence replaces a plain sequence of the same messages.
+- An agent handoff sequence replaces a plain sequence of the same handoffs.
+- A Dynamic view and a sequence diagram are alternatives. Draw one of them.
+- A Container view shows the people and external systems next to its containers.
+  Draw a separate System Context view only when a new user type or a new external system is the point of the change.
+- A Container view replaces a flow diagram of the same containers.
+
+Each artifact sets its own diagram limit:
+
+- A spec holds its opening diagram and at most two more. [`formatting.md`](formatting.md) owns the spec rule.
+- A pull request body holds one diagram at most. [`ordinary-pr.md`](../../plate/references/ordinary-pr.md) owns the pull request rule.
 - A `/mold` fork card follows [`fork-questions.md`](../../mold/references/fork-questions.md).
+
+When more items remain than the limit allows, keep the diagrams of the riskiest change.
+A changed data model, a new failure path, or a new boundary is riskier than a moved responsibility.
 
 ## Pick one view
 

@@ -117,19 +117,14 @@ Claims:
 
 ### Diagram
 
-Add one Mermaid diagram only when the structure is the point of the review:
-
-| Change | Diagram |
-| --- | --- |
-| A data or control flow that crosses three or more modules | `flowchart` of that flow |
-| A changed message order between components or agents | `sequenceDiagram` |
-| A stack of PRs | `flowchart` of the stack order, with this PR marked |
-| A new, removed, or rewired application, data store, queue, or external system | C4 Container view as a `flowchart` |
+Add one Mermaid diagram at most, and only when the structure is the point of the review.
+Pick it with the checklist and the smallest-set rules in [`diagrams.md`](../../cheese/references/diagrams.md).
+When several items apply, draw the one that shows the riskiest change.
 
 Add no diagram to a small fix, a docs-only pull request, or an independent PR.
-A stack layer keeps the stack-order diagram.
+A stack layer keeps a `flowchart` of the stack order, with this PR marked.
 Derive the diagram from the diff. Show only the elements that the diff changes, plus their neighbors.
-Draw it by the notation and Mermaid rules in [`diagrams.md`](../../cheese/references/diagrams.md).
+Draw it by the notation and Mermaid rules in `diagrams.md`.
 
 ## Push verification
 
