@@ -85,7 +85,7 @@ flowchart LR
   Web -->|"submits order<br>[JSON/HTTPS]"| API
   API -->|"writes order<br>[SQL]"| DB
   API -.->|"enqueues charge<br>[SQS]"| Queue
-  Queue -.->|"delivers job"| Worker
+  Queue -.->|"delivers job<br>[SQS]"| Worker
   Worker -->|"charges card<br>[HTTPS]"| Pay
   Worker -->|"marks paid<br>[SQL]"| DB
 ```
@@ -113,11 +113,12 @@ flowchart LR
   Handler -->|"places order"| Service
   Service -->|"saves order"| Repo
   Service -->|"requests charge"| Pub
-  Repo -->|"SQL"| DB
-  Pub -.->|"SQS"| Queue
+  Repo -->|"reads and writes<br>[SQL]"| DB
+  Pub -.->|"publishes job<br>[SQS]"| Queue
 ```
 
 Title: `Component view: Orders API`.
+Legend: cylinder = data store, double-edged box = queue, dashed arrow = asynchronous message.
 
 ## Dynamic: sequence form
 
@@ -160,6 +161,7 @@ flowchart LR
 ```
 
 Title: `Dynamic view: Shop checkout`.
+Legend: cylinder = data store, double-edged box = queue, dashed arrow = asynchronous message.
 
 ## Deployment
 
@@ -180,12 +182,13 @@ flowchart TB
       end
     end
   end
-  LB -->|"HTTPS"| API
-  API -->|"SQL over TLS"| DB
-  Worker -->|"SQL over TLS"| DB
+  LB -->|"routes requests<br>[HTTPS]"| API
+  API -->|"reads and writes<br>[SQL over TLS]"| DB
+  Worker -->|"marks paid<br>[SQL over TLS]"| DB
 ```
 
 Title: `Deployment view: Shop, production`.
+Legend: cylinder = data store, nested box = deployment node.
 
 ## Sequence: request and response
 
@@ -211,6 +214,8 @@ sequenceDiagram
   deactivate API
 ```
 
+Title: `Sequence view: place an order`.
+
 ## Sequence: asynchronous work
 
 Use this sequence when a change adds a queue, a retry, a callback, or a background job.
@@ -235,6 +240,8 @@ sequenceDiagram
   Note over Worker,Pay: Idempotency key is order_id
 ```
 
+Title: `Sequence view: charge a card`.
+
 ## Sequence: agent handoff
 
 Use this sequence when a change alters the order of handoffs between skills, agents, or sub-agents.
@@ -257,6 +264,8 @@ sequenceDiagram
   Press-->>Cook: Hardened tests
 ```
 
+Title: `Sequence view: feature handoff`.
+
 ## Database: entity relationship
 
 Use an entity relationship diagram when a change adds or alters tables, columns, keys, or relationships.
@@ -274,7 +283,7 @@ erDiagram
   }
   ORDER {
     uuid id PK
-    uuid customer_id FK
+    uuid customer_id FK "NOT NULL"
     string status
     timestamp created_at
   }
@@ -286,16 +295,17 @@ erDiagram
   }
   PAYMENT {
     uuid id PK
-    uuid order_id FK, UK
+    uuid order_id FK, UK "NOT NULL"
     string provider_ref
   }
 ```
 
 Cardinality: `||` exactly one, `o|` zero or one, `|{` one or more, `o{` zero or more.
+Title: `Database view: Shop orders`.
 
 ## Database: UML tables
 
-Use the UML table form when the reader needs column types, constraints, or indexes that the entity relationship form cannot show.
+Use the UML table form when the reader needs constraints or indexes beside each column.
 Mark each class with the `<<table>>` stereotype. Put multiplicities on each association.
 
 ```mermaid
@@ -308,19 +318,21 @@ classDiagram
   class orders {
     <<table>>
     uuid id PK
-    uuid customer_id FK
+    uuid customer_id FK NOT NULL
     text status CHECK in pending, paid, failed
     timestamptz created_at INDEX
   }
   class payments {
     <<table>>
     uuid id PK
-    uuid order_id FK UNIQUE
+    uuid order_id FK UNIQUE NOT NULL
     text provider_ref
   }
   customers "1" --> "0..*" orders : places
   orders "1" --> "0..1" payments : paid by
 ```
+
+Title: `Database view: Shop orders, UML tables`.
 
 ## State
 
@@ -336,3 +348,5 @@ stateDiagram-v2
   Failed --> [*]
   Shipped --> [*]
 ```
+
+Title: `State view: Order status`.

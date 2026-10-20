@@ -24,13 +24,13 @@ Supplementary diagrams: System Landscape, Dynamic, and Deployment. Notation rule
 ## Limits of the C4 model
 
 - Static structure only. The C4 FAQ names embedded systems and configured platforms (SAP, Salesforce) as weaker fits.
-- The word "container" collides with Docker containers, and teams often confuse containers with components. One practitioner blog (workingsoftware.dev) lists this as a common misuse; treat it as a single source.
+- The word "container" collides with Docker containers, and teams often confuse containers with components. One practitioner blog ([Misuses and mistakes of the C4 model](https://www.workingsoftware.dev/misuses-and-mistakes-of-the-c4-model)) lists this as a common misuse. Treat it as a single source.
 - Hand-drawn diagrams drift. The C4 site recommends modelling tools that generate views from one model. See [C4 models-as-code tools comparison](./c4-models-as-code-tools.md).
 - Event-driven and data-flow designs need Dynamic or sequence views. This is an inference from the static-structure scope, not a sourced claim.
 
 ## Alternatives and complements to C4
 
-C4 alternatives answer different questions. The rows below were not all checked against primary sources; arc42, UML, and 4+1 were, the rest are background knowledge.
+C4 alternatives answer different questions. Primary sources back the arc42, UML, and 4+1 rows. The other rows rest on background knowledge.
 
 | Model | Best use | Relation to C4 |
 | --- | --- | --- |
@@ -48,9 +48,7 @@ C4 alternatives answer different questions. The rows below were not all checked 
 easy-cheese adopts the C4 vocabulary and draws every view in Mermaid:
 
 - `skills/cheese/references/diagrams.md` holds the when-to-draw checklist, the view table, and the notation and Mermaid rules.
-- `skills/cheese/references/diagram-templates.md` holds one rendered-and-checked template per view: the six Structurizr view types (Landscape, Context, Container, Component, Dynamic in two forms, Deployment), three sequence diagrams, two database diagrams, and a state diagram.
-- Agents draw C4 views with Mermaid `flowchart`, not Mermaid `C4Context`, because the Mermaid C4 syntax is experimental and rendered worst in the local test ([C4 Diagrams | Mermaid](../sources/mermaid-c4-diagrams.md)).
-
-Full evidence with fetch bodies: `.cheese/research/c4-model/` (gitignored, this checkout).
+- `skills/cheese/references/diagram-templates.md` holds the starting templates. They cover the Structurizr view types: Landscape, Context, Container, Component, Dynamic in two forms, and Deployment. They also cover three sequence diagrams, two database diagrams, and a state diagram.
+- Agents draw C4 views with Mermaid `flowchart`, not Mermaid `C4Context`. Mermaid marks its C4 syntax as experimental, and that syntax rendered worst in the local test ([Mermaid C4 diagram syntax](../sources/mermaid-c4-diagrams.md)).
 
 _Source: briesearch pass 2026-10-19 (c4model.com, mermaid.js.org, practitioner blogs) · Updated: 2026-10-19_

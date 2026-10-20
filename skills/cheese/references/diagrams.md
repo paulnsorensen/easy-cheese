@@ -1,6 +1,8 @@
 # Diagram vocabulary
 
-Use this reference when a skill adds an architecture, flow, data, or behavior diagram to a spec, a pull request body, a wiki page, or an explanation.
+Use this reference when a skill adds a diagram to a spec, a pull request body, or a wiki page.
+Also use it for a diagram in an explanation.
+The diagram can show architecture, flow, data, or behavior.
 The architecture vocabulary comes from the [C4 model](https://c4model.com/).
 C4 defines the abstractions and the zoom levels. It does not fix a notation, so draw C4 views in Mermaid.
 Copy a starting diagram from [`diagram-templates.md`](diagram-templates.md).
@@ -22,12 +24,14 @@ Draw the diagram for each item that applies. Draw no diagram when no item applie
 - [ ] The change adds a status field, a lifecycle, or a transition. Draw a **state** diagram.
 - [ ] A data or control flow crosses three or more modules. Draw a **flow** diagram.
 
-Draw no diagram for a small fix, a docs-only change, a test-only change, or a rename that keeps every boundary.
+Draw no diagram for a small fix, a docs-only pull request, or a test-only change.
+Also draw none for a rename that keeps every boundary.
+These rules do not apply to the spec opening diagram.
 Each artifact keeps its own diagram limit:
 
-- A spec opens Approach with one diagram. It adds one diagram for each other checklist item that applies.
-- A pull request body holds one diagram at most. Pick the item that a reviewer most needs. See the `/plate` body contract.
-- A `/mold` fork card shows the one view that the fork changes.
+- A spec follows the spec diagram rule in [`formatting.md`](formatting.md).
+- A pull request body holds one diagram at most. The `/plate` diagram table decides whether the PR gets one.
+- A `/mold` fork card follows [`fork-questions.md`](../../mold/references/fork-questions.md).
 
 ## Pick one view
 
@@ -67,10 +71,10 @@ A Component view also shows the containers and external systems that connect to 
 
 - Give each diagram a title that names the view and its scope, for example `Container view: Shop checkout`.
 - Label each element with its name, its type and technology, and one line of responsibility.
-  For example: `Pay["Payment provider<br>[Software system]<br>Charges cards"]`.
+  For example: `Pay["Payment provider<br>[External system]<br>Charges cards"]`.
 - Draw each relationship in one direction.
   Label it with its intent, and add the protocol or technology between containers.
-- Add a legend when a shape, a color, or a line style carries meaning.
+- Add a legend when a shape or a line style carries meaning.
   Mermaid has no legend element, so put a one-line `Legend:` under the diagram.
 - Show only the elements that the change touches, plus their direct neighbors.
   Keep a diagram to 15 nodes or fewer.
@@ -89,14 +93,5 @@ A Component view also shows the containers and external systems that connect to 
 
 ## Templates
 
-[`diagram-templates.md`](diagram-templates.md) holds one tested template for each view in the table above.
-It covers the C4 views that Structurizr draws, three sequence diagrams, two database diagrams, and a state diagram.
-
-## Alternatives
-
-C4 covers static structure well. Use another model when the question is different:
-
-- arc42 is a documentation template. It pairs with C4 views and adds quality goals, decisions, and risks.
-- UML sequence, state, and deployment diagrams add precise behavior where C4 stays informal.
-- A data flow diagram with trust boundaries supports a threat model.
-- ArchiMate covers enterprise views that cross business, application, and technology layers.
+[`diagram-templates.md`](diagram-templates.md) holds a template for each view in the table above.
+Draw a flow diagram as a plain `flowchart`. It has no template.

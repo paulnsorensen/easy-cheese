@@ -1,6 +1,6 @@
-# export | Structurizr
+# Structurizr export command
 
-The Structurizr documentation page for the `export` command, last verified 2026-10-19, supports the claims about Structurizr's free command-line export formats and its open-source status.
+This page records the Structurizr documentation page for the `export` command, last verified 2026-10-19. The page supports the claims about the free export formats and the open-source status of Structurizr.
 Canonical source: [export | Structurizr](https://docs.structurizr.com/export)
 
 ## Claims used from the Structurizr export page

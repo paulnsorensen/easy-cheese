@@ -34,6 +34,7 @@ Draw the branches as a plain-text graph in a `text` fence when the fork changes 
 Use a symbol table when the branches differ only in properties.
 Use Mermaid only when the host renders it. A terminal does not.
 Keep each graph to eight lines or fewer.
+For an architecture fork, name the C4 level and the elements in the graph, as [`diagrams.md`](../../cheese/references/diagrams.md) defines them.
 
 Example:
 

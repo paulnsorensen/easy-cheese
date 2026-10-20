@@ -124,13 +124,12 @@ Add one Mermaid diagram only when the structure is the point of the review:
 | A data or control flow that crosses three or more modules | `flowchart` of that flow |
 | A changed message order between components or agents | `sequenceDiagram` |
 | A stack of PRs | `flowchart` of the stack order, with this PR marked |
-| A new, removed, or rewired service, data store, or external system | C4 Container view as a `flowchart` |
+| A new, removed, or rewired application, data store, queue, or external system | C4 Container view as a `flowchart` |
 
-Add no diagram to a small fix, a docs-only change, or an independent PR.
-Derive the diagram from the diff. Show only components that the diff changes, plus their direct callers.
-Keep it to 15 nodes or fewer. Quote a label that holds punctuation, for example `R["router.select()"]`.
-Never use `end` as a node id. Use `<br>` for a line break. Do not add theme or style directives.
-Label C4 elements and relationships by the notation rules in [`diagrams.md`](../../cheese/references/diagrams.md).
+Add no diagram to a small fix, a docs-only pull request, or an independent PR.
+A stack layer keeps the stack-order diagram.
+Derive the diagram from the diff. Show only the elements that the diff changes, plus their neighbors.
+Draw it by the notation and Mermaid rules in [`diagrams.md`](../../cheese/references/diagrams.md).
 
 ## Push verification
 

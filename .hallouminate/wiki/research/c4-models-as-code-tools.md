@@ -6,7 +6,7 @@ Research pass and local render test, 2026-10-19. Question: which open-source too
 
 LikeC4 (MIT) is the best-supported open-source alternative to Structurizr. It has one model with many views, the most contributors and releases, a CLI, a language server, and a read-only MCP server ([LikeC4 CLI](../sources/likec4-cli.md)). It does not enforce C4 element rules unless you write a specification.
 
-Structurizr is itself open source now (Apache-2.0 in `structurizr/structurizr`), with a free `local` viewer and a free `export` command ([export | Structurizr](../sources/structurizr-export.md)). It is the C4 reference implementation, but one person made every commit in the last year.
+Structurizr is itself open source now (Apache-2.0 in `structurizr/structurizr`), with a free `local` viewer and a free `export` command ([Structurizr export command](../sources/structurizr-export.md)). It is the C4 reference implementation, but one person made every commit in the last year.
 
 For static images, C4-PlantUML produced the best output in the local test. No tool renders natively in GitHub pull requests except plain Mermaid.
 
@@ -35,7 +35,7 @@ An MCP server adds targeted queries (search, relationship paths) without loading
 
 ## Rendered output quality from the local test
 
-One identical Container view (8 elements, 7 relationships) was rendered in each tool on 2026-10-19 and scored by eye for layout, label readability, C4 fidelity, and looks. No published side-by-side comparison exists.
+On 2026-10-19 the test rendered one identical Container view (8 elements, 7 relationships) in each tool. One rater scored layout, label readability, C4 fidelity, and looks by eye. No published side-by-side comparison exists.
 
 1. C4-PlantUML: clean, full C4 notation, automatic legend and boundary. Needs Java or Docker and fetches its library from GitHub at render time.
 2. Structurizr: classic C4 look with technology on edges. External systems overlapped the boundary. The CLI needs the browser renderer for PNG.
@@ -43,14 +43,12 @@ One identical Container view (8 elements, 7 relationships) was rendered in each 
 4. LikeC4: modern look, but tall, no legend, and no technology on edges. The model may have put technology in the wrong field; left-to-right layout was not tried.
 5. Mermaid `flowchart` with C4 labels: readable and GitHub-native, but not true C4 notation.
 6. D2 with dagre layout: labels collided.
-7. Mermaid C4: edges through boxes and labels on boxes ([C4 Diagrams | Mermaid](../sources/mermaid-c4-diagrams.md)).
+7. Mermaid C4: edges through boxes and labels on boxes ([Mermaid C4 diagram syntax](../sources/mermaid-c4-diagrams.md)).
 
 Caveats: one small model, one rater. Large nested models stress layout engines differently. D2's TALA engine (now MPL-2.0) and goadesign/model were not rendered.
 
 ## Consequence for easy-cheese tooling
 
-Keep Mermaid `flowchart` for spec and pull-request diagrams, because only Mermaid renders in GitHub. When a repository keeps a durable C4 model, prefer LikeC4 for agent use and browsable docs, or Structurizr with a C4-PlantUML export for the cleanest static images. `skills/cheese/references/diagrams.md` already tells agents to derive views from such a model instead of drawing a divergent copy.
-
-Evidence: `.cheese/research/c4-as-code-tools/`, `.cheese/research/c4-output-quality/`, and `.context/c4-bakeoff/RESULTS.md` (all gitignored, this checkout).
+Keep Mermaid `flowchart` for spec and pull-request diagrams, because only Mermaid renders in GitHub. When a repository keeps a durable C4 model, prefer LikeC4 for agent use and browsable docs. Prefer Structurizr with a C4-PlantUML export for the cleanest static images. `skills/cheese/references/diagrams.md` already tells agents to derive views from such a model instead of drawing a divergent copy.
 
 _Source: briesearch passes and local render test 2026-10-19 (gh api, likec4.dev, docs.structurizr.com, mermaid.js.org, d2lang.com) · Updated: 2026-10-19_

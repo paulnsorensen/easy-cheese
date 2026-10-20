@@ -1,6 +1,6 @@
 # The C4 model for visualising software architecture
 
-Simon Brown's C4 model website (c4model.com), last verified 2026-10-19, supports the definition of the C4 abstractions, diagram levels, and notation rules, and the claim that System Context and Container diagrams are sufficient for most teams.
+This page records Simon Brown's C4 model website (c4model.com), last verified 2026-10-19. The site supports the definitions of the C4 abstractions, diagram levels, and notation rules. It also supports the claim that System Context and Container diagrams are sufficient for most teams.
 Canonical source: [The C4 model for visualising software architecture](https://c4model.com/)
 
 ## Claims used from the C4 model website
