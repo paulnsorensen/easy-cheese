@@ -356,6 +356,15 @@ Wiring rows exist in the manifest, not the curd block.
   A stalled or blocked scope routes to Mold remediation planning.
   After wiring and merge, the project gates must pass before the global post-merge chain.
 
+- **Stall report.**
+  A stalled, capped, or blocked scope stops silently unless the orchestrator reports it.
+  Write the stall report as visible prose before the Mold route and before any question.
+  Name the curd, each Age and Cure pass with its findings, and why the fixes did not converge.
+  When the stall needs a design decision, weigh each option and its trade-off in that prose.
+  A question can confirm only an option that the report weighed.
+  Follow the freshness rule in [`ask-user-question.md`](../../cheese/references/ask-user-question.md).
+  After the answer, state the selected option and the next dispatch in prose before the dispatch.
+
 ## Worktree harvest and teardown
 
 - Give each curd its own worktree.
