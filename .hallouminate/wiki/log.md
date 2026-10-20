@@ -107,3 +107,9 @@
 
 - 2026-10-15 · 5d06dbb1e665716c · merged · adr/culture-wheypoint-collaboration-001.md · Replace explicit altitude selection with user-approved conversational navigation. Frozen identity and natural-language probes return the page at rank 1.
 
+
+
+- 2026-10-18 · 6d02516f78fb5bc0 · new-page · research/behavioral-acceptance-ears-loops.md · promoted dotfiles research on behavioral acceptance: EARS plus BDD examples, false-success and known-working controls, test-admission question, acceptance-repair versus optimization loops, constraints as non-compensating gates; visual summary and call manifests under research/artifacts/behavioral-acceptance-ears-loops/. Exact and natural probes rank 1-2.
+- 2026-10-18 · 6d02516f78fb5bc0 · new-page · research/behavioral-acceptance-easy-cheese-suggestions.md · seven candidate changes for Mold, Cook, Press, Age, loops, doctrine tests, and skill experiments, grounded at 336258e0; records wiki drift where /cut and GateReceipt still read as live. Exact and natural probes rank 1.
+- 2026-10-18 · 6d02516f78fb5bc0 · new-page · sources/index.md and 14 sources/*.md pages · one retrieval-spine page per cited source (EARS, Gherkin, BDD, BDD myths, Google testing and mutation, Hypothesis stateful, Anthropic evals and agents, Self-Refine, holdout reuse, ICLR and TACL self-correction, ArchUnit). Three paper titles verified by fetch on 2026-10-18. All exact-title and central-claim probes in top 3.
+
