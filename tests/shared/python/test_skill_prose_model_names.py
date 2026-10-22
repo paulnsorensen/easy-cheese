@@ -8,7 +8,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 OVERLAY_FILE = Path("skills/cheese/references/routing-policy.md")
 OVERLAY_HEADING = "## Roles x tiers"
-MODEL_NAME = re.compile(r"\b(?:opus|sonnet|haiku)\b|\bgpt-\d", re.IGNORECASE)
+MODEL_NAME = re.compile(
+    r"\b(?:opus|sonnet|haiku|luna|sol|astra|terra)\b|\bgpt-\d", re.IGNORECASE
+)
 
 
 def _overlay_span(lines: list[str]) -> range:
@@ -51,10 +53,13 @@ def test_check_rejects_planted_hits(tmp_path: Path) -> None:
     )
     other = tmp_path / "skills/foo/SKILL.md"
     other.parent.mkdir(parents=True)
-    _ = other.write_text("Use gpt-5 or haiku.\nplain solar words\n", encoding="utf-8")
+    _ = other.write_text(
+        "Use gpt-5 or haiku.\nplain solar words\nescalate to Astra\n", encoding="utf-8"
+    )
 
     hits = find_model_name_hits(tmp_path)
 
-    assert len(hits) == 2
+    assert len(hits) == 3
     assert any(h.startswith("skills/cheese/references/routing-policy.md:9") for h in hits)
     assert any(h.startswith("skills/foo/SKILL.md:1") for h in hits)
+    assert any(h.startswith("skills/foo/SKILL.md:3") for h in hits)

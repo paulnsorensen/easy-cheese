@@ -69,7 +69,7 @@ Dispatch the fresh-context reviewer unless all four conditions are true:
 - The diff has <~40 changed lines.
 - The diff has no risk flag.
 
-If all four conditions are true, run the coder self-check. If one condition is false, route the review to 1 fresh reviewer at the `powerful` tier (see `../../cheese/references/routing-policy.md` § Roles x tiers).
+If all four conditions are true, run the coder self-check. If one condition is false, dispatch 1 fresh `reviewer (taste-test)` at the tier that **Who runs it** names below.
 
 ### Risk flag
 
