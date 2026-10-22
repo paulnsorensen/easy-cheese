@@ -147,9 +147,8 @@ Do not accept an unrelated failure as a reproduction.
 Classify the symptom before you form hypotheses.
 
 - Continue at the current model tier for a clean stack trace and a reliable loop.
-- Upgrade the model tier for races, cross-module failures, performance regressions, or Heisenbugs.
+- Upgrade to the `powerful` tier for races, cross-module failures, performance regressions, or Heisenbugs.
 
-Upgrade to the `powerful` tier.
 The per-harness upgrade commands live in `../cheese/references/routing-policy.md` § Roles x tiers.
 
 ## Phase 3: Form hypotheses
