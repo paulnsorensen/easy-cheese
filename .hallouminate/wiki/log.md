@@ -110,6 +110,7 @@
 
 
 - 2026-10-18 · 9014418ab9a8e937 · merged · ideas/minimal-easy-cheese.md · Prepare the manifesto discussion for review: separate assistant proposals, state evidence limits, and add measurable next steps. Publication does not approve a rewrite.
+- 2026-10-22 · tenet-reconciliation-rulings · curated · easy-cheese-manifesto.md, ideas/minimal-easy-cheese.md, adr/codex-omp-portability-002.md, adr/deterministic-fanout-sizing-005.md, adr/workflow-contract-milknado-seam-007.md, adr/workflow-contract-milknado-seam-008.md, adr/hard-cheese-retained-002.md, adr/workflow-contract-milknado-seam-006.md · Fold the owner's fork and tension rulings into the canonical manifesto; record forks A, B, C, I, and J as ADRs; mark seam-006 superseded in part; replace measure-first next steps with the ruled change-first order.
 
 - 2026-10-19 · 410a1f3752f7508b · new-page · research/c4-model-evaluation.md · C4 is a good default for static structure; Context + Container suffice for most teams; alternatives table; easy-cheese draws C4 in Mermaid flowchart (diagrams.md, diagram-templates.md).
 - 2026-10-19 · 410a1f3752f7508b · new-page · research/c4-models-as-code-tools.md · LikeC4 best-supported OSS alternative; Structurizr now Apache-2.0 with one committer; every tool has a CLI; local render test ranks C4-PlantUML first, Mermaid C4 last.

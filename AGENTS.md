@@ -2,6 +2,11 @@
 
 This document is for LLMs, agents, and automation tools working in this repository.
 
+## Tenets
+
+The easy-cheese tenets and the owner's rulings live in one page: [the easy-cheese manifesto](.hallouminate/wiki/easy-cheese-manifesto.md).
+Read it before you change a workflow, the role of a skill, or a contract between skills.
+
 ## Single Quality Gate: `just check`
 
 **Always run `just check` before declaring work done — before any commit, push, PR open, or hand-off.** Treat green from `just check` as the only signal that a change is shippable.

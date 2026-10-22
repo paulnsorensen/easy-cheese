@@ -1,8 +1,8 @@
 # Minimal easy-cheese
 
-Working discussion — 2026-10-18.
+Working discussion — 2026-10-18, updated 2026-10-22.
 This page tests a simpler design against the [manifesto](../easy-cheese-manifesto.md).
-It does not approve implementation, schema removal, or a new storage engine.
+The manifesto's rulings section records what the owner decided; this page keeps the proposals and the evidence.
 
 ## The smallest coherent shape
 
@@ -70,8 +70,8 @@ These rows describe required experiences, not a new sequence of mandatory phases
 | Resume in another session | Recover current decisions, unresolved questions, artifact versions, and the next authorized move. |
 | Work without optional tools or UI | Preserve core behavior; state any lost capability or assurance. |
 
-The concurrent discovery/build row still needs a rule for changes to an in-flight piece.
-The earlier proposal to finish and queue a follow-up was never approved.[^stream]
+The owner ruled on 2026-10-22: the in-flight piece finishes and a follow-up piece is queued; a change in direction cancels and resends it.
+See [deterministic-fanout-sizing-005](../adr/deterministic-fanout-sizing-005.md).
 The older fifteen-workflow map survives only as a summary in the sources recovered here.
 The October record explicitly leaves its reconciliation with the six examples open.
 This table is a coverage hypothesis, not proof that every historical workflow is accounted for.[^stream]
@@ -112,7 +112,7 @@ The current Age router already separates semantic input from deterministic plann
 **Reviewability:** use a revision-bound change explanation, not decorative documentation.
 Show intent, affected responsibilities, key alternatives, risks, evidence, and the decisions the human must understand.
 Use diagrams or stacks only when they reduce that burden.
-Hard-cheese should support understanding throughout the work, not surprise the user with an exam at publication.
+Hard-cheese stays the quiz; a separate review artifact supports understanding throughout the work ([hard-cheese-retained-002](../adr/hard-cheese-retained-002.md)).
 
 **Optimization:** measure verified outcomes, cost, and user understanding.
 Prevent the optimizer from changing its own success criteria or learning the holdout cases.
@@ -142,44 +142,36 @@ Those are coverage plans, not reliability measurements.[^journeys]
 
 ## Next steps
 
-The proposed next steps test whether a smaller easy-cheese preserves the required experience.
-They do not authorize implementation or live model calls.
+On 2026-10-22 the owner chose to make the ruled changes first and measure after.
+The earlier measure-first sequence (settle tenets, reconcile the journey map, baseline the current engine, then compare one simplification) no longer sets the order.
+The accepted risk: no baseline of the current cook exists to compare the size heuristics against.
 
-1. **Settle the working tenets.**
-   Review the manifesto separately from these assistant proposals.
-   Output: accepted wording and a list of unresolved disagreements.
-2. **Reconcile the journey map.**
-   Recover the older fifteen-workflow enumeration, or explicitly record what cannot be recovered.
-   Map each known use case to a journey and its observable result.
-   Output: one coverage table with gaps, not an assumed completeness claim.
-3. **Define the commitment boundary.**
-   Use one example where discovery continues while a ready piece builds.
-   Decide what must stay stable and what happens when a specification or shared interface changes.
-   Output: a small decision record for readiness, invalidation, and required human approval.
-4. **Measure the current engine.**
-   Start with a small bug, an uncertain feature, a parallel change, a PR-feedback fix, and a cold-session resume.
+1. **Size-heuristics mold.**
+   Define the size score, the grounding-plan section of the spec, mixed inline and dispatched pieces, the change-in-direction test, and the degrade path without sub-agents.
+   See [deterministic-fanout-sizing-005](../adr/deterministic-fanout-sizing-005.md).
+2. **Review-artifact mold.**
+   Define its sections, its editor, and where it lands.
+   See [hard-cheese-retained-002](../adr/hard-cheese-retained-002.md).
+3. **Harness overlay.**
+   Keep model names in one overlay and reject them elsewhere in shared skill text.
+   See [codex-omp-portability-002](../adr/codex-omp-portability-002.md).
+4. **Record links.**
+   Add digest-pinned links from the Wheypoint record to Spec, Plan, and Review artifacts, then revisit further record cuts (issue #843).
+5. **Journeys and the grader (fork F).**
+   Run after the tilth benchmark work.
    Pin the task, revision, model, tools, and live-call budget before each run.
-   Record final behavior, interventions, elapsed time, token cost, and whether the user can explain the result.
-   Include absent-adapter cases and a relevant broken case that each acceptance check rejects.
-   Output: a baseline report with failures and skips; do not convert missing evidence into passes.
-5. **Try one bounded simplification.**
-   Choose one demonstrated source of duplicate state, stale evidence, or process cost.
-   Compare the candidate with the baseline under the same acceptance checks and budgets.
-   Output: a keep, revise, or reject decision; require explicit approval before implementation or wider replacement.
 
 Routing-only tests remain useful, but do not establish successful downstream work.[^evals][^journeys]
-Use held-out journeys for the replacement decision.
-Do not remove guards or weaken success criteria to make a candidate win.
+Do not remove guards or weaken success criteria to make a change look better.
 
 ## Decisions still needed
 
-- What evidence makes a piece ready to leave discovery and enter implementation?
-- Which decisions require the human, and when should Hard-cheese interrupt rather than merely explain?
-- What happens when the specification or shared interface changes during parallel work?
-- Which outcomes and costs must improve before a rewrite replaces the current flow?
+- Which workflows exist: the six from the October 3 session, or a reconciliation with the lost fifteen? This waits for the skill cuts (fork E).
+- What evidence makes a piece ready to leave discovery and enter implementation? The size-heuristics mold owns part of this.
+- What counts as a change in direction for an in-flight piece, and does code or the agent detect it?
+- One archive or thirteen (fork H)?
 
-The available evidence does not show that a wholesale rewrite improves quality or total delivery cost.
-The manifesto provides a clear direction; it is not yet that evidence.[^initial]
+The available evidence does not show that a wholesale rewrite improves quality or total delivery cost.[^initial]
 
 ## Evidence boundary
 
@@ -196,7 +188,7 @@ The connected record chain is:
 | --- | --- | --- |
 | `rebuild-easy-cheese-from-scratch` | `rev-c1a85e43507b` | Exploratory root; no wholesale rewrite approval. |
 | `easy-cheese-contracts-simplify` | `rev-d4db1d5e6d96` | Recorded child; selected contract cuts. |
-| `wheypoint-contract-simplify` | `rev-90cbbec9791d` | Recorded grandchild; proposed cuts remain unapproved. |
+| `wheypoint-contract-simplify` | `rev-90cbbec9791d` | Recorded grandchild; #776 (`ff7509bc`, merged 2026-10-15) landed the schema-5 cuts; further cuts wait on issue #843. |
 | `wheypoint-milknado-seam` | `rev-df6756bd3d99` | Related split without a recorded fork edge; shared schemas and separate stores. |
 | `journey-workflow-coverage` | `rev-525cb6ea725f` | Related coverage handoff; proposed cases, not live results. |
 
@@ -228,4 +220,4 @@ The visual summarizes this proposal and does not replace the evidence or approve
 [^evals]: [Anthropic agent-evaluation guidance](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents), retrieved 2026-10-18.
 [^initial]: XDG research `rebuild-easy-cheese-from-scratch/rebuild-easy-cheese-from-scratch.md:5-9,96-112`.
 
-_Source: owner's 2026-10-18 brief and publication request; assistant synthesis; cited records and research · Updated: 2026-10-18._
+_Source: owner's 2026-10-18 brief and publication request; owner rulings of 2026-10-18 to 2026-10-22; assistant synthesis; cited records and research · Updated: 2026-10-22._
