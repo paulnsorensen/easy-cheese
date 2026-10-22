@@ -1,6 +1,6 @@
 # ADR: Easy Cheese proves the core seam before Milknado adoption
 
-Decision status: accepted
+Decision status: accepted; superseded in part by [workflow-contract-milknado-seam-008](./workflow-contract-milknado-seam-008.md) (2026-10-18). The milknado dependency and runtime CurdPlan import steps no longer apply; milknado couples by artifact pointer only.
 Spec: `/home/paul/.local/share/cheese/paulnsorensen-easy-cheese/specs/workflow-contract-milknado-seam.md`
 
 ## Context

@@ -15,6 +15,7 @@
 - [cheese-kernel-shared-refs-001](./cheese-kernel-shared-refs-001.md) — ADR: shared docs live in the cheese skill's references dir, cited sibling-relative
 - [cheese-kernel-shared-refs-002](./cheese-kernel-shared-refs-002.md) — ADR: owner-homed cross-skill content stays with its owner
 - [codex-omp-portability-001](./codex-omp-portability-001.md) — ADR: Shared harness portability reference
+- [codex-omp-portability-002](./codex-omp-portability-002.md) — ADR: Harness-neutral core with thin model overlays
 - [cross-skill-work-contract-001](./cross-skill-work-contract-001.md) — ADR: WorkRecord continuity is worktree-scoped and pointer-free
 - [cross-skill-work-contract-002](./cross-skill-work-contract-002.md) — ADR: Cross-skill handoffs use a versioned envelope and phase-owned contracts
 - [cross-skill-work-contract-003](./cross-skill-work-contract-003.md) — ADR: Cheese bundles its YAML contract runtime
@@ -23,6 +24,7 @@
 - [deterministic-fanout-sizing-002](./deterministic-fanout-sizing-002.md) — ADR-002 — The file-weight table is inverted: default full weight
 - [deterministic-fanout-sizing-003](./deterministic-fanout-sizing-003.md) — ADR-003 — No LLM classifier in the sizing path
 - [deterministic-fanout-sizing-004](./deterministic-fanout-sizing-004.md) — ADR-004 — Curd blocks declare a size estimate; the validator gates it
+- [deterministic-fanout-sizing-005](./deterministic-fanout-sizing-005.md) — ADR-005: Size heuristics decide cook's shape
 - [hallouminate-wiring-stack-001](./hallouminate-wiring-stack-001.md) — ADR: hallouminate wiring ships as a stacked 4-PR build, one PR per issue
 - [hallouminate-wiring-stack-002](./hallouminate-wiring-stack-002.md) — ADR: cook and age record durable-change flags; only the publication boundary writes the wiki
 - [hallouminate-wiring-stack-003](./hallouminate-wiring-stack-003.md) — ADR: liberal wiki grounding in mold/culture is prose guidance, not a coherence gate
@@ -31,6 +33,7 @@
 - [hard-cheese-question-targeting-002](./hard-cheese-question-targeting-002.md) — ADR: ranked regions appear before the first attempt; targeted questions appear only after a FAIL
 - [hard-cheese-question-targeting-003](./hard-cheese-question-targeting-003.md) — ADR: the hard-cheese prompt opens with a purpose-first sentence and keeps the paper's questions verbatim
 - [hard-cheese-retained-001](./hard-cheese-retained-001.md) — ADR: hard-cheese retained despite local zero-use signal
+- [hard-cheese-retained-002](./hard-cheese-retained-002.md) — ADR: Hard-cheese stays the quiz; a review artifact carries understanding
 - [legacy-adapter-lifecycle-004](./legacy-adapter-lifecycle-004.md) — ADR: Legacy handoff adapters are exact, explicit, and temporary
 - [legacy-migration-withdrawal-001](./legacy-migration-withdrawal-001.md) — ADR: Workflow-layer CurdPlan migration is withdrawn
 - [mold-cook-boundary-001](./mold-cook-boundary-001.md) — ADR: Cook prepares missing plans but preserves plan approval
@@ -97,5 +100,7 @@
 - [workflow-contract-milknado-seam-004](./workflow-contract-milknado-seam-004.md) — ADR: Executors consume CurdPlan and return criterion-led CurdResult
 - [workflow-contract-milknado-seam-005](./workflow-contract-milknado-seam-005.md) — ADR: Payload schemas and transition routing remain separate
 - [workflow-contract-milknado-seam-006](./workflow-contract-milknado-seam-006.md) — ADR: Easy Cheese proves the core seam before Milknado adoption
+- [workflow-contract-milknado-seam-007](./workflow-contract-milknado-seam-007.md) — ADR: Spec, Plan, and Review are separate artifact schemas
+- [workflow-contract-milknado-seam-008](./workflow-contract-milknado-seam-008.md) — ADR: milknado is an optional plugin coupled by artifact pointers
 - [writer-view-boundary-simplification-001](./writer-view-boundary-simplification-001.md) — ADR: Strict contract-version equality and a single cook CLI module
 <!-- HALLOUMINATE:INDEX-END -->
