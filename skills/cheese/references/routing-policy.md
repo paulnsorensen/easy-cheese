@@ -30,19 +30,20 @@ Workers use frozen contracts at worker tier.
 
 | Role | claude | codex | OMP | effort | notes | tier |
 |---|---|---|---|---|---|---|
-| explorer | sonnet | terra | task | low (from medium) | judgment-shaped digests stay sonnet (KG playbook Table IV doctrine); haiku fits only schema-constrained scans | default |
-| researcher | sonnet | terra | (researcher agent) | medium | unchanged | default |
-| coder | sonnet | terra | task | medium | gains ESCALATE contract; delegation IS the downgrade | default |
+| explorer | sonnet | sol | task | low (from medium) | judgment-shaped digests stay sonnet (KG playbook Table IV doctrine); haiku fits only schema-constrained scans | default |
+| researcher | sonnet | sol | (researcher agent) | medium | unchanged | default |
+| coder | sonnet | sol | task | medium | gains ESCALATE contract; delegation IS the downgrade | default |
 | verifier | haiku | luna | tiny | low | "verify exactly one claim"; schema-constrained; the cheap severity-filter leg | cheap |
-| reviewer | opus | sol | slow | dial: low/medium fast pass, high thorough | pinned strong; count and effort follow the age router | powerful |
-| reviewer (taste-test) | sonnet | terra | task | medium | checklist-shaped seven-lens verdict; severity-report stays opus | default |
+| reviewer | opus | astra | slow | dial: low/medium fast pass, high thorough | pinned strong; count and effort follow the age router | powerful |
+| reviewer (taste-test) | sonnet | sol | task | medium | checklist-shaped seven-lens verdict; severity-report stays opus | default |
 | gate-runner | haiku | luna | tiny | low | gate command → failures + counts digest; compatible: whey-drainer | cheap |
 | planner / integrator | orchestrator | orchestrator | plan/default | high at mold | the integrator is parent-owned; the planner is a delegated fresh-context worker | powerful |
 
 Tier-upgrade commands (move to the `powerful` tier):
 
 - claude: `/model opus`, then `/effort`.
-- codex and OMP: the named equivalent from the table above.
+- codex: `gpt-6-astra`. The codex models are `gpt-6-luna` (cheap), `gpt-6-sol` (default), and `gpt-6-astra` (powerful).
+- OMP: the `strong` model role, or `slow` for high effort.
 - other hosts: the generic model upgrade.
 
 Claude note: Opus 5 recalls more findings, so the report-everything contract (§ Cross-cutting contracts, item 2) fits it well.
