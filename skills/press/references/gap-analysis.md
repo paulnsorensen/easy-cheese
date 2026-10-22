@@ -2,17 +2,35 @@
 
 ## Ownership boundary
 
-Press is not a second first-coverage phase. Cook owns the implementation and its tests.
+Press does not write first coverage. Cook owns the implementation, its tests, and first acceptance coverage. When that coverage is missing, Press reports `coverage_gap`.
 
 Press attacks the approved contract after Cook. Press writes only tests, fixtures, or test-only harness support.
 
 Report a missing production implementation as a finding. Hand it to Cook as a correction.
+
+Cook dispatches Press automatically inside its Press loop. `/press <slug>` stays callable for a manual re-run that hands off to Age on GREEN.
+
+## The adversarial question
+
+Inspect the acceptance check before you add tests. Then ask:
+
+"Can the user's original complaint still occur while every test passes?"
+
+Select ONE relevant false-success attack. Do not run all four:
+
+- an unexpected coded error
+- a no-op implementation
+- an empty or unusable artifact
+- reported success without the required state change
+
+Record the question, the selected attack, and why it threatens the claim in `.cheese/press/<slug>.md`. Confirm the acceptance check rejects that case. When it accepts the case, the outcome is `coverage_gap`.
 
 ## What Press may expose
 
 | Gap type | Evidence | Action |
 | --- | --- | --- |
 | Defect | The approved seam fails on an adversarial input or transition | Report it as a finding with the failing test. Hand off to Cook as a correction. |
+| Coverage gap | First acceptance coverage is missing, or it accepts the selected false success | Report `coverage_gap`. Hand off to Cook to add coverage. |
 | Invalid evidence (`blocked`) | The recorded run does not verify the attack outcome | Stop with `halt: <reason>`. |
 | Production mutation (`blocked`) | A production path changes during a Press interval | Stop with `halt: <reason>`. |
 | Out-of-contract behavior | The approved spec omits a desired behavior | Record it under `## Review follow-ups`. Report `ok-with-concerns` on a GREEN pass. Do not implement it. |
@@ -22,7 +40,7 @@ Report a missing production implementation as a finding. Hand it to Cook as a co
 Complete these steps at each Press entry and after each Cook correction:
 
 1. Run the same adversarial attack. Do not change its test or fixture digest.
-2. Select `green`, `finding`, `invalid_evidence`, or `production_changed`.
+2. Select `green`, `finding`, `coverage_gap`, `invalid_evidence`, or `production_changed`.
 3. For a finding, record the failing test and its digest.
 
 A Cook correction can change production code to make the attack GREEN.
@@ -37,7 +55,7 @@ Press closes only adversarial gaps in the approved Cook contract:
 2. Attack approved boundaries, invalid inputs, state transitions, integrations, and error paths.
 3. Verify assertion sensitivity. The attack must fail for an incorrect value, state, or error.
 
-Cook owns first coverage. Do not create one hardening test for each changed behavior.
+Do not create one hardening test for each changed behavior.
 
 Do not add tests for unchanged or out-of-contract code.
 
@@ -45,7 +63,11 @@ Do not add tests for unchanged or out-of-contract code.
 
 - GREEN hands off to `/age`.
 - A finding hands off to Cook as a correction (`next: cook`).
+- A `coverage_gap` hands off to Cook (`next: cook`). Cook adds first acceptance coverage, then Press reruns.
+- A second `coverage_gap` in one Cook run stops with `status: halt: coverage-gap` and `next: done`.
 - Press allows at most 2 Cook corrections for the same attack. A third finding on that attack stops with `status: halt: correction-cap` and `next: done`.
+- Cook counts the rounds and passes the round number and attack identity. Press halts only from that number. A manual run reads prior rounds from `.cheese/press/<slug>.md`.
+- A Cook run allows at most 6 Press rounds in total, on both the linear and fan paths. The sixth round that does not end green halts with `status: halt: press-round-limit`. In the linear path that halt reports `next: done`. In the fan path the orchestrator blocks the curd and routes to Mold.
 - Invalid evidence and production changes stop.
 - That stop is `blocked`. It reports `status: halt: <reason>` and `next: done`.
 
@@ -58,6 +80,7 @@ New or changed failures block the route.
 | Situation | Action |
 | --- | --- |
 | An adversarial test exposes a defect in Cook behavior | Report the finding with its failing test. Hand off to Cook as a correction. |
+| First acceptance coverage is missing | Report `coverage_gap`. Do not write the coverage. |
 | The digest or production snapshot is invalid | Stop with `halt: <reason>`. Report the exact integrity failure. |
 | A third finding exposes the same attack | Stop with `status: halt: correction-cap` and `next: done`. |
 | The attack targets behavior outside the approved spec | Record it under `## Review follow-ups` for `/age`. Do not edit production code. |

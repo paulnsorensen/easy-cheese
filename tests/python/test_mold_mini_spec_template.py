@@ -44,6 +44,9 @@ Clarify existing documentation without changing runtime behavior.
 ## Acceptance
 - AC-1: WHEN the documentation build runs THE SYSTEM SHALL complete successfully.
 
+## Acceptance demonstration
+
+n/a: documentation-only change with no runtime behavior to demonstrate.
 ## Non-goals
 - Runtime behavior changes.
 """
@@ -103,3 +106,10 @@ def test_strict_validation_rejects_a_malformed_grounding_row(tmp_path: Path) -> 
     )
     assert result.returncode != 0
     assert "ERROR:" in result.stdout + result.stderr
+
+
+def test_template_declares_the_acceptance_demonstration_section() -> None:
+    body = _template()
+    assert "## Acceptance demonstration" in body
+    assert "| False success |" in body
+    assert "n/a: <reason>" in body

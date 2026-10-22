@@ -107,3 +107,11 @@
 
 - 2026-10-15 · 5d06dbb1e665716c · merged · adr/culture-wheypoint-collaboration-001.md · Replace explicit altitude selection with user-approved conversational navigation. Frozen identity and natural-language probes return the page at rank 1.
 
+
+- 2026-10-19 · 410a1f3752f7508b · new-page · research/c4-model-evaluation.md · C4 is a good default for static structure; Context + Container suffice for most teams; alternatives table; easy-cheese draws C4 in Mermaid flowchart (diagrams.md, diagram-templates.md).
+- 2026-10-19 · 410a1f3752f7508b · new-page · research/c4-models-as-code-tools.md · LikeC4 best-supported OSS alternative; Structurizr now Apache-2.0 with one committer; every tool has a CLI; local render test ranks C4-PlantUML first, Mermaid C4 last.
+- 2026-10-19 · 410a1f3752f7508b · new-page · sources/c4-model-site.md, sources/mermaid-c4-diagrams.md, sources/structurizr-export.md, sources/likec4-cli.md · source pages with retrieval spine for the two research pages; all 13 frozen probes passed.
+
+
+- 2026-10-19 · affinage:pr-838 · curated · research/c4-model-evaluation.md, research/c4-models-as-code-tools.md, sources/*.md · review fixes: linked the workingsoftware.dev source, dropped checkout-local evidence paths, gave source pages topic H1s and the sources index lane prose, split long and passive sentences.
+

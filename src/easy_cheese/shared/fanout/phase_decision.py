@@ -42,7 +42,7 @@ Output (JSON):
     {
       "action": "spawn" | "stop" | "stop_early" | "clean_complete" | "halt"
                 | "needs_context" | "gated",
-      "next_phase": "press" | "age" | "cure" | "cook" | null,
+      "next_phase": "age" | "cure" | "cook" | null,
       "exit_message": "<one-line operator-visible reason>",
       "status": "<parsed status name>",
       "disposition": "proceed" | "retry" | "stop",
@@ -97,7 +97,9 @@ class Verdict(TypedDict):
 
 # A phase table is an ordered list of phase names; the phase that runs after
 # index i is table[i + 1], and the last entry is terminal.
-LINEAR_TABLE: list[str] = ["cook", "press", "age", "cure", "age", "cure", "age"]
+# The Press loop runs inside Cook, so Cook's next runnable phase is Age.
+LINEAR_TABLE: list[str] = ["cook", "age", "cure", "age", "cure", "age"]
+# A distinct list: `decide` gates early stop on `table is LINEAR_TABLE` identity.
 NOT_APPLICABLE_LINEAR: list[str] = ["cook", "age", "cure", "age", "cure", "age"]
 NOT_APPLICABLE_CURD: list[str] = ["cook", "age", "cure", "age"]
 NOT_APPLICABLE_POSTMERGE: list[str] = ["age", "cure", "age"]
@@ -282,7 +284,7 @@ def decide_cmd(
     status
         `status` field from the handoff slug; see the handback vocabulary.
     next_field
-        `next` field from the handoff slug (e.g. press, cure, done).
+        `next` field from the handoff slug (e.g. age, cure, done).
     table
         Which receipt-specific table to walk: linear or a closed
         non-behavior path. Fan remediation uses its progress-aware state.

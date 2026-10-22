@@ -185,13 +185,13 @@ Check supplied dispatch observations with `scripts/age.pyz review-plan-check` be
 
 Print `Age report: .cheese/age/<slug>.md`.
 When `press: skipped` is set, print the following warning:
-`Warning: no /press report for <slug> — hardening was skipped. Run /press <slug> first, or continue with /cure.`
+`Warning: no .cheese/press/<slug>.md. Re-run /cook or /press <slug>, or continue with /cure.`
 When the user passes `--html`, print the HTML path that `html-report` returns.
 The render command appears under `--html` in `## Inputs`.
 
 ## Handoff
 
-**Pipeline:** culture → mold → cook → press → **[age]** → cure → plate
+**Pipeline:** culture → mold → cook (⇄ press) → **[age]** → cure → plate
 
 **Compute the recommended set.** Use the `all-medium, cheap` composite.
 Include the medium floor (blocker+high+medium).

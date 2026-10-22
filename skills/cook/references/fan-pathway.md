@@ -96,8 +96,14 @@ Do not create a preflight helper.
 
    For fan topology, route the validated plan and selected curd IDs through
    `easy_cheese.skills.cook.preparation.fan_execute.execute_fan`.
-   `execute_fan` adapts the existing writer, review, diagnosis, and Press dispatches
+   `execute_fan` adapts the existing writer, review, diagnosis, and acceptance-check dispatches
    into `run_fan`, which owns the progress-aware state machine.
+
+   The host passes three Press-related inputs to `execute_fan` and `execute_bound_plan`.
+   `dispatch_press` runs one Press round; a host without sub-agents runs that round inline, per [`press-loop.md`](press-loop.md) § Dispatch.
+   A behavior curd with no `dispatch_press` fails fast at start, before any Cook dispatch.
+   `dispatch_acceptance` runs the integrated acceptance check.
+   `non_behavior_curds` names the curd ids exempt from Press.
 
 5. `run_fan` schedules the validated plan in topological waves.
    A blocked prerequisite produces a deterministic blocked `CurdResult` for its dependents.
@@ -260,20 +266,24 @@ Then proceed.
 | Stage | Chain | Canonical handoff |
 | --- | --- | --- |
 | Planner | `planner-request → PlannerResult → validated CurdPlan` | `PlannerResult` |
-| Per curd | `cook → age ↔ cure` until clean, stalled, or blocked | `CurdResult` + remediation state |
-| Post-merge | `press → age ↔ cure → age` over the merged typed results | final `CurdResult` |
+| Per curd | `cook (with its Press loop) → age ↔ cure` until clean, stalled, or blocked | `CurdResult` + remediation state |
+| Post-merge | `integrated acceptance check → age ↔ cure → age` over the merged typed results | final `CurdResult` |
 | Per curd, non-behavior work | `coder(cook) → age ↔ coder(cure)` until terminal | `not-applicable-curd` |
 | Post-merge, non-behavior work | `age ↔ cure → age` | `not-applicable-postmerge` |
 
 Per-curd workers own incomplete implementation slices.
 
-They never run Press while sibling curds remain unfinished.
+Each behavior curd runs its Press loop inside its own Cook phase.
+The orchestrator dispatches Press after each behavior Cook and owns the round count; non-behavior curds skip it.
+Per-curd workers never run a global Press.
+The orchestrator also bounds each Press loop at six rounds in total. A seventh round never starts. The run halts with `halt: press-round-limit` and routes to Mold.
 
 The progress-aware state machine records each review, Cure receipt, debt score, and stop reason.
 A clean review completes the scope. Two non-improving reviews stall the scope and route to Mold remediation planning.
 A blocked scope blocks every dependent curd without worker dispatch.
 
-After wiring and merge, the orchestrator runs one global Press → Age/Cure chain only after every curd passes.
+After wiring and merge, the orchestrator runs one integrated acceptance check, then the Age/Cure chain, only after every curd passes.
+The integrated acceptance check is not a Press run.
 Incomplete fan work never emits `next: press`.
 
 The host still records one normalized result.
@@ -298,7 +308,10 @@ A clean first Age skips Cure.
 
 A stalled or blocked scope stops its loop and routes to Mold.
 
-Count the global Press only after every curd passes.
+Count one Press dispatch per behavior curd for each Press round.
+There is no global Press dispatch.
+Non-behavior curds add no Press dispatch.
+Count the integrated acceptance check once per post-merge round.
 
 Exclude wiring dispatches.
 
@@ -352,7 +365,8 @@ Wiring rows exist in the manifest, not the curd block.
 
 - Run the disposition-specific sequential chain for each curd.
   Persist one normalized `CurdResult` for each curd.
-  Per-curd workers never run Press.
+  Each behavior curd runs its own Press loop inside Cook.
+  Non-behavior curds skip Press.
 
 - After every curd returns, harvest its commits.
   Then tear down each curd worktree.
@@ -368,7 +382,7 @@ Wiring rows exist in the manifest, not the curd block.
   It also leaves no stray worker directory.
 
 - Run wiring in dependency order.
-  Then run the one global `press → age → cure → age` integration pass.
+  Then run the one integrated `acceptance check → age ↔ cure → age` pass.
 
 - `/cook` alone performs harvest.
   The Cook fan orchestrator owns the terminal `/plate` dispatch.

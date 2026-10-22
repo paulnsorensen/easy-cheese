@@ -1,14 +1,14 @@
 ---
 name: press
-description: Run the tests-only adversarial pass after `/cook`. Report each defect as a finding for a Cook correction. Use this skill when the user says "press the changes", "harden this", "press before /age", or "/press". Do not edit production code.
+description: Run the tests-only adversarial pass that `/cook` dispatches after a behavior change; also callable as a manual re-run. Use this skill when the user says "press the changes", "harden this", "re-run press", or "/press". Do not edit production code.
 license: MIT
 ---
 
 # /press
 
-Press is the tests-only adversarial pass after `/cook`. It reports a GREEN pass to `/age` and a finding to Cook.
+Press is the adversarial pass that Cook dispatches inside its Press loop. `/press <slug>` stays callable for a manual re-run. It reports a GREEN pass to `/age` and a finding or `coverage_gap` to Cook.
 
-Press never owns first coverage. Press never edits production code. Cook owns the implementation. Press attacks the approved contract and reports each defect it exposes.
+Press never edits production code. Cook owns the implementation and first acceptance coverage. Press attacks the approved contract and reports each defect it exposes.
 
 ## Phase entry
 
@@ -21,7 +21,8 @@ Keep its `record.revision_id` as `<base>` ([§ Base revision](../cheese/referenc
 
 ## Inputs
 
-Press accepts this invocation:
+Cook dispatches Press automatically after its taste test on behavior work, so no invocation is needed.
+For a manual re-run, Press accepts this invocation and hands off to Age on GREEN:
 
 ```text
 /press <slug> [--auto] [--hard] [--open-pr]
@@ -39,15 +40,15 @@ Press preserves the Cook `durable_flags:` value without change. Press ignores th
 
 ## Adversarial loop
 
-1. **Attack** — Add or run only tests, fixtures, and test-only harness support. Use the approved seam and witness. Keep the attack identity and test digest stable.
-2. **Classify** — Use `finding` when an attack test exposes a defect. Use `green` for a clean pass. Use `production_changed` when the attempt changed production paths. Use `invalid_evidence` when you cannot verify the evidence.
-3. **Report** — Report each finding with its failing test. Hand it to Cook as a correction.
-4. **Replay** — Replay the same attack after the correction returns. Use the same attack and test digest. Then classify the result again.
-5. **Terminate** — Hand off to `/age` after GREEN.
+Ask one question: "Can the user's original complaint still occur while every test passes?"
+Select ONE relevant false-success attack, not all four. Record the question, the attack, and why it threatens the claim. Confirm the acceptance check rejects that case.
+[`references/gap-analysis.md`](references/gap-analysis.md) lists the attacks and the evidence sequence.
 
-Invalid evidence and a production tree change stop the run. A third finding on the same attack also stops the run. The outcome table defines the correction cap.
+Press does not write first coverage. When it is missing, Press reports `coverage_gap`.
+Replay the same attack after each Cook correction, with the same attack and test digest.
+Invalid evidence and a production tree change stop the run. The outcome table defines the caps.
 
-Press has no global `dispatch: /cook` action. A Cook correction runs only for a reported finding.
+Press has no global `dispatch: /cook` action.
 
 ## Baseline-aware gates
 
@@ -60,10 +61,11 @@ See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md)
 ## Flow
 
 1. **Read** — Load the approved spec, Cook handoff, and baseline block. Use canonical terms from `.cheese/glossary/<slug>.md` when that file exists.
-2. **Attack** — Add or run only adversarial tests. Do not add first-coverage tests. Do not change production paths.
-3. **Classify** — Select `green`, `finding`, `invalid_evidence`, or `production_changed` from the adversarial run.
-4. **Report** — Write `.cheese/press/<slug>.md`. Include the attempts, evidence, and review follow-ups.
-5. **Hand off** — Send GREEN to `/age`. Send a finding to Cook as a correction.
+2. **Inspect** — Read the acceptance check before you add tests.
+3. **Attack** — Add or run only adversarial tests. Do not change production paths.
+4. **Classify** — Select `green`, `finding`, `coverage_gap`, `invalid_evidence`, or `production_changed`.
+5. **Report** — Write `.cheese/press/<slug>.md`. Include the question, the selected attack, why it threatens the claim, the attempts, evidence, and review follow-ups.
+6. **Hand off** — Send GREEN to `/age`. Send a finding or `coverage_gap` to Cook.
 
 Use [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) for source changes.
 
@@ -75,8 +77,9 @@ Press reports one readiness value. Map `ready for /age` to `status: ok` and `nex
 Map `follow-up recommended` to `status: ok-with-concerns: <concern>` and `next: age`. Use this status for a GREEN pass that also records a review follow-up. Age owns each recorded concern.
 
 Map `finding` to `status: ok-with-concerns: <defect>` and `next: cook`.
+Map `coverage_gap` to `status: ok-with-concerns: coverage-gap: <gap>` and `next: cook`.
 
-Map `blocked` to `status: halt: <reason>` and `next: done`. `blocked` means invalid evidence or a production change. Stop after that status.
+Map `blocked` to `status: halt: <reason>` and `next: done`. `blocked` means invalid evidence or a production change.
 
 ## Auto mode
 
@@ -84,7 +87,7 @@ Map `blocked` to `status: halt: <reason>` and `next: done`. `blocked` means inva
 
 Dispatch `/age <slug> --auto` after `ready for /age` or `follow-up recommended`. Add `--hard` when the user supplied it. Add `--open-pr` when the user supplied it.
 
-Stop after `blocked` or `halt: correction-cap`. Do not dispatch Age.
+Stop after `blocked`, `halt: correction-cap`, or `halt: coverage-gap`. Do not dispatch Age.
 
 Honor the no-chain directive when the caller supplies it. Write the Press handoff and stop. Do not start another phase. Cook's fan pathway owns this directive. The retired `/ultracook` orchestrator previously owned it. Test for the directive itself. Do not test for the source name. See [`../cook/references/auto-mode.md`](../cook/references/auto-mode.md).
 
@@ -130,22 +133,26 @@ Map the outcome to the terminal preamble:
 | GREEN | `ok` | `age` |
 | GREEN with a recorded concern | `ok-with-concerns: <concern>` | `age` |
 | finding (an attack test exposes a defect) | `ok-with-concerns: <defect>` | `cook` |
+| `coverage_gap` | `ok-with-concerns: coverage-gap: <gap>` | `cook` |
+| second `coverage_gap` in one Cook run | `halt: coverage-gap` | `done` |
 | invalid evidence or production change (`blocked`) | `halt: <reason>` | `done` |
 | third finding on the same attack | `halt: correction-cap` | `done` |
+| sixth Press round that does not end green | `halt: press-round-limit` | `done` |
 
 `next: done` is terminal. It never starts another phase.
 
-A `next: cook` handoff is a Cook correction (`correction = true`). Cook fixes the defect. Press then replays the same attack.
+A `next: cook` handoff is a Cook correction (`correction = true`), for a finding or a `coverage_gap`. Press then replays or reruns the same attack.
 
-Press enforces a correction cap. Press allows at most 2 Cook corrections for the same attack. A third finding on that attack stops with `status: halt: correction-cap` and `next: done`.
+Cook counts the rounds. Cook passes the round number and attack identity in the dispatch. Press emits `halt: correction-cap` or `halt: coverage-gap` only from that round number. A manual `/press <slug>` run reads prior rounds from `.cheese/press/<slug>.md`. `references/gap-analysis.md` holds the caps, including the 6-round `press-round-limit`.
 
 ## Handoff
 
-**Pipeline:** culture → mold → cook → **[press]** → age → cure → plate
+**Pipeline:** culture → mold → cook (⇄ press) → age → cure → plate
 
-After a GREEN Press report, use the shared [handoff gate](../cheese/references/handoff-gate.md). Start the review with `/age <slug>`.
+When Cook dispatched Press, return the handoff to Cook and stop.
+After a manual GREEN re-run, use the shared [handoff gate](../cheese/references/handoff-gate.md). Start the review with `/age <slug>`.
 
-After a finding, hand off to Cook as a correction with the failing test named in the report.
+After a finding or `coverage_gap`, hand off to Cook with the failing test or the gap named in the report.
 
 Forward `--hard`, `--auto`, and `--open-pr` to `/age` when the caller supplied them. Never add `--open-pr`.
 

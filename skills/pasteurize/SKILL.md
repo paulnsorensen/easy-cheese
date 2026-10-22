@@ -259,7 +259,7 @@ Record necessary architectural work in the slug.
 Make this recommendation after you apply the fix.
 
 Hand the completed slug to `/cook <slug> --auto`.
-Cook checks the existing diff and runs the `press -> age -> cure` chain.
+Cook checks the diff and runs `cook (⇄ press) -> age -> cure`.
 Pasteurize does not commit changes or open pull requests.
 
 ## Fan-out sizing
@@ -369,7 +369,7 @@ Set `next: done` when an external cause needs no repository change.
 
 ## Handoff
 
-**Pipeline:** cheese -> **pasteurize** -> cook --auto -> press -> age -> cure -> plate
+**Pipeline:** cheese -> **pasteurize** -> cook --auto (⇄ press) -> age -> cure -> plate
 
 After you write the report and slug, present these options through [`handoff-gate.md`](../cheese/references/handoff-gate.md):
 
