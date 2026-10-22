@@ -78,4 +78,4 @@ They describe search results, not corpus discovery or domain-model presence.
 
 ## Install
 
-See `scripts/install.sh --help` and `README.md § Optional tools` for install instructions for each MCP. Both are opt-in — they are not in `EC_DEFAULT_MCP`.
+See `README.md § Installing MCP servers` and `README.md § Installing CLI tools` for install instructions for each MCP. Both are opt-in.

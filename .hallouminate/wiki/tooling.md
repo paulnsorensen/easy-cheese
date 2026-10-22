@@ -15,7 +15,6 @@ PR, or hand-off (`AGENTS.md:7`).
 | markdown | `lint-md-fix` (autofix) | `lint-md` (check only) |
 | yaml | `lint-yaml-fix` + `lint-yaml` | `lint-yaml` |
 | python | `lint-py-fix` (`uvx ruff check --fix .`) | — |
-| shell | `lint-sh` (`shellcheck scripts/install.sh`) | `lint-sh` |
 | tests | `test` | `test` |
 | docs | `docs-build` (`pnpm run docs:build` → Astro/Starlight) | `docs-build` |
 
@@ -25,8 +24,8 @@ validators (`test_validate_skills.py`, `test_validate_wiki.py`,
 (`tests/python`, `tests/shared/python`, `tests/fanout/python`,
 `tests/schemas/python`, `tests/hard-cheese/python`,
 `tests/pasteurize/python`, `tests/wheypoint/python`), the JS suite
-(`node --test tests/js`), the bats suites
-(`tests/bash/test_install.bats`, the fan-out bats), and
+(`node --test tests/js`), the fan-out bats
+suite (`tests/fanout/bash/test_pr_plan_to_branches.bats`), and
 `just test-skill-overlap` (`justfile:17-33`).
 
 `test-skill-overlap` is the one leg of the gate that is not Python, JS,
@@ -123,8 +122,8 @@ Under `.github/workflows/`:
 
 | Workflow | Trigger | Does |
 |---|---|---|
-| `validate.yml` | push main, all PRs, merge groups | frontmatter validation, archive build before pytest, install.sh bats + smoke, lint |
-| `publish-dist.yml` | push main, dispatch | build archives, append one full-tree commit to `dist` |
+| `validate.yml` | push main, all PRs, merge groups | frontmatter validation, archive build before pytest, publish checks (stage, `gh skill publish --dry-run`, archive `--help`), fan-out bats on macOS, lint |
+| `publish-dist.yml` | push main, hourly schedule, dispatch | build archives from the `main` tip, append one full-tree commit to `dist` |
 | `retarget-dist-prs.yml` | PRs opened against `dist` | move the PR base to `main` |
 | `release.yml` | tag `v[0-9]*` | build archives, stage slim tree, force-push `release` branch, GitHub release |
 | `publish-pypi.yml` | push main touching `pyproject.toml`, dispatch | publish `easy-cheese-schemas` to PyPI |
@@ -139,7 +138,7 @@ Under `.github/workflows/`:
 ### Prerequisites
 
 `just`, `uv` (for `uvx ruff`), plus `yamllint`, `yamlfmt`,
-`markdownlint-cli2`, `shellcheck`, and `bats` — see `README.md` for
+`markdownlint-cli2`, and `bats` — see `README.md` for
 install hints (`AGENTS.md:18-21`).
 
-_Source: [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729), approved A correction · Updated: 2026-09-28 · Supersedes: runtime loaders, release-only archive assets, temporary test archives, and the separate archive workflow._
+_Source: [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729), approved A correction; `scripts/install.sh` removal (npx-only install) · Updated: 2026-10-18 · Supersedes: runtime loaders, release-only archive assets, temporary test archives, and the separate archive workflow._

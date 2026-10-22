@@ -24,10 +24,9 @@ def _verdict(stdout: str) -> Verdict:
 
 class TestTableShapes:
     def test_linear_table_shape(self) -> None:
-        # AC-16 guard: linear mode retains the fixed seven-phase chain.
+        # AC-8 guard: the Press loop runs inside Cook, so no table carries press.
         assert phase_decision.LINEAR_TABLE == [
             "cook",
-            "press",
             "age",
             "cure",
             "age",
@@ -58,8 +57,8 @@ class TestTableShapes:
 
     def test_default_table_is_linear(self) -> None:
         # Calling decide without a table must behave exactly like linear mode.
-        assert phase_decision.decide(0, "ok")["next_phase"] == "press"
-        assert phase_decision.decide(6, "ok", "done")["action"] == "stop"
+        assert phase_decision.decide(0, "ok")["next_phase"] == "age"
+        assert phase_decision.decide(5, "ok", "done")["action"] == "stop"
 
 
 class TestNotApplicableTables:
@@ -110,7 +109,7 @@ class TestCliTableFlag:
         assert _verdict(result.stdout)["next_phase"] == "age"
 
     def test_default_table_is_linear(self) -> None:
-        result = self._run("--phase-index", "6", "--status", "ok", "--next", "done")
+        result = self._run("--phase-index", "5", "--status", "ok", "--next", "done")
         assert result.returncode == 0
         assert _verdict(result.stdout)["action"] == "stop"
 

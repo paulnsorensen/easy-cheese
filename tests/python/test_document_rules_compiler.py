@@ -23,6 +23,7 @@ import _document_rules_compiler as compiler  # noqa: E402
 
 _OPTIONAL_SECTIONS = {
     "Deferred follow-ups",
+    "Acceptance demonstration",
     "Test Contracts",
     "Reproduction",
     "References",
@@ -76,6 +77,7 @@ def test_mold_spec_document_declares_seven_column_test_contracts_table() -> None
 def test_mold_spec_document_declares_cross_field_rules() -> None:
     rule_ids = {rule.rule_id for rule in contracts.MoldSpecDocument.cross_field_rules}
     assert rule_ids == {
+        "acceptance-demonstration-complete",
         "ac-coverage-exactly-once",
         "tracer-row-blank-matrix-cells",
         "contract-matrix-row-requires-both",
@@ -249,6 +251,7 @@ def test_generated_document_rules_module_imports_only_stdlib_names() -> None:
     )
     cross_field_rules = cast(list[dict[str, object]], rules["cross_field_rules"])
     assert {rule["rule_id"] for rule in cross_field_rules} == {
+        "acceptance-demonstration-complete",
         "ac-coverage-exactly-once",
         "tracer-row-blank-matrix-cells",
         "contract-matrix-row-requires-both",
