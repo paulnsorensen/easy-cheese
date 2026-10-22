@@ -1,8 +1,8 @@
 # Manifesto evidence bundle (2026-10-18)
 
-This directory holds the research that grounds `docs/manifesto.md` and
-`docs/architecture/manifesto-evidence.md`. Each file is a verbatim copy of a
-report from the durable cheese corpus at
+This directory holds the research behind the easy-cheese tenets in
+`.hallouminate/wiki/easy-cheese-manifesto.md`. The files in the table are
+verbatim copies of reports from the durable cheese corpus at
 `~/.local/share/cheese/paulnsorensen-easy-cheese/research/`. The corpus stays
 the source of truth; this copy exists so the evidence travels with the repo
 and with the pull request.
@@ -31,7 +31,7 @@ and with the pull request.
 
 `evidence-digests.md` is new. It condenses what six read-only sub-agents
 found in the wheypoint records, the wiki, and skillz-that-grillz on
-2026-10-18.
+2026-10-18. `manifesto-review.md` is the synthesis of that pass.
 
 ## What is not here
 
@@ -45,9 +45,10 @@ found in the wheypoint records, the wiki, and skillz-that-grillz on
 
 ## How to read it
 
-1. Start with `docs/manifesto.md` for the tenets.
-2. Read `docs/architecture/manifesto-evidence.md` for the verdicts, the
-   simplest-cheese synthesis, and the open forks.
+1. Start with the canonical tenets and rulings in
+   `.hallouminate/wiki/easy-cheese-manifesto.md`.
+2. Read `manifesto-review.md` for the per-tenet verdicts and the research
+   behind the rulings. Its proposals and fork list are evidence, not decisions.
 3. Open `evidence-digests.md` for the record-level facts behind each claim.
 4. Open the reports under `rebuild/` and `adjacent/` for the cited sources.
 

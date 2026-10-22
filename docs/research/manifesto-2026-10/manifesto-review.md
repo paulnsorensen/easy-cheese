@@ -1,14 +1,21 @@
 # easy-cheese manifesto review (2026-10-18)
 
-Companion to `docs/manifesto.md`. Read-only culture pass. Sources: the
+> **Evidence, not decisions.** The canonical tenets and the owner's rulings
+> live in `.hallouminate/wiki/easy-cheese-manifesto.md`. Section 2 (the
+> simplest easy-cheese) and the skill keep, shrink, fold, park, and delete list
+> are proposals; skill cuts are deferred. Section 5 (open forks) and section 7
+> (suggested order) are superseded by the rulings of 2026-10-18 to 2026-10-22.
+> Some facts below are stale against `main`: #776 landed schema 5, and
+> #772 to #774 merged on 2026-10-15.
+
+Read-only culture pass. Sources: the
 rebuild record (rev 8), the contracts and wheypoint-contract records, the seam
 record, the journey record, the age records, eleven older wheypoints, the
 wiki (architecture, invariants, parity, ADR families, analytics, research),
 the rebuild research cluster, four adjacent research clusters, and the
 skillz-that-grillz repo and cheese dir. Six read-only sub-agents gathered the
 evidence; this file holds the synthesis. The copied reports, measured facts,
-diagrams, and record-level digests are under
-`docs/research/manifesto-2026-10/`.
+diagrams, and record-level digests are in this directory.
 
 ## 1. Verdict per tenet
 
