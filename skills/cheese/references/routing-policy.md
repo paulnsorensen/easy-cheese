@@ -21,23 +21,31 @@ Workers use frozen contracts at worker tier.
 
 | Entry | Free evidence | Decision | Output |
 |---|---|---|---|
-| mold gate | the design dialogue | full spec vs small behavior; tier check | spec-sized: warn to upgrade. Use the harness-detected phrasing: claude `/model opus` plus `/effort`, the codex/OMP named equivalent, or the generic fallback. Then dispatch the fresh-context decomposer on draft spec text. Curds land in the approved artifact. small: use the mini-spec fast path at the current tier |
+| mold gate | the design dialogue | full spec vs small behavior; tier check | spec-sized: warn to upgrade. Use the harness-detected tier-upgrade command from § Roles x tiers. Then dispatch the fresh-context decomposer on draft spec text. Curds land in the approved artifact. small: use the mini-spec fast path at the current tier |
 | cook gate | the spec (curd block, else AC count and edit-site estimate) | single vs fan vs decompose-first; wave plan; transport | curds present: fan in waves of four or fewer. un-curded small: use one coder. un-curded big: dispatch the same decomposer. Then gate with "12 ACs -> 5 curds, 2 waves, up to 25 agent dispatches. Go?" |
 | age router | Scoped semantic evidence, effort, workload, and host capabilities; Affinage also supplies comments and CI status | Subject assignments and per-worker effort | Normal/deep protect conventions, altitude, and reframe. Mandatory risks add specialists. Overall separates all subjects. The versioned planner records coverage and dispatch batches. |
 | pasteurize gate | symptom shape + review-surface score over the suspect range | shallow vs deep; fan width | fan width 1/2 for a regression over a tight or wide range. Width 3 for a heisenbug, race, or perf-regression. Width 3-5 for a cold bug with no diff to anchor to. `src/easy_cheese/shared/fanout/pasteurize_route.py` computes the width. Clean stack trace plus deterministic repro: stay at the current tier. Heisenbug, race, cross-module, or perf regression: warn-upgrade before hypothesis formation |
 
 ## Roles x tiers (all three harnesses)
 
-| Role | claude | codex | OMP | effort | notes |
-|---|---|---|---|---|---|
-| explorer | sonnet | terra | task | low (from medium) | judgment-shaped digests stay sonnet (KG playbook Table IV doctrine); haiku fits only schema-constrained scans |
-| researcher | sonnet | terra | (researcher agent) | medium | unchanged |
-| coder | sonnet | terra | task | medium | gains ESCALATE contract; delegation IS the downgrade |
-| verifier | haiku | luna | tiny | low | "verify exactly one claim"; schema-constrained; the cheap severity-filter leg |
-| reviewer | opus | sol | slow | dial: low/medium fast pass, high thorough | pinned strong; count and effort follow the age router |
-| reviewer (taste-test) | sonnet | terra | task | medium | checklist-shaped seven-lens verdict; severity-report stays opus |
-| gate-runner | haiku | luna | tiny | low | gate command → failures + counts digest; compatible: whey-drainer |
-| planner / integrator | orchestrator | orchestrator | plan/default | high at mold | the integrator is parent-owned; the planner is a delegated fresh-context worker |
+| Role | claude | codex | OMP | effort | notes | tier |
+|---|---|---|---|---|---|---|
+| explorer | sonnet | terra | task | low (from medium) | judgment-shaped digests stay sonnet (KG playbook Table IV doctrine); haiku fits only schema-constrained scans | default |
+| researcher | sonnet | terra | (researcher agent) | medium | unchanged | default |
+| coder | sonnet | terra | task | medium | gains ESCALATE contract; delegation IS the downgrade | default |
+| verifier | haiku | luna | tiny | low | "verify exactly one claim"; schema-constrained; the cheap severity-filter leg | cheap |
+| reviewer | opus | sol | slow | dial: low/medium fast pass, high thorough | pinned strong; count and effort follow the age router | powerful |
+| reviewer (taste-test) | sonnet | terra | task | medium | checklist-shaped seven-lens verdict; severity-report stays opus | default |
+| gate-runner | haiku | luna | tiny | low | gate command → failures + counts digest; compatible: whey-drainer | cheap |
+| planner / integrator | orchestrator | orchestrator | plan/default | high at mold | the integrator is parent-owned; the planner is a delegated fresh-context worker | powerful |
+
+Tier-upgrade commands (move to the `powerful` tier):
+
+- claude: `/model opus`, then `/effort`.
+- codex and OMP: the named equivalent from the table above.
+- other hosts: the generic model upgrade.
+
+Claude note: Opus 5 recalls more findings, so the report-everything contract (§ Cross-cutting contracts, item 2) fits it well.
 
 Scoper: deleted everywhere.
 
@@ -68,7 +76,7 @@ The coordinator interprets scoped evidence; the planner does not inspect diffs o
 1. **Grounded verdicts** — each reviewer receives the evidence slice for its check.
    Each verdict cites diff hunks, specification lines, or test output.
    Return `escalate` when evidence cannot settle a claim.
-2. **Report-everything reviewers** — severity-conservative phrasing is banned in reviewer prompts; filtering happens in the reconcile/verifier pass (Opus 5 recall behavior).
+2. **Report-everything reviewers** — severity-conservative phrasing is banned in reviewer prompts; filtering happens in the reconcile/verifier pass.
 3. **Fan-in envelope** — fixed schema, `status`/`next`/`artifact`/orientation plus SCOPE (owned/untouched), EVIDENCE, ASSUMPTIONS, RISKS. Workflows validate the envelope mechanically (validation is not routing; thin-wrapper rule holds). See `handoff-gate.md` § Fan-in envelope fields for the documented schema.
 4. **Delegation restraint** — delegate only independent and substantial tracks.
    Do not delegate verification of your own work.
