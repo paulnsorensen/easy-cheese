@@ -1,10 +1,15 @@
 """Sweep test for the question-transport-policy audit (curd 4).
 
 Scans every question-asking site's **file** across `skills/*/SKILL.md` +
-`skills/*/references/*.md` and pins each file to one of three states:
+`skills/*/references/*.md` and pins each file to one of four states:
 
+  * pointed — every paragraph with question language links
+    `ask-user-question.md` inside that same paragraph. Such a file needs no
+    list entry. A pointer in another paragraph does not account for a bare
+    one, so a new bare paragraph in a pointed file fails the sweep.
   * routed  — the file already links the shared transport chokepoint
-    (`handoff-gate.md` and/or `ask-user-question.md`).
+    (`handoff-gate.md` and/or `ask-user-question.md`) somewhere, and is
+    listed in ROUTED_FILES.
   * the transport doc itself — `ask-user-question.md` is the chokepoint
     other files link to; it has no further pointer to link to itself.
   * exempt  — recorded here with a reason (mechanical fast-path, rhetorical
@@ -24,12 +29,14 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from textwrap import shorten
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_DIR = REPO_ROOT / "skills"
 
 TRANSPORT_REF = "ask-user-question.md"
 HANDOFF_GATE_REF = "handoff-gate.md"
+PARAGRAPH_BREAK = "\n\n"
 
 # Question-asking keyword sweep — mirrors the audit method in the cook spec:
 # "ask the user", AskUserQuestion, "structured question", "confirm with the
@@ -50,12 +57,13 @@ TRANSPORT_DOC_ITSELF = {
 
 # Files that, taken as a whole, already route their question-asking sites
 # through the shared transport chokepoint (a direct link to handoff-gate.md
-# or ask-user-question.md appears somewhere in the file).
+# or ask-user-question.md appears somewhere in the file). Pointed files
+# account for themselves and stay off this list, so the sweep keeps checking
+# their question paragraphs one by one.
 ROUTED_FILES = {
     "skills/affinage/SKILL.md",
     "skills/age/references/handoff-detail.md",  # gate menu, moved out of the body
     "skills/age/SKILL.md",
-    "skills/briesearch/SKILL.md",
     "skills/cheese/references/continue-resume.md",  # --continue flow, moved out of the body
     "skills/cheese/references/ask-user-question-sources.md",  # transport doc's own appendix
     "skills/cheese/references/handoff-gate.md",  # the chokepoint itself
@@ -65,10 +73,6 @@ ROUTED_FILES = {
     "skills/culture/SKILL.md",
     "skills/cure/SKILL.md",
     "skills/melt/SKILL.md",
-    "skills/mold/references/early-curds.md",
-    "skills/mold/references/evals.md",
-    "skills/mold/references/gate-graph.md",
-    "skills/mold/references/mini-spec-mode.md",  # direct Cook consent question
     "skills/mold/SKILL.md",
     "skills/pasteurize/SKILL.md",
     "skills/plate/SKILL.md",  # the gate-`ERROR` ask before publication
@@ -241,6 +245,19 @@ def test_exempt_sites_are_pinned_and_unrouted() -> None:
         )
 
 
+def _bare_question_paragraphs(text: str) -> list[str]:
+    """Paragraphs with question language and no transport pointer of their
+    own. The pointer must sit in the same paragraph, so a mention elsewhere
+    in the file cannot mask a bare site. A handoff-gate.md link alone does
+    not count, the same standard
+    test_culture_handoff_gate_site_points_to_transport applies."""
+    return [
+        paragraph
+        for paragraph in text.split(PARAGRAPH_BREAK)
+        if QUESTION_KEYWORDS.search(paragraph) and TRANSPORT_REF not in paragraph
+    ]
+
+
 def _unaccounted_sites(
     candidates: list[Path],
     repo_root: Path,
@@ -249,27 +266,30 @@ def _unaccounted_sites(
 ) -> list[str]:
     """Core sweep logic, factored out so a synthetic fixture can exercise
     it directly (see test_sweep_catches_new_bare_site_in_new_file) instead
-    of relying only on today's real-repo census staying bare."""
+    of relying only on today's real-repo census staying bare. Each entry
+    names the file and its first bare paragraph."""
     unaccounted: list[str] = []
     for path in candidates:
         rel = str(path.relative_to(repo_root))
-        if rel in sibling_owned:
+        if rel in sibling_owned or rel in accounted:
             continue
-        text = path.read_text(encoding="utf-8")
-        if QUESTION_KEYWORDS.search(text) and rel not in accounted:
-            unaccounted.append(rel)
+        bare = _bare_question_paragraphs(path.read_text(encoding="utf-8"))
+        if bare:
+            unaccounted.append(f"{rel}: {shorten(bare[0], width=80)}")
     return unaccounted
 
 
 def test_no_unaccounted_question_sites() -> None:
     """Sweep every SKILL.md / references/*.md file for question-asking
-    language. Every matching file must be either in ROUTED_FILES, the
-    transport doc itself, or have every one of its exempt sites accounted
-    for in EXEMPT_SITES (matched by file). Accounting is per file, not
-    per site: a brand-new bare site in a brand-new file, or a new keyword
-    hit in an already-known-bare file that isn't in EXEMPT_SITES, fails
-    this test — the sweep's teeth against drift. A new bare site added to
-    an already-accounted file does not trip this test. No file is skipped
+    language. Every matching file must be pointed (each question paragraph
+    carries its own ask-user-question.md link), in ROUTED_FILES, the
+    transport doc itself, or have every one of its exempt sites accounted for in
+    EXEMPT_SITES (matched by file). Listed files are accounted per file,
+    not per site: a brand-new bare site in a brand-new file, a bare
+    paragraph added to a pointed file, or a new keyword hit in an
+    already-known-bare file that isn't in EXEMPT_SITES, fails this test —
+    the sweep's teeth against drift. A new bare site added to a listed
+    file does not trip this test. No file is skipped
     as sibling-owned scaffolding any more; all five curds are merged, so
     the sweep runs over the full corpus."""
     exempt_files = {rel for rel, _, _ in EXEMPT_SITES}
@@ -283,7 +303,8 @@ def test_no_unaccounted_question_sites() -> None:
     )
     assert not unaccounted, (
         "question-asking sites found with no routing/exemption record — "
-        f"audit and add to ROUTED_FILES or EXEMPT_SITES: {unaccounted}"
+        f"link {TRANSPORT_REF} in the same paragraph, or audit and add to "
+        f"ROUTED_FILES or EXEMPT_SITES: {unaccounted}"
     )
 
 
@@ -293,7 +314,7 @@ def _paragraph_after(text: str, marker: str) -> str:
     rejects a pointer that drifted to another paragraph (see
     test_paragraph_after_rejects_pointer_moved_to_another_paragraph)."""
     start = text.index(marker)
-    end = text.find("\n\n", start)
+    end = text.find(PARAGRAPH_BREAK, start)
     return text[start : end if end != -1 else len(text)]
 
 
@@ -327,7 +348,35 @@ def test_sweep_catches_new_bare_site_in_new_file(tmp_path: Path) -> None:
     unaccounted = _unaccounted_sites(
         candidates, tmp_path, sibling_owned=set(), accounted=set()
     )
-    assert unaccounted == ["skills/newskill/SKILL.md"]
+    assert unaccounted == [
+        "skills/newskill/SKILL.md: Before running, ask the user to pick an option."
+    ]
+
+
+def test_sweep_credits_a_pointer_only_in_its_own_paragraph(tmp_path: Path) -> None:
+    """An unlisted file passes when its question paragraph links the
+    transport doc, but the same link in a different paragraph does not
+    account for a bare question paragraph. A whole-file pointer check
+    would wrongly pass `masked`; ignoring pointers would wrongly flag
+    `pointed`."""
+    skills = tmp_path / "skills"
+    files = {
+        "pointed": "# Pointed\n\nAsk the user to pick one via ask-user-question.md.\n",
+        "masked": (
+            "# Masked\n\nBefore running, ask the user to pick an option.\n\n"
+            + "See ask-user-question.md for the transport.\n"
+        ),
+    }
+    for name, text in files.items():
+        (skills / name).mkdir(parents=True)
+        _ = (skills / name / "SKILL.md").write_text(text, encoding="utf-8")
+    candidates = sorted(skills.glob("*/SKILL.md"))
+    unaccounted = _unaccounted_sites(
+        candidates, tmp_path, sibling_owned=set(), accounted=set()
+    )
+    assert unaccounted == [
+        "skills/masked/SKILL.md: Before running, ask the user to pick an option."
+    ]
 
 
 def test_sweep_skips_sibling_owned_and_accounted_files(tmp_path: Path) -> None:
