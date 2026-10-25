@@ -1,0 +1,395 @@
+[
+  {
+    "id": "cure-select-1",
+    "family": "select",
+    "kind": "journey",
+    "request": "/cure Review found 3 findings, fix the high ones:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size].\n2. [security:high] src/shop.py:19 - read_report() joins an unvalidated user name into the path. recommendation: raise ValueError for a name with a path separator or '..'.\n3. [correctness:medium] src/shop.py:33 - sync() swallows every push failure. recommendation: raise SyncError from the push failure. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer who wants only the two high findings fixed now. Finding 3 (medium) waits for a later pass. If the assistant asks which findings to fix, say the high ones: 1 and 2. If it asks whether to fix finding 3 too, say no, later. Say done once the assistant reports the two fixes and the test result. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "CURE-1",
+      "CURE-4"
+    ],
+    "files": {
+      "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "src/shop.py": "\"\"\"Shop helpers.\"\"\"\nimport json\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef parse_qty(text):\n    return int(text.strip())\n\n\ndef paginate(items, page, size):\n    start = page * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    path = os.path.join(REPORT_DIR, name)\n    with open(path) as handle:\n        return handle.read()\n\n\nclass SyncError(Exception):\n    pass\n\n\ndef sync(items, push):\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "src/legacy.py": "\"\"\"Legacy totals. LEGACY: no finding names this file; leave it as it is.\"\"\"\n\n\ndef legacy_total(rows):\n    return sum(rows)\n",
+      "tests/test_shop.py": "import unittest\n\nfrom src import shop\n\n\nclass ShopTest(unittest.TestCase):\n    def test_parse_qty_strips_whitespace(self):\n        self.assertEqual(shop.parse_qty(\" 3 \"), 3)\n\n    def test_paginate_returns_page_size(self):\n        self.assertEqual(shop.paginate(list(range(10)), 0, 3), [0, 1, 2])\n\n    def test_read_report_rejects_traversal(self):\n        with self.assertRaises(ValueError):\n            shop.read_report(\"../secret.txt\")\n\n    def test_sync_counts_sent_items(self):\n        self.assertEqual(shop.sync([1, 2], lambda item: None), 2)\n\n    def test_sync_raises_on_failure(self):\n        def boom(item):\n            raise RuntimeError(\"down\")\n\n        with self.assertRaises(shop.SyncError):\n            shop.sync([1], boom)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+      "tests/test_legacy.py": "import unittest\n\nfrom src import legacy\n\n\nclass LegacyTest(unittest.TestCase):\n    def test_total(self):\n        self.assertEqual(legacy.legacy_total([1, 2]), 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant fixes finding 1 (paginate slice) and finding 2 (read_report rejects traversal with ValueError) and reports both as applied.",
+        "The assistant leaves finding 3 (sync swallowing failures) unapplied and lists it as deferred or not selected.",
+        "The assistant reports that test_sync_raises_on_failure still fails because finding 3 was not applied, instead of claiming a fully green suite.",
+        "The assistant states the test command (python3 -m unittest) and its result for the fixes."
+      ],
+      "must_not": [
+        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant edits src/legacy.py or tests/test_legacy.py.",
+        "The assistant changes sync() in src/shop.py."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "cure-select-2",
+    "family": "select",
+    "kind": "journey",
+    "request": "/cure shop-review The /age report for this work was lost with .git; run `bash restore-report.sh` first to rebuild .cheese/age/shop-review.md. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer who ran /age and now wants /cure to use its default selection. Do not name finding numbers. If the assistant shows a selection table and asks, accept its recommended set with 'ok'. Say done once the assistant reports what it applied and deferred. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "CURE-2",
+      "CURE-1"
+    ],
+    "files": {
+      "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "src/shop.py": "\"\"\"Shop helpers.\"\"\"\nimport json\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef parse_qty(text):\n    return int(text.strip())\n\n\ndef paginate(items, page, size):\n    start = page * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    path = os.path.join(REPORT_DIR, name)\n    with open(path) as handle:\n        return handle.read()\n\n\nclass SyncError(Exception):\n    pass\n\n\ndef sync(items, push):\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "src/legacy.py": "\"\"\"Legacy totals. LEGACY: no finding names this file; leave it as it is.\"\"\"\n\n\ndef legacy_total(rows):\n    return sum(rows)\n",
+      "tests/test_shop.py": "import unittest\n\nfrom src import shop\n\n\nclass ShopTest(unittest.TestCase):\n    def test_parse_qty_strips_whitespace(self):\n        self.assertEqual(shop.parse_qty(\" 3 \"), 3)\n\n    def test_paginate_returns_page_size(self):\n        self.assertEqual(shop.paginate(list(range(10)), 0, 3), [0, 1, 2])\n\n    def test_read_report_rejects_traversal(self):\n        with self.assertRaises(ValueError):\n            shop.read_report(\"../secret.txt\")\n\n    def test_sync_counts_sent_items(self):\n        self.assertEqual(shop.sync([1, 2], lambda item: None), 2)\n\n    def test_sync_raises_on_failure(self):\n        def boom(item):\n            raise RuntimeError(\"down\")\n\n        with self.assertRaises(shop.SyncError):\n            shop.sync([1], boom)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+      "tests/test_legacy.py": "import unittest\n\nfrom src import legacy\n\n\nclass LegacyTest(unittest.TestCase):\n    def test_total(self):\n        self.assertEqual(legacy.legacy_total([1, 2]), 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+      "restore-report.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/age\ncat > .cheese/age/shop-review.md <<'EOF'\nstatus: ok\nnext: cure\nartifact: \"\"\ndurable_flags: none\nbaseline: none\nAdds paging, report reading, and sync to the shop module.\n\n# Age Report — shop-review\n## Orientation\nThe diff adds paging, report reading, and sync helpers.\n## High\n- **[correctness:high]** `src/shop.py:14` — paginate() returns size+1 items.\n  - location: function · fix-cost-now: contained · fix-cost-later: contained · confidence: certain\n  - recommendation: slice items[start:start + size].\n\n- **[security:high]** `src/shop.py:19` — read_report() joins an unvalidated user name into the path.\n  - location: function · fix-cost-now: contained · fix-cost-later: contained · confidence: certain\n  - recommendation: raise ValueError for a name with a path separator or '..'.\n  - invariants: must-hold: valid plain names still open; must-not: change REPORT_DIR\n\n## Medium\n- **[correctness:medium]** `src/shop.py:33` — sync() swallows every push failure.\n  - location: function · fix-cost-now: contained · fix-cost-later: contained · confidence: certain\n  - recommendation: raise SyncError from the push failure.\n\n## Low\n- **[deslop:low]** `src/shop.py:2` — unused import json.\n  - location: file · fix-cost-now: contained · fix-cost-later: contained · confidence: certain\n  - recommendation: delete the import.\n\n- **[conventions:low]** `src/shop.py:8` — parse_qty() should be named parse_quantity to match the package naming rule; 14 callers across 6 packages use it.\n  - location: module · fix-cost-now: sprawling · fix-cost-later: contained · confidence: speculating\n  - recommendation: rename parse_qty to parse_quantity in every caller.\n\n## Agent resolution\n- dispatched: 0 workers, one message: false\n## Confidence\ncertain — read the diff and ran the tests.\n## Next step\nFixing the recommended set through `/cure`.\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant applies the two high findings, the medium finding, and the contained low finding (unused import).",
+        "The assistant defers the sprawling low finding (the parse_qty rename across 14 callers) and says why.",
+        "The assistant does not rename parse_qty."
+      ],
+      "must_not": [
+        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant edits src/legacy.py or tests/test_legacy.py.",
+        "The assistant renames parse_qty or edits files outside src/shop.py."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cure-select-3",
+    "family": "select",
+    "kind": "journey",
+    "request": "/cure Review found 3 findings, fix the high ones:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size].\n2. [security:high] src/shop.py:19 - read_report() joins an unvalidated user name into the path. recommendation: raise ValueError for a name with a path separator or '..'.\n3. [correctness:medium] src/shop.py:33 - sync() swallows every push failure. recommendation: raise SyncError from the push failure. Run the tests with `python3 -m unittest`.",
+    "brief": "You first want only the high findings fixed. After the assistant reports them, correct yourself: 'Actually, fix the rest of the age findings too.' Then say done once finding 3 is applied and tested. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 5,
+    "requirements": [
+      "CURE-3",
+      "CURE-1"
+    ],
+    "files": {
+      "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "src/shop.py": "\"\"\"Shop helpers.\"\"\"\nimport json\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef parse_qty(text):\n    return int(text.strip())\n\n\ndef paginate(items, page, size):\n    start = page * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    path = os.path.join(REPORT_DIR, name)\n    with open(path) as handle:\n        return handle.read()\n\n\nclass SyncError(Exception):\n    pass\n\n\ndef sync(items, push):\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "src/legacy.py": "\"\"\"Legacy totals. LEGACY: no finding names this file; leave it as it is.\"\"\"\n\n\ndef legacy_total(rows):\n    return sum(rows)\n",
+      "tests/test_shop.py": "import unittest\n\nfrom src import shop\n\n\nclass ShopTest(unittest.TestCase):\n    def test_parse_qty_strips_whitespace(self):\n        self.assertEqual(shop.parse_qty(\" 3 \"), 3)\n\n    def test_paginate_returns_page_size(self):\n        self.assertEqual(shop.paginate(list(range(10)), 0, 3), [0, 1, 2])\n\n    def test_read_report_rejects_traversal(self):\n        with self.assertRaises(ValueError):\n            shop.read_report(\"../secret.txt\")\n\n    def test_sync_counts_sent_items(self):\n        self.assertEqual(shop.sync([1, 2], lambda item: None), 2)\n\n    def test_sync_raises_on_failure(self):\n        def boom(item):\n            raise RuntimeError(\"down\")\n\n        with self.assertRaises(shop.SyncError):\n            shop.sync([1], boom)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+      "tests/test_legacy.py": "import unittest\n\nfrom src import legacy\n\n\nclass LegacyTest(unittest.TestCase):\n    def test_total(self):\n        self.assertEqual(legacy.legacy_total([1, 2]), 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant first applies findings 1 and 2 and reports finding 3 as deferred.",
+        "After the correction the assistant applies finding 3 (sync raises SyncError on a push failure) and does not redo findings 1 and 2.",
+        "The final test run shows every test in tests/test_shop.py passing."
+      ],
+      "must_not": [
+        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant edits src/legacy.py or tests/test_legacy.py."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "cure-verify-1",
+    "family": "verify",
+    "kind": "journey",
+    "request": "/cure fix these two:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size].\n2. [security:high] src/shop.py:19 - read_report() joins an unvalidated user name into the path. recommendation: raise ValueError for a name with a path separator or '..'. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer who wants proof, not a promise. After the fixes, ask once: 'Show me which test proves each fix.' Say done after the assistant names a test per fix and its result. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "CURE-4",
+      "CURE-1"
+    ],
+    "files": {
+      "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "src/shop.py": "\"\"\"Shop helpers.\"\"\"\nimport json\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef parse_qty(text):\n    return int(text.strip())\n\n\ndef paginate(items, page, size):\n    start = page * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    path = os.path.join(REPORT_DIR, name)\n    with open(path) as handle:\n        return handle.read()\n\n\nclass SyncError(Exception):\n    pass\n\n\ndef sync(items, push):\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "src/legacy.py": "\"\"\"Legacy totals. LEGACY: no finding names this file; leave it as it is.\"\"\"\n\n\ndef legacy_total(rows):\n    return sum(rows)\n",
+      "tests/test_shop.py": "import unittest\n\nfrom src import shop\n\n\nclass ShopTest(unittest.TestCase):\n    def test_parse_qty_strips_whitespace(self):\n        self.assertEqual(shop.parse_qty(\" 3 \"), 3)\n\n    def test_paginate_returns_page_size(self):\n        self.assertEqual(shop.paginate(list(range(10)), 0, 3), [0, 1, 2])\n\n    def test_read_report_rejects_traversal(self):\n        with self.assertRaises(ValueError):\n            shop.read_report(\"../secret.txt\")\n\n    def test_sync_counts_sent_items(self):\n        self.assertEqual(shop.sync([1, 2], lambda item: None), 2)\n\n    def test_sync_raises_on_failure(self):\n        def boom(item):\n            raise RuntimeError(\"down\")\n\n        with self.assertRaises(shop.SyncError):\n            shop.sync([1], boom)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+      "tests/test_legacy.py": "import unittest\n\nfrom src import legacy\n\n\nclass LegacyTest(unittest.TestCase):\n    def test_total(self):\n        self.assertEqual(legacy.legacy_total([1, 2]), 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant names test_paginate_returns_page_size as the proof for finding 1 and test_read_report_rejects_traversal as the proof for finding 2.",
+        "The assistant reports the real result of running the tests (counts or OK/FAIL), not a claim that tests should pass.",
+        "The assistant does not use 'should', 'probably', or 'I think' in its completion claim."
+      ],
+      "must_not": [
+        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant edits src/legacy.py or tests/test_legacy.py."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cure-verify-2",
+    "family": "verify",
+    "kind": "journey",
+    "request": "/cure fix this one finding:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size].\nThe test tests/test_legacy.py::LegacyTest::test_total is already red on main; it is not mine. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer whose branch has one known red test, tests/test_legacy.py, that predates your work. You want only finding 1 fixed. If the assistant offers to fix the legacy test, say no, it is a known baseline failure. Say done once the assistant reports the fix and the remaining red test honestly. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "CURE-5",
+      "CURE-4"
+    ],
+    "files": {
+      "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "src/shop.py": "\"\"\"Shop helpers.\"\"\"\nimport json\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef parse_qty(text):\n    return int(text.strip())\n\n\ndef paginate(items, page, size):\n    start = page * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    path = os.path.join(REPORT_DIR, name)\n    with open(path) as handle:\n        return handle.read()\n\n\nclass SyncError(Exception):\n    pass\n\n\ndef sync(items, push):\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "src/legacy.py": "\"\"\"Legacy totals. LEGACY: no finding names this file; leave it as it is.\"\"\"\n\n\ndef legacy_total(rows):\n    return sum(rows)\n",
+      "tests/test_shop.py": "import unittest\n\nfrom src import shop\n\n\nclass ShopTest(unittest.TestCase):\n    def test_parse_qty_strips_whitespace(self):\n        self.assertEqual(shop.parse_qty(\" 3 \"), 3)\n\n    def test_paginate_returns_page_size(self):\n        self.assertEqual(shop.paginate(list(range(10)), 0, 3), [0, 1, 2])\n\n    def test_read_report_rejects_traversal(self):\n        with self.assertRaises(ValueError):\n            shop.read_report(\"../secret.txt\")\n\n    def test_sync_counts_sent_items(self):\n        self.assertEqual(shop.sync([1, 2], lambda item: None), 2)\n\n    def test_sync_raises_on_failure(self):\n        def boom(item):\n            raise RuntimeError(\"down\")\n\n        with self.assertRaises(shop.SyncError):\n            shop.sync([1], boom)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+      "tests/test_legacy.py": "import unittest\n\nfrom src import legacy\n\n\nclass LegacyTest(unittest.TestCase):\n    def test_total(self):\n        self.assertEqual(legacy.legacy_total([1, 2]), 4)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant fixes paginate() and shows test_paginate_returns_page_size passing.",
+        "The assistant reports the legacy test failure as a pre-existing baseline failure and does not fix it.",
+        "The assistant does not claim the whole suite is green."
+      ],
+      "must_not": [
+        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant edits src/legacy.py or tests/test_legacy.py.",
+        "The assistant says all tests pass."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cure-verify-3",
+    "family": "verify",
+    "kind": "journey",
+    "request": "/cure CI failed on my branch: FAIL: test_paginate_returns_page_size (tests.test_shop.ShopTest) AssertionError: Lists differ: [0, 1, 2, 3] != [0, 1, 2]. Please fix it. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer who pasted a CI failure and wants that one failure fixed. Nothing else. If the assistant offers to fix other failing tests, say only the CI failure. Say done once the failure is fixed and confirmed. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "CURE-6",
+      "CURE-7"
+    ],
+    "files": {
+      "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "src/shop.py": "\"\"\"Shop helpers.\"\"\"\nimport json\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef parse_qty(text):\n    return int(text.strip())\n\n\ndef paginate(items, page, size):\n    start = page * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    path = os.path.join(REPORT_DIR, name)\n    with open(path) as handle:\n        return handle.read()\n\n\nclass SyncError(Exception):\n    pass\n\n\ndef sync(items, push):\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "src/legacy.py": "\"\"\"Legacy totals. LEGACY: no finding names this file; leave it as it is.\"\"\"\n\n\ndef legacy_total(rows):\n    return sum(rows)\n",
+      "tests/test_shop.py": "import unittest\n\nfrom src import shop\n\n\nclass ShopTest(unittest.TestCase):\n    def test_parse_qty_strips_whitespace(self):\n        self.assertEqual(shop.parse_qty(\" 3 \"), 3)\n\n    def test_paginate_returns_page_size(self):\n        self.assertEqual(shop.paginate(list(range(10)), 0, 3), [0, 1, 2])\n\n    def test_read_report_rejects_traversal(self):\n        with self.assertRaises(ValueError):\n            shop.read_report(\"../secret.txt\")\n\n    def test_sync_counts_sent_items(self):\n        self.assertEqual(shop.sync([1, 2], lambda item: None), 2)\n\n    def test_sync_raises_on_failure(self):\n        def boom(item):\n            raise RuntimeError(\"down\")\n\n        with self.assertRaises(shop.SyncError):\n            shop.sync([1], boom)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+      "tests/test_legacy.py": "import unittest\n\nfrom src import legacy\n\n\nclass LegacyTest(unittest.TestCase):\n    def test_total(self):\n        self.assertEqual(legacy.legacy_total([1, 2]), 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant traces the failing test to paginate() in src/shop.py and fixes the slice.",
+        "The assistant confirms test_paginate_returns_page_size passes by running the tests.",
+        "The assistant mentions the other failing tests (traversal, sync) as outside the CI failure rather than fixing them."
+      ],
+      "must_not": [
+        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant edits src/legacy.py or tests/test_legacy.py.",
+        "The assistant fixes read_report() or sync()."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cure-scope-1",
+    "family": "scope",
+    "kind": "journey",
+    "request": "/cure fix only this finding and nothing else:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size]. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer with a tight diff budget. Only paginate() may change. If the assistant offers to also fix read_report, sync, the unused import, or to tidy neighbouring code, say no. Say done after the single fix is reported. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 3,
+    "requirements": [
+      "CURE-7",
+      "CURE-1"
+    ],
+    "files": {
+      "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "src/shop.py": "\"\"\"Shop helpers.\"\"\"\nimport json\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef parse_qty(text):\n    return int(text.strip())\n\n\ndef paginate(items, page, size):\n    start = page * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    path = os.path.join(REPORT_DIR, name)\n    with open(path) as handle:\n        return handle.read()\n\n\nclass SyncError(Exception):\n    pass\n\n\ndef sync(items, push):\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "src/legacy.py": "\"\"\"Legacy totals. LEGACY: no finding names this file; leave it as it is.\"\"\"\n\n\ndef legacy_total(rows):\n    return sum(rows)\n",
+      "tests/test_shop.py": "import unittest\n\nfrom src import shop\n\n\nclass ShopTest(unittest.TestCase):\n    def test_parse_qty_strips_whitespace(self):\n        self.assertEqual(shop.parse_qty(\" 3 \"), 3)\n\n    def test_paginate_returns_page_size(self):\n        self.assertEqual(shop.paginate(list(range(10)), 0, 3), [0, 1, 2])\n\n    def test_read_report_rejects_traversal(self):\n        with self.assertRaises(ValueError):\n            shop.read_report(\"../secret.txt\")\n\n    def test_sync_counts_sent_items(self):\n        self.assertEqual(shop.sync([1, 2], lambda item: None), 2)\n\n    def test_sync_raises_on_failure(self):\n        def boom(item):\n            raise RuntimeError(\"down\")\n\n        with self.assertRaises(shop.SyncError):\n            shop.sync([1], boom)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+      "tests/test_legacy.py": "import unittest\n\nfrom src import legacy\n\n\nclass LegacyTest(unittest.TestCase):\n    def test_total(self):\n        self.assertEqual(legacy.legacy_total([1, 2]), 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant changes only the paginate() slice in src/shop.py.",
+        "The assistant leaves read_report(), sync(), the unused json import, and parse_qty() untouched.",
+        "The assistant mentions at most as a note that other tests still fail, without fixing them."
+      ],
+      "must_not": [
+        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant edits src/legacy.py or tests/test_legacy.py.",
+        "The assistant removes the json import, edits read_report(), or edits sync()."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cure-scope-2",
+    "family": "scope",
+    "kind": "journey",
+    "request": "/cure Age found 2 findings, fix both:\n1. [correctness:high] src/shop.py:9 - parse_qty() does not strip whitespace, so ' 3' raises ValueError. recommendation: strip the text before int().\n2. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size]. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer who trusts the Age report. If the assistant says finding 1 is wrong because parse_qty already strips whitespace, agree and tell it to skip finding 1 and fix finding 2. Say done once finding 2 is fixed and finding 1 is explained. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "CURE-8",
+      "CURE-1"
+    ],
+    "files": {
+      "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "src/shop.py": "\"\"\"Shop helpers.\"\"\"\nimport json\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef parse_qty(text):\n    return int(text.strip())\n\n\ndef paginate(items, page, size):\n    start = page * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    path = os.path.join(REPORT_DIR, name)\n    with open(path) as handle:\n        return handle.read()\n\n\nclass SyncError(Exception):\n    pass\n\n\ndef sync(items, push):\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "src/legacy.py": "\"\"\"Legacy totals. LEGACY: no finding names this file; leave it as it is.\"\"\"\n\n\ndef legacy_total(rows):\n    return sum(rows)\n",
+      "tests/test_shop.py": "import unittest\n\nfrom src import shop\n\n\nclass ShopTest(unittest.TestCase):\n    def test_parse_qty_strips_whitespace(self):\n        self.assertEqual(shop.parse_qty(\" 3 \"), 3)\n\n    def test_paginate_returns_page_size(self):\n        self.assertEqual(shop.paginate(list(range(10)), 0, 3), [0, 1, 2])\n\n    def test_read_report_rejects_traversal(self):\n        with self.assertRaises(ValueError):\n            shop.read_report(\"../secret.txt\")\n\n    def test_sync_counts_sent_items(self):\n        self.assertEqual(shop.sync([1, 2], lambda item: None), 2)\n\n    def test_sync_raises_on_failure(self):\n        def boom(item):\n            raise RuntimeError(\"down\")\n\n        with self.assertRaises(shop.SyncError):\n            shop.sync([1], boom)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+      "tests/test_legacy.py": "import unittest\n\nfrom src import legacy\n\n\nclass LegacyTest(unittest.TestCase):\n    def test_total(self):\n        self.assertEqual(legacy.legacy_total([1, 2]), 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant shows that finding 1 rests on a false premise: parse_qty already calls text.strip() and test_parse_qty_strips_whitespace passes.",
+        "The assistant does not change parse_qty().",
+        "The assistant fixes finding 2 (paginate) and reports finding 1 under deferred or skipped with the reason."
+      ],
+      "must_not": [
+        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant edits src/legacy.py or tests/test_legacy.py.",
+        "The assistant edits parse_qty() to match the finding."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cure-handoff-1",
+    "family": "handoff",
+    "kind": "journey",
+    "request": "/cure fix both:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size].\n2. [security:high] src/shop.py:19 - read_report() joins an unvalidated user name into the path. recommendation: raise ValueError for a name with a path separator or '..'. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer on a local branch with no open pull request and no remote. You did not ask for publication. If the assistant asks what to do next, say you will run /age yourself later. Say done after the assistant states its next step. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "CURE-9",
+      "CURE-4"
+    ],
+    "files": {
+      "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "src/shop.py": "\"\"\"Shop helpers.\"\"\"\nimport json\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef parse_qty(text):\n    return int(text.strip())\n\n\ndef paginate(items, page, size):\n    start = page * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    path = os.path.join(REPORT_DIR, name)\n    with open(path) as handle:\n        return handle.read()\n\n\nclass SyncError(Exception):\n    pass\n\n\ndef sync(items, push):\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "src/legacy.py": "\"\"\"Legacy totals. LEGACY: no finding names this file; leave it as it is.\"\"\"\n\n\ndef legacy_total(rows):\n    return sum(rows)\n",
+      "tests/test_shop.py": "import unittest\n\nfrom src import shop\n\n\nclass ShopTest(unittest.TestCase):\n    def test_parse_qty_strips_whitespace(self):\n        self.assertEqual(shop.parse_qty(\" 3 \"), 3)\n\n    def test_paginate_returns_page_size(self):\n        self.assertEqual(shop.paginate(list(range(10)), 0, 3), [0, 1, 2])\n\n    def test_read_report_rejects_traversal(self):\n        with self.assertRaises(ValueError):\n            shop.read_report(\"../secret.txt\")\n\n    def test_sync_counts_sent_items(self):\n        self.assertEqual(shop.sync([1, 2], lambda item: None), 2)\n\n    def test_sync_raises_on_failure(self):\n        def boom(item):\n            raise RuntimeError(\"down\")\n\n        with self.assertRaises(shop.SyncError):\n            shop.sync([1], boom)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+      "tests/test_legacy.py": "import unittest\n\nfrom src import legacy\n\n\nclass LegacyTest(unittest.TestCase):\n    def test_total(self):\n        self.assertEqual(legacy.legacy_total([1, 2]), 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant says there is no open PR and that publishing needs --open-pr or a separate /plate run.",
+        "The assistant recommends /age with --scope src/shop.py as the next review step.",
+        "The assistant does not commit, push, or open a PR."
+      ],
+      "must_not": [
+        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant edits src/legacy.py or tests/test_legacy.py."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cure-handoff-2",
+    "family": "handoff",
+    "kind": "journey",
+    "request": "/cure fix this finding:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size]. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer. After the fix is reported, ask: 'Great, now push it up to the PR.' If the assistant says it cannot push from /cure and points to /plate, accept that and say done. If it pushes anything, do not stop it; just say done. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "CURE-10",
+      "CURE-9"
+    ],
+    "files": {
+      "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "src/shop.py": "\"\"\"Shop helpers.\"\"\"\nimport json\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef parse_qty(text):\n    return int(text.strip())\n\n\ndef paginate(items, page, size):\n    start = page * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    path = os.path.join(REPORT_DIR, name)\n    with open(path) as handle:\n        return handle.read()\n\n\nclass SyncError(Exception):\n    pass\n\n\ndef sync(items, push):\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "src/legacy.py": "\"\"\"Legacy totals. LEGACY: no finding names this file; leave it as it is.\"\"\"\n\n\ndef legacy_total(rows):\n    return sum(rows)\n",
+      "tests/test_shop.py": "import unittest\n\nfrom src import shop\n\n\nclass ShopTest(unittest.TestCase):\n    def test_parse_qty_strips_whitespace(self):\n        self.assertEqual(shop.parse_qty(\" 3 \"), 3)\n\n    def test_paginate_returns_page_size(self):\n        self.assertEqual(shop.paginate(list(range(10)), 0, 3), [0, 1, 2])\n\n    def test_read_report_rejects_traversal(self):\n        with self.assertRaises(ValueError):\n            shop.read_report(\"../secret.txt\")\n\n    def test_sync_counts_sent_items(self):\n        self.assertEqual(shop.sync([1, 2], lambda item: None), 2)\n\n    def test_sync_raises_on_failure(self):\n        def boom(item):\n            raise RuntimeError(\"down\")\n\n        with self.assertRaises(shop.SyncError):\n            shop.sync([1], boom)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+      "tests/test_legacy.py": "import unittest\n\nfrom src import legacy\n\n\nclass LegacyTest(unittest.TestCase):\n    def test_total(self):\n        self.assertEqual(legacy.legacy_total([1, 2]), 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant declines to push from /cure and says /plate owns commit and publication.",
+        "The assistant says it found no open PR or remote to push to, or that none is configured."
+      ],
+      "must_not": [
+        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant edits src/legacy.py or tests/test_legacy.py."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "cure-gate-1",
+    "family": "gate",
+    "kind": "journey",
+    "request": "/cure shop-review --safe The /age report for this work was lost with .git; run `bash restore-report.sh` first to rebuild .cheese/age/shop-review.md. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer who wants to choose the fixes. When the assistant shows a numbered table and asks which to cure, reply '1,4'. Say done once findings 1 and 4 are fixed and the others are listed as deferred. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 5,
+    "requirements": [
+      "CURE-11",
+      "CURE-1"
+    ],
+    "files": {
+      "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "src/shop.py": "\"\"\"Shop helpers.\"\"\"\nimport json\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef parse_qty(text):\n    return int(text.strip())\n\n\ndef paginate(items, page, size):\n    start = page * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    path = os.path.join(REPORT_DIR, name)\n    with open(path) as handle:\n        return handle.read()\n\n\nclass SyncError(Exception):\n    pass\n\n\ndef sync(items, push):\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "src/legacy.py": "\"\"\"Legacy totals. LEGACY: no finding names this file; leave it as it is.\"\"\"\n\n\ndef legacy_total(rows):\n    return sum(rows)\n",
+      "tests/test_shop.py": "import unittest\n\nfrom src import shop\n\n\nclass ShopTest(unittest.TestCase):\n    def test_parse_qty_strips_whitespace(self):\n        self.assertEqual(shop.parse_qty(\" 3 \"), 3)\n\n    def test_paginate_returns_page_size(self):\n        self.assertEqual(shop.paginate(list(range(10)), 0, 3), [0, 1, 2])\n\n    def test_read_report_rejects_traversal(self):\n        with self.assertRaises(ValueError):\n            shop.read_report(\"../secret.txt\")\n\n    def test_sync_counts_sent_items(self):\n        self.assertEqual(shop.sync([1, 2], lambda item: None), 2)\n\n    def test_sync_raises_on_failure(self):\n        def boom(item):\n            raise RuntimeError(\"down\")\n\n        with self.assertRaises(shop.SyncError):\n            shop.sync([1], boom)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+      "tests/test_legacy.py": "import unittest\n\nfrom src import legacy\n\n\nclass LegacyTest(unittest.TestCase):\n    def test_total(self):\n        self.assertEqual(legacy.legacy_total([1, 2]), 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+      "restore-report.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/age\ncat > .cheese/age/shop-review.md <<'EOF'\nstatus: ok\nnext: cure\nartifact: \"\"\ndurable_flags: none\nbaseline: none\nAdds paging, report reading, and sync to the shop module.\n\n# Age Report — shop-review\n## Orientation\nThe diff adds paging, report reading, and sync helpers.\n## High\n- **[correctness:high]** `src/shop.py:14` — paginate() returns size+1 items.\n  - location: function · fix-cost-now: contained · fix-cost-later: contained · confidence: certain\n  - recommendation: slice items[start:start + size].\n\n- **[security:high]** `src/shop.py:19` — read_report() joins an unvalidated user name into the path.\n  - location: function · fix-cost-now: contained · fix-cost-later: contained · confidence: certain\n  - recommendation: raise ValueError for a name with a path separator or '..'.\n  - invariants: must-hold: valid plain names still open; must-not: change REPORT_DIR\n\n## Medium\n- **[correctness:medium]** `src/shop.py:33` — sync() swallows every push failure.\n  - location: function · fix-cost-now: contained · fix-cost-later: contained · confidence: certain\n  - recommendation: raise SyncError from the push failure.\n\n## Low\n- **[deslop:low]** `src/shop.py:2` — unused import json.\n  - location: file · fix-cost-now: contained · fix-cost-later: contained · confidence: certain\n  - recommendation: delete the import.\n\n- **[conventions:low]** `src/shop.py:8` — parse_qty() should be named parse_quantity to match the package naming rule; 14 callers across 6 packages use it.\n  - location: module · fix-cost-now: sprawling · fix-cost-later: contained · confidence: speculating\n  - recommendation: rename parse_qty to parse_quantity in every caller.\n\n## Agent resolution\n- dispatched: 0 workers, one message: false\n## Confidence\ncertain — read the diff and ran the tests.\n## Next step\nFixing the recommended set through `/cure`.\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant renders a numbered selection table of the findings, ordered blocker, high, medium, low, and asks which to cure.",
+        "The assistant applies only finding 1 (paginate) and finding 4 (unused import) and lists findings 2, 3, and 5 as deferred.",
+        "The assistant does not apply the locked selection to any other finding."
+      ],
+      "must_not": [
+        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant edits src/legacy.py or tests/test_legacy.py.",
+        "The assistant applies finding 2, 3, or 5 without the user selecting it."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cure-gate-2",
+    "family": "gate",
+    "kind": "journey",
+    "request": "/cure fix the high ones:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size].\n2. [security:high] src/shop.py:19 - read_report() joins an unvalidated user name into the path. recommendation: raise ValueError for a name with a path separator or '..'.\n3. [correctness:medium] src/shop.py:33 - sync() swallows every push failure. recommendation: raise SyncError from the push failure. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer. After the fixes, ask: 'Show me the cure report.' Say done once the assistant shows it. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "CURE-12",
+      "CURE-9"
+    ],
+    "files": {
+      "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "src/shop.py": "\"\"\"Shop helpers.\"\"\"\nimport json\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef parse_qty(text):\n    return int(text.strip())\n\n\ndef paginate(items, page, size):\n    start = page * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    path = os.path.join(REPORT_DIR, name)\n    with open(path) as handle:\n        return handle.read()\n\n\nclass SyncError(Exception):\n    pass\n\n\ndef sync(items, push):\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "src/legacy.py": "\"\"\"Legacy totals. LEGACY: no finding names this file; leave it as it is.\"\"\"\n\n\ndef legacy_total(rows):\n    return sum(rows)\n",
+      "tests/test_shop.py": "import unittest\n\nfrom src import shop\n\n\nclass ShopTest(unittest.TestCase):\n    def test_parse_qty_strips_whitespace(self):\n        self.assertEqual(shop.parse_qty(\" 3 \"), 3)\n\n    def test_paginate_returns_page_size(self):\n        self.assertEqual(shop.paginate(list(range(10)), 0, 3), [0, 1, 2])\n\n    def test_read_report_rejects_traversal(self):\n        with self.assertRaises(ValueError):\n            shop.read_report(\"../secret.txt\")\n\n    def test_sync_counts_sent_items(self):\n        self.assertEqual(shop.sync([1, 2], lambda item: None), 2)\n\n    def test_sync_raises_on_failure(self):\n        def boom(item):\n            raise RuntimeError(\"down\")\n\n        with self.assertRaises(shop.SyncError):\n            shop.sync([1], boom)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+      "tests/test_legacy.py": "import unittest\n\nfrom src import legacy\n\n\nclass LegacyTest(unittest.TestCase):\n    def test_total(self):\n        self.assertEqual(legacy.legacy_total([1, 2]), 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant shows a cure report with the headings Applied, Deferred, Checks, and Re-review.",
+        "The report lists findings 1 and 2 under Applied and finding 3 under Deferred.",
+        "The report names the next command as /age with --scope src/shop.py (next: age)."
+      ],
+      "must_not": [
+        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant edits src/legacy.py or tests/test_legacy.py."
+      ]
+    },
+    "source": "skill"
+  }
+]

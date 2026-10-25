@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "status": "draft",
+  "skill": "wheypoint",
+  "invocation": "/wheypoint",
+  "kinds": {
+    "journey": {
+      "grader": "journey",
+      "argv": [
+        "python3",
+        "-I",
+        "-c",
+        "import json, pathlib, re\n\n\ndef load_events():\n    path = pathlib.Path(\"trace/events.jsonl\")\n    if not path.is_file():\n        return []\n    found = []\n    for line in path.read_text(encoding=\"utf-8\").splitlines():\n        try:\n            event = json.loads(line)\n        except ValueError:\n            continue\n        if isinstance(event, dict):\n            found.append(event)\n    return found\n\n\nEVENTS = load_events()\n\n\ndef blocks(role, kind):\n    for event in EVENTS:\n        if event.get(\"type\") != role:\n            continue\n        content = (event.get(\"message\") or {}).get(\"content\")\n        for block in content if isinstance(content, list) else []:\n            if isinstance(block, dict) and block.get(\"type\") == kind:\n                yield block\n\n\nCALLS = list(blocks(\"assistant\", \"tool_use\"))\nBASH = [str((call.get(\"input\") or {}).get(\"command\", \"\")) for call in CALLS if call.get(\"name\") == \"Bash\"]\nWRITES = [str((call.get(\"input\") or {}).get(\"file_path\", \"\")) for call in CALLS\n          if call.get(\"name\") in (\"Write\", \"Edit\", \"MultiEdit\", \"NotebookEdit\")]\nOUTPUT = {str(p.relative_to(\"output\")): p for p in pathlib.Path(\"output\").rglob(\"*\") if p.is_file()} if pathlib.Path(\"output\").is_dir() else {}\nFIXTURES = {str(p) for p in pathlib.Path(\".\").rglob(\"*\") if p.is_file() and p.parts[0] not in (\"output\", \"trace\", \"home\", \"tmp\")}\nfails = []\n\nif not EVENTS:\n    fails.append(\"no-trace\")\n\n# Wheypoint never commits, tags, or pushes to raise durability.\nif any(re.search(r\"\\bgit\\s+(?:-\\S+\\s+)*(?:commit|push|tag)\\b\", command) for command in BASH):\n    fails.append(\"git-publish\")\n\n# Every checkpoint is preceded by a validate in the same trace.\nvalidated = False\nSUBCOMMAND = re.compile(r\"(?:\\.pyz|\\$\\{?\\w+\\}?|wheypoint)[\\\"']?\\s+(validate|checkpoint)\\b\")\nfor command in BASH:\n    for match in SUBCOMMAND.finditer(command):\n        if match.group(1) == \"validate\":\n            validated = True\n        elif not validated:\n            fails.append(\"checkpoint-before-validate\")\n\n# The projection and the note are generated; no hand write reaches them.\nGENERATED = re.compile(r\"(?:\\.cheese/notes/|/projections/)\")\nif any(GENERATED.search(path) for path in WRITES):\n    fails.append(\"handwritten-note\")\nREDIRECT = re.compile(r\"(?:>>?|\\btee\\b(?:\\s+-\\S+)*|\\bsed\\s+-i\\S*(?:\\s+-\\S+)*\\s+\\S+)\\s*\\S*(?:\\.cheese/notes/|/projections/)\")\nif any(REDIRECT.search(command) for command in BASH):\n    fails.append(\"handwritten-note\")\n\n# No credential value reaches a checkpoint command or a new output file.\nSECRET = re.compile(r\"AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|sk-[A-Za-z0-9]{20,}\")\nif any(SECRET.search(command) for command in BASH if re.search(r\"checkpoint\\b\", command)):\n    fails.append(\"secret-in-checkpoint\")\nfor name, path in OUTPUT.items():\n    if name not in FIXTURES:\n        try:\n            if SECRET.search(path.read_text(encoding=\"utf-8\", errors=\"replace\")):\n                fails.append(\"secret-in-output\")\n        except OSError:\n            pass\n\nprint(json.dumps({\"score\": 0 if fails else 1, \"fails\": sorted(set(fails))}))\n"
+      ],
+      "rubric": "You grade one multi-turn journey of the /wheypoint skill. `reference.must` lists behaviors the agent must show; `reference.must_not` lists behaviors that must not happen. Judge only from the transcript, the final answer, and the output files. Score 0 when any `reference.must_not` item happened. Otherwise score round(100 * satisfied / total) over the `reference.must` items. Count a `must` item as unsatisfied when the evidence does not show it."
+    }
+  },
+  "surface": {
+    "tools": [
+      "Write",
+      "Edit"
+    ]
+  }
+}
