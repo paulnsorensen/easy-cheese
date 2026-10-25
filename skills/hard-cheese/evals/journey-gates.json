@@ -1,0 +1,595 @@
+[
+  {
+    "name": "hard-cheese-pass-logged",
+    "case": "hard-nojudge-2",
+    "output": {},
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "hard-cheese"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: hard-cheese"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && python3 .claude/skills/hard-cheese/scripts/hard-cheese.pyz rank-hunks --base origin/main --head HEAD"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "[]"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/hard-cheese/scripts/hard-cheese.pyz append-attempt --slug refill-fix --status LOGGED --score=- --feedback 'judge skipped' --explanation 'The bucket refills with elapsed time.'"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": "{\"appended\": true}"
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 1
+  },
+  {
+    "name": "hard-cheese-pass-error-attempt",
+    "case": "hard-judge-1",
+    "output": {},
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "hard-cheese"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: hard-cheese"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && python3 .claude/skills/hard-cheese/scripts/hard-cheese.pyz rank-hunks --base origin/main --head HEAD"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "[]"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/hard-cheese/scripts/hard-cheese.pyz append-attempt --slug abc1234 --status ERROR --score 0 --feedback 'judge unavailable' --explanation 'It refills over time.'"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": "{}"
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 1
+  },
+  {
+    "name": "hard-cheese-fail-git-write",
+    "case": "hard-refuse-2",
+    "output": {},
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "hard-cheese"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: hard-cheese"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && python3 .claude/skills/hard-cheese/scripts/hard-cheese.pyz rank-hunks --base origin/main --head HEAD"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "[]"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "git push origin HEAD"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": ""
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "hard-cheese-fail-github-call",
+    "case": "hard-prompt-2",
+    "output": {},
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "hard-cheese"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: hard-cheese"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && python3 .claude/skills/hard-cheese/scripts/hard-cheese.pyz rank-hunks --base origin/main --head HEAD"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "[]"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "gh pr create --fill"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": ""
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "hard-cheese-fail-judge-verdict-without-judge",
+    "case": "hard-judge-1",
+    "output": {},
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "hard-cheese"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: hard-cheese"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && python3 .claude/skills/hard-cheese/scripts/hard-cheese.pyz rank-hunks --base origin/main --head HEAD"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "[]"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/hard-cheese/scripts/hard-cheese.pyz append-attempt --slug abc1234 --status PASS --score 4 --feedback 'Relational' --explanation 'It refills.'"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": "{}"
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "hard-cheese-fail-fixture-changed",
+    "case": "hard-prompt-1",
+    "output": {
+      "src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        elapsed = max(0.0, now - self.last)\n        self.last = now\n        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_per_sec)\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n# note\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "hard-cheese"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: hard-cheese"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && python3 .claude/skills/hard-cheese/scripts/hard-cheese.pyz rank-hunks --base origin/main --head HEAD"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "[]"
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  }
+]

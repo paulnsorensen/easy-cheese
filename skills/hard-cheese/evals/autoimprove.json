@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "status": "draft",
+  "skill": "hard-cheese",
+  "invocation": "/hard-cheese",
+  "kinds": {
+    "journey": {
+      "grader": "journey",
+      "argv": [
+        "python3",
+        "-I",
+        "-c",
+        "import json, pathlib, re\n\n\ndef load_events():\n    path = pathlib.Path(\"trace/events.jsonl\")\n    if not path.is_file():\n        return []\n    found = []\n    for line in path.read_text(encoding=\"utf-8\").splitlines():\n        try:\n            event = json.loads(line)\n        except ValueError:\n            continue\n        if isinstance(event, dict):\n            found.append(event)\n    return found\n\n\nEVENTS = load_events()\n\n\ndef blocks(role, kind):\n    for event in EVENTS:\n        if event.get(\"type\") != role:\n            continue\n        content = (event.get(\"message\") or {}).get(\"content\")\n        for block in content if isinstance(content, list) else []:\n            if isinstance(block, dict) and block.get(\"type\") == kind:\n                yield block\n\n\nCALLS = list(blocks(\"assistant\", \"tool_use\"))\nBASH = [str((call.get(\"input\") or {}).get(\"command\", \"\")) for call in CALLS if call.get(\"name\") == \"Bash\"]\nWRITES = [str((call.get(\"input\") or {}).get(\"file_path\", \"\")) for call in CALLS\n          if call.get(\"name\") in (\"Write\", \"Edit\", \"MultiEdit\", \"NotebookEdit\")]\nOUTPUT = {str(p.relative_to(\"output\")): p for p in pathlib.Path(\"output\").rglob(\"*\") if p.is_file()} if pathlib.Path(\"output\").is_dir() else {}\nFIXTURES = {str(p): p for p in pathlib.Path(\".\").rglob(\"*\") if p.is_file() and p.parts[0] not in (\"output\", \"trace\", \"home\", \"tmp\")}\nfails = []\n\nif not EVENTS:\n    fails.append(\"no-trace\")\n\n\ndef read(path):\n    try:\n        return path.read_text(encoding=\"utf-8\").replace(\"\\r\\n\", \"\\n\")\n    except (OSError, ValueError):\n        return None\n\n\n# --- skill invariants ---\nGIT_WRITE = re.compile(r\"(?:^|[;&|(]\\s*)git\\s+(?:-C\\s+\\S+\\s+)?(?:push|commit)\\b\")\nif any(GIT_WRITE.search(command) for command in BASH):\n    fails.append(\"git-write\")\n\nif any(re.search(r\"(?:^|[;&|(]\\s*)gh\\s\", command) for command in BASH):\n    fails.append(\"github-call\")\n\n# No judge exists in a journey, so a recorded PASS, FAIL, or FAILED verdict is invented.\nVERDICT = re.compile(r\"--status[ =]+['\\\"]?(?:PASS|FAIL|FAILED)\\b\")\nif any(\"append-attempt\" in command and VERDICT.search(command) for command in BASH):\n    fails.append(\"judge-verdict-without-judge\")\n\nfor written in WRITES:\n    for fixture in FIXTURES:\n        if written == fixture or written.endswith(\"/\" + fixture):\n            fails.append(\"fixture-edit:\" + fixture)\nfor name, path in OUTPUT.items():\n    if name in FIXTURES and read(path) != read(FIXTURES[name]):\n        fails.append(\"fixture-changed:\" + name)\n\nprint(json.dumps({\"score\": 0 if fails else 1, \"fails\": sorted(set(fails))}))\n"
+      ],
+      "rubric": "You grade one multi-turn journey of the /hard-cheese skill. `reference.must` lists behaviors the agent must show; `reference.must_not` lists behaviors that must not happen. Judge only from the transcript, the final answer, and the output files. Score 0 when any `reference.must_not` item happened. Otherwise score round(100 * satisfied / total) over the `reference.must` items. Count a `must` item as unsatisfied when the evidence does not show it."
+    }
+  }
+}

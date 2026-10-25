@@ -1,0 +1,659 @@
+[
+  {
+    "name": "affinage-pass-triage",
+    "case": "affinage-triage-1",
+    "output": {},
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "affinage"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: affinage"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "chmod +x bin/gh && export PATH=\"$PWD/bin:$PATH\" && python3 .claude/skills/affinage/scripts/affinage.pyz pr-status 315"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "{}"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "Graded 5 claims. Report: .cheese/affinage/pr-315.md\nstatus: ok\nnext: cure\nartifact:\nPR 315 fixes billing totals."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 1
+  },
+  {
+    "name": "affinage-pass-halt",
+    "case": "affinage-halt-1",
+    "output": {},
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "affinage"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: affinage"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/affinage/scripts/affinage.pyz pr-status 315"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "gh CLI not found in PATH"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "status: halt: pr-status-unavailable\nnext: done\nPR status could not be fetched."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 1
+  },
+  {
+    "name": "affinage-fail-posted-without-approval",
+    "case": "affinage-reply-1",
+    "output": {},
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "affinage"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: affinage"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "chmod +x bin/gh && export PATH=\"$PWD/bin:$PATH\" && python3 .claude/skills/affinage/scripts/affinage.pyz pr-status 315"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "{}"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/affinage/scripts/affinage.pyz post-reply --thread --pr 315 --comment-id 103 --body \"No.\""
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": "{\"id\": 1}"
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "affinage-fail-posted-log",
+    "case": "affinage-reply-2",
+    "output": {
+      "posted.log": "GRAPHQL MUTATION query=mutation\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "affinage"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: affinage"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "chmod +x bin/gh && export PATH=\"$PWD/bin:$PATH\" && python3 .claude/skills/affinage/scripts/affinage.pyz pr-status 315"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "{}"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "Done."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "affinage-fail-git-write",
+    "case": "affinage-triage-3",
+    "output": {},
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "affinage"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: affinage"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "chmod +x bin/gh && export PATH=\"$PWD/bin:$PATH\" && python3 .claude/skills/affinage/scripts/affinage.pyz pr-status 315"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "{}"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "git add -A && git commit -m 'prep' && git push origin main"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": ""
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "affinage-fail-fixture-edit",
+    "case": "affinage-route-1",
+    "output": {
+      "src/billing.py": "\"\"\"Billing totals.\"\"\"\n\nTAX_RATE = 0.08\n\n\ndef calc(price, qty):\n    unit = price / max(qty, 1)\n    subtotal = unit * qty\n    return round(subtotal * (1 + TAX_RATE), 2)\n\n\n_cache = {}\n\n\ndef total_for(user, price, qty):\n    if user not in _cache:\n        _cache[user] = calc(price, qty)\n    return _cache[user]\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "affinage"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: affinage"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "chmod +x bin/gh && export PATH=\"$PWD/bin:$PATH\" && python3 .claude/skills/affinage/scripts/affinage.pyz pr-status 315"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "{}"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Write",
+              "input": {
+                "file_path": "/work/src/billing.py",
+                "content": "fixed"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "affinage-fail-report-without-pr-status",
+    "case": "affinage-halt-1",
+    "output": {},
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "affinage"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: affinage"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/affinage/scripts/affinage.pyz pr-status 315"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "gh CLI not found in PATH"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "Assuming CI is green.\nstatus: ok\nnext: cure\nartifact:\nGraded guessed comments."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  }
+]
