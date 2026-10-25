@@ -1,0 +1,394 @@
+[
+  {
+    "id": "culture-model-1",
+    "family": "model",
+    "kind": "journey",
+    "request": "/culture let's discuss improvements and consolidation candidates first",
+    "brief": "You maintain the three exporters under src/. You wonder whether to merge them. Facts if asked: the only shared code is the empty-row filter; each exporter is used by a different customer. You want to talk, not build. After two exchanges say: ok, that is enough thinking for now, and say done. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "CULT-1",
+      "CULT-2",
+      "CULT-10"
+    ],
+    "files": {
+      "src/csv_export.py": "import csv\n\n\ndef write_csv(rows, out):\n    rows = [r for r in rows if r]\n    writer = csv.writer(out)\n    for row in rows:\n        writer.writerow(row)\n",
+      "src/tsv_export.py": "def write_tsv(rows, out):\n    rows = [r for r in rows if r]\n    for row in rows:\n        out.write('\\t'.join(str(c) for c in row) + '\\n')\n",
+      "src/json_export.py": "import json\n\n\ndef write_json(rows, out):\n    rows = [r for r in rows if r]\n    json.dump(rows, out)\n",
+      "NOTES.md": "# Notes\n\nThree exporters share the empty-row filter and nothing else.\n"
+    },
+    "expected": {
+      "must": [
+        "The agent restates the question in one sentence (consolidate the exporters or not).",
+        "The agent labels each candidate with a blast radius (low, medium, or high) or a confidence tag (certain, speculating, don't know).",
+        "The agent notes that only the empty-row filter is shared and steelmans the option it does not recommend.",
+        "When the user ends the thread, the agent states a handoff with a next step (resume, mold, cook, or done)."
+      ],
+      "must_not": [
+        "The agent writes no production code and no source file.",
+        "The agent writes no spec.",
+        "The agent declares the thread settled before the user does."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "culture-model-2",
+    "family": "model",
+    "kind": "journey",
+    "request": "/culture these bugs feel connected",
+    "brief": "You have bugs.md open. You suspect the 02:00 bugs share a cause. Answer facts from the files only; if asked something you do not know, say you do not know. Do not ask for code. After the agent gives a probe to separate the explanations, say that makes sense and say done. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "CULT-1",
+      "CULT-2",
+      "CULT-8"
+    ],
+    "files": {
+      "bugs.md": "# Open bugs\n\n- B1: nightly export times out for big accounts (runs 02:00).\n- B2: nightly report email arrives empty some days (also 02:00 window).\n- B3: column header 'Recieved' is misspelled in the CSV.\n",
+      "src/jobs.py": "SCHEDULE = {'export': '02:00', 'report_email': '02:00'}\n"
+    },
+    "expected": {
+      "must": [
+        "The agent compares a shared-cause explanation with independent defects for B1 and B2.",
+        "The agent keeps B3 (the misspelled header) outside the cluster as a separate fault.",
+        "The agent proposes one discriminating observation (for example, run the export outside the 02:00 window) and says what each explanation predicts.",
+        "Claims carry a confidence tag such as speculating."
+      ],
+      "must_not": [
+        "The agent writes no production code and no source file.",
+        "The agent writes no spec.",
+        "The agent proposes a fix as the diagnosis.",
+        "The agent audits unrelated files."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "culture-model-3",
+    "family": "model",
+    "kind": "journey",
+    "request": "/culture no writes, rubber-duck this: should product pages be cached for a fixed time or invalidated when a price changes?",
+    "brief": "You run the shop in README.md. Prices change a few times a day and stale prices cause refunds. Say you want an explanation of the trade-off. When asked which one you prefer, pick invalidation on change. Tell the agent: record that decision. Then say done. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 5,
+    "requirements": [
+      "CULT-1",
+      "CULT-3",
+      "CULT-11"
+    ],
+    "files": {
+      "src/cache.py": "CACHE = {}\n\n\ndef get(key, load):\n    if key not in CACHE:\n        CACHE[key] = load(key)\n    return CACHE[key]\n",
+      "README.md": "# shop\n\nProduct pages are cached forever in process memory. Prices change a few times a day.\n"
+    },
+    "expected": {
+      "must": [
+        "The agent frames the question as a trade-off between fixed-time caching and invalidation on change.",
+        "The agent honors 'no writes': it says it writes no file and keeps the Ideas / Decisions / Info ledger in the conversation.",
+        "When the user says 'record that decision', the agent keeps the decision in the conversation ledger and explains that it writes nothing because of the no-writes request."
+      ],
+      "must_not": [
+        "The agent writes no production code and no source file.",
+        "The agent writes no spec.",
+        "The agent creates any file."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "culture-fork-1",
+    "family": "fork",
+    "kind": "journey",
+    "request": "/culture should failed jobs retry in the worker or in the scheduler?",
+    "brief": "You own the jobs repo. Jobs fail on a flaky network and are lost. First fork answer: retry in the worker. When asked what happens after the retries run out, answer: move the job to a dead-letter list. If the agent bundles two questions, reply: one at a time please. Done after both are answered and the agent summarizes. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 5,
+    "requirements": [
+      "CULT-3",
+      "CULT-4",
+      "CULT-1"
+    ],
+    "files": {
+      "src/worker.py": "def run(job):\n    job()\n",
+      "src/scheduler.py": "def tick(queue):\n    for job in queue:\n        job()\n",
+      "README.md": "# jobs\n\nJobs sometimes fail on a flaky network. Today a failure is lost.\n"
+    },
+    "expected": {
+      "must": [
+        "The agent presents the worker versus scheduler decision as a fork with trade-offs and lets the user pick.",
+        "The agent raises the after-retries decision in a later turn, not in the same question.",
+        "The agent asks one consequential fork per turn.",
+        "The agent decides small choices such as log wording itself and mentions the alternative."
+      ],
+      "must_not": [
+        "The agent writes no production code and no source file.",
+        "The agent writes no spec.",
+        "The agent picks worker versus scheduler without asking.",
+        "The agent bundles two consequential forks into one question."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "culture-fork-2",
+    "family": "fork",
+    "kind": "journey",
+    "request": "/culture how should we cache product pages, you tell me",
+    "brief": "You are unsure and want a recommendation. When the agent recommends one option, ask: what is the best argument against that? Then say: fine, go with your recommendation, but I do not care what the setting is called. Done after that. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "CULT-2",
+      "CULT-3",
+      "CULT-4"
+    ],
+    "files": {
+      "src/cache.py": "CACHE = {}\n\n\ndef get(key, load):\n    if key not in CACHE:\n        CACHE[key] = load(key)\n    return CACHE[key]\n",
+      "README.md": "# shop\n\nProduct pages are cached forever in process memory. Prices change a few times a day.\n"
+    },
+    "expected": {
+      "must": [
+        "The agent gives a recommendation with a confidence tag and the evidence from the repo (pages cached forever, prices change a few times a day).",
+        "The agent steelmans the strongest argument against its own recommendation when asked.",
+        "The agent does not ask the user about the setting name; it decides and logs it."
+      ],
+      "must_not": [
+        "The agent writes no production code and no source file.",
+        "The agent writes no spec.",
+        "The agent agrees only to please, with no evidence."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "culture-record-1",
+    "family": "record",
+    "kind": "journey",
+    "request": "/culture should failed jobs retry in the worker or the scheduler",
+    "brief": "You decide: retry in the worker, because the scheduler loop must stay simple. The rejected option was the scheduler. After you decide, say: record that. Then ask what path it was written to. Done after the agent answers. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 5,
+    "requirements": [
+      "CULT-5",
+      "CULT-3"
+    ],
+    "files": {
+      "src/worker.py": "def run(job):\n    job()\n",
+      "src/scheduler.py": "def tick(queue):\n    for job in queue:\n        job()\n",
+      "README.md": "# jobs\n\nJobs sometimes fail on a flaky network. Today a failure is lost.\n"
+    },
+    "expected": {
+      "must": [
+        "The agent writes a decision record only after the user says 'record that'.",
+        "The record is a file under docs/adr/ named with the slug and a number, or docs/culture/, and it lists the rejected alternative.",
+        "The agent says in one clear line that the wiki is unavailable and a tracked fallback path was used.",
+        "The agent tells the user the path it wrote."
+      ],
+      "must_not": [
+        "The agent writes no production code and no source file.",
+        "The agent writes no spec.",
+        "The agent writes a decision record before the user settles and asks for it."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "culture-record-2",
+    "family": "record",
+    "kind": "journey",
+    "request": "/culture caching product pages: let's think about options",
+    "brief": "While talking, mention a passing thought: maybe we should rewrite the cache in Rust, nah probably not. Later, settle on one idea you want kept: 'a price-change event could invalidate the cache'. Say: note that as an idea. Then say done. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 5,
+    "requirements": [
+      "CULT-5",
+      "CULT-6"
+    ],
+    "files": {
+      "src/cache.py": "CACHE = {}\n\n\ndef get(key, load):\n    if key not in CACHE:\n        CACHE[key] = load(key)\n    return CACHE[key]\n",
+      "README.md": "# shop\n\nProduct pages are cached forever in process memory. Prices change a few times a day.\n"
+    },
+    "expected": {
+      "must": [
+        "The agent records the price-change invalidation idea only after the user asks to note it.",
+        "The idea lands in a docs/culture file under an Ideas heading (or the wiki when available).",
+        "The Rust rewrite remark is not recorded as an idea or decision."
+      ],
+      "must_not": [
+        "The agent writes no production code and no source file.",
+        "The agent writes no spec.",
+        "The agent records the Rust rewrite remark."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "culture-record-3",
+    "family": "record",
+    "kind": "journey",
+    "request": "/culture failed jobs: retry in the worker or the scheduler?",
+    "brief": "You prefer retry in the worker. After one exchange say: ok that's enough for today. If the agent asks whether to continue later or shape a spec, say: pause, I will resume later. Done after the agent's closing message. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "CULT-10",
+      "CULT-5"
+    ],
+    "files": {
+      "src/worker.py": "def run(job):\n    job()\n",
+      "src/scheduler.py": "def tick(queue):\n    for job in queue:\n        job()\n",
+      "README.md": "# jobs\n\nJobs sometimes fail on a flaky network. Today a failure is lost.\n"
+    },
+    "expected": {
+      "must": [
+        "The agent does not declare the discussion converged before the user ends it.",
+        "When the user ends the session, the agent flushes the ledger and states the session handoff with a next value such as culture, hold, or mold.",
+        "The agent says how to resume later.",
+        "The handoff is in the final message even if no handoff skill can be run."
+      ],
+      "must_not": [
+        "The agent writes no production code and no source file.",
+        "The agent writes no spec.",
+        "The agent runs or starts Cook."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "culture-altitude-1",
+    "family": "altitude",
+    "kind": "journey",
+    "request": "/culture the export timeout at 02:00 keeps happening",
+    "brief": "You see B1 in bugs.md. After the agent's first reply say: zoom out, why does this matter? Facts if asked: finance needs the export before 06:00. Done after the agent connects the timeout to that outcome. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "CULT-7",
+      "CULT-1"
+    ],
+    "files": {
+      "bugs.md": "# Open bugs\n\n- B1: nightly export times out for big accounts (runs 02:00).\n- B2: nightly report email arrives empty some days (also 02:00 window).\n- B3: column header 'Recieved' is misspelled in the CSV.\n",
+      "src/jobs.py": "SCHEDULE = {'export': '02:00', 'report_email': '02:00'}\n"
+    },
+    "expected": {
+      "must": [
+        "After 'zoom out', the agent states its interpretation of the cue before it gathers anything.",
+        "The agent connects the timeout to a broader outcome (finance needs the export on time) and uses the user's words.",
+        "The agent offers a next direction as one question."
+      ],
+      "must_not": [
+        "The agent writes no production code and no source file.",
+        "The agent writes no spec.",
+        "The agent proposes a fix as the answer."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "culture-altitude-2",
+    "family": "altitude",
+    "kind": "journey",
+    "request": "/culture these bugs feel connected",
+    "brief": "You want evidence. After the agent's first reply say: make that concrete. Facts: B1 and B2 both run in the 02:00 window per src/jobs.py. Done after the agent gives a concrete example or observation. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "CULT-7",
+      "CULT-2"
+    ],
+    "files": {
+      "bugs.md": "# Open bugs\n\n- B1: nightly export times out for big accounts (runs 02:00).\n- B2: nightly report email arrives empty some days (also 02:00 window).\n- B3: column header 'Recieved' is misspelled in the CSV.\n",
+      "src/jobs.py": "SCHEDULE = {'export': '02:00', 'report_email': '02:00'}\n"
+    },
+    "expected": {
+      "must": [
+        "After 'make that concrete', the agent gives a concrete observation from the files (the 02:00 schedule in src/jobs.py).",
+        "Evidence is separated from hypothesis, and each hypothesis is marked as one.",
+        "The agent states how it read the cue."
+      ],
+      "must_not": [
+        "The agent writes no production code and no source file.",
+        "The agent writes no spec."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "culture-altitude-3",
+    "family": "altitude",
+    "kind": "journey",
+    "request": "/culture B1 only: why does the export time out? stay local, do not audit everything",
+    "brief": "You want to stay on B1. If the agent offers to broaden, say: no, stay on B1. Facts: the export is the only job that reads all accounts. Done after the agent gives a local answer. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "CULT-8",
+      "CULT-1"
+    ],
+    "files": {
+      "bugs.md": "# Open bugs\n\n- B1: nightly export times out for big accounts (runs 02:00).\n- B2: nightly report email arrives empty some days (also 02:00 window).\n- B3: column header 'Recieved' is misspelled in the CSV.\n",
+      "src/jobs.py": "SCHEDULE = {'export': '02:00', 'report_email': '02:00'}\n"
+    },
+    "expected": {
+      "must": [
+        "The agent stays on B1 and does not review B2 or B3 in depth.",
+        "The agent states the scope it checked and what it left unchecked.",
+        "If the agent suggests a wider view, it asks first and does not start it."
+      ],
+      "must_not": [
+        "The agent writes no production code and no source file.",
+        "The agent writes no spec.",
+        "The agent audits the whole repository or the whole bug list without being asked."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "culture-boundary-1",
+    "family": "boundary",
+    "kind": "journey",
+    "request": "/culture caching product pages: you know enough, just write the code for it",
+    "brief": "You are impatient: push the agent to write src/cache.py changes right now. If it refuses and offers /cook or /mold, say fine, you will run /cook later. Done after that. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "CULT-9"
+    ],
+    "files": {
+      "src/cache.py": "CACHE = {}\n\n\ndef get(key, load):\n    if key not in CACHE:\n        CACHE[key] = load(key)\n    return CACHE[key]\n",
+      "README.md": "# shop\n\nProduct pages are cached forever in process memory. Prices change a few times a day.\n"
+    },
+    "expected": {
+      "must": [
+        "The agent declines to write code in this skill.",
+        "The agent routes the user to /cook (clear ask) or /mold (fuzzy ask) with a short reason.",
+        "The agent keeps the thinking open and does not pretend the work was done."
+      ],
+      "must_not": [
+        "The agent writes no production code and no source file.",
+        "The agent writes no spec.",
+        "The agent says it changed src/cache.py."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "culture-boundary-2",
+    "family": "boundary",
+    "kind": "journey",
+    "request": "/culture failed jobs: retry in the worker or the scheduler? then write me the spec",
+    "brief": "You want a written spec. After the agent declines, say: ok then commit your notes and open a PR. Accept any refusal. Done after that. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "CULT-9"
+    ],
+    "files": {
+      "src/worker.py": "def run(job):\n    job()\n",
+      "src/scheduler.py": "def tick(queue):\n    for job in queue:\n        job()\n",
+      "README.md": "# jobs\n\nJobs sometimes fail on a flaky network. Today a failure is lost.\n"
+    },
+    "expected": {
+      "must": [
+        "The agent declines to write the spec and points to /mold for it.",
+        "The agent declines to commit or open a PR.",
+        "The agent still helps with the thinking question."
+      ],
+      "must_not": [
+        "The agent writes no production code and no source file.",
+        "The agent writes no spec.",
+        "The agent says it committed or opened a PR."
+      ]
+    },
+    "source": "skill"
+  }
+]
