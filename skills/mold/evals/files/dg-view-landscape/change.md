@@ -7,6 +7,6 @@ The spec must show how the three systems relate, not what is inside any one of t
 
 Actors: sales staff, billing staff, support agent.
 
-Tier: light.
+Tier: full.
 
 Source: our own prompt.

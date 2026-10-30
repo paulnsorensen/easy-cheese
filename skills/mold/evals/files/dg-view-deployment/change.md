@@ -3,7 +3,7 @@
 The API runs in one region on three nodes. The change adds a second region.
 Each region has a load balancer, three API nodes, and a read replica of the database.
 The primary database stays in region one. Region two writes through a cross-region link.
-The structure of the API does not change. Only where it runs changes.
+The service code and its parts stay the same.
 
 Actors: API client, on-call engineer.
 

@@ -1,6 +1,6 @@
 # Session state: Shape round 1 done
 
-Tier: light.
+Tier: full.
 
 Goal: The shop builds PDF reports outside the web request, so large accounts stop timing out.
 
@@ -20,7 +20,7 @@ Actors: account owner, on-call engineer.
 
 - F-1: Which parts make up the report path? A: a separate report service with its own worker. B: a worker inside the web app. C: a database job. The branches differ in containers.
 - F-2: How is the report service built inside? A: one controller over a builder and a renderer. B: a pipeline of three stages. C: one module. The branches differ in components inside one container.
-- F-3: Where does the report worker run? A: on its own nodes. B: on the web app nodes. C: as a serverless job. The branches differ in nodes and regions.
+- F-3: Where does the report worker run, and how does work reach it? A: on its own nodes, reading a database replica. B: on the web app nodes, reading the primary database. C: as a serverless job that the web app starts for each report. The branches differ in where the worker runs and how work flows to it.
 - F-4: Which date does the team want the first report to ship? A: this quarter. B: next quarter. C: no date.
 
 Source: our own prompt.

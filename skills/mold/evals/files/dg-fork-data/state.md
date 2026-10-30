@@ -1,6 +1,6 @@
 # Session state: Shape round 1 done
 
-Tier: light.
+Tier: full.
 
 Goal: The ledger stores invoices with lines, and each refund moves through a fixed set of states.
 
@@ -18,7 +18,7 @@ Actors: billing staff, support agent.
 
 ## Forks for round 2
 
-- F-1: How are invoices stored? A: an invoices table with an invoice_lines table. B: one invoices table with a JSON lines column. C: an event log only. The branches differ in tables and relations.
+- F-1: How are invoices stored? A: an invoices table with an invoice_lines table. B: one invoices table with a JSON lines column. C: an event log only. The branches differ in how a line reaches its invoice: a join between tables, a nested value in one row, or a replay of events.
 - F-2: How does a refund move through its life? A: five states with guarded moves. B: three states: open, paid, failed. C: keep the boolean. The branches differ in the allowed moves between states.
 - F-3: How long does the team keep invoice rows? A: seven years. B: ten years. C: forever.
 

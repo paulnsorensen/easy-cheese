@@ -4,7 +4,7 @@ The problem: classes that only hold data repeat the same methods by hand. Type c
 
 ## Draft X
 
-**Answer:** A class decorator reads the annotated attributes of a class and adds the usual methods. The class stays a normal class.
+**Answer:** A class decorator reads the annotated attributes of a class, adds the usual methods, and leaves it a normal class.
 
 ```mermaid
 flowchart LR
@@ -17,21 +17,47 @@ flowchart LR
   Checker -->|"reads fields"| Cls
 ```
 
-Title: `Flow: data-holding class`.
+Title: `Flow view: data-holding class`.
 
 - Problem: a developer writes the same constructor and comparison for every data class. A type checker needs the fields without a plugin.
+- Decision: a class decorator that reads the annotations.
 - Seam: the decorator is the only entry point. A per-field helper overrides a default or leaves a field out of comparison.
 - Invariants: field order is annotation order. A field with a mutable default fails at class creation, not at use.
 - Failure modes: a class that already defines a method keeps its own method.
 - Crux: the rule for default values and for inheritance of fields.
-- Rejected: the tuple-based factory ties the class to tuple behavior, such as equality with plain tuples and iteration. Generating a restricted attribute layout by default changes class creation, so a decorator cannot do it safely.
+- Placement:
+
+```text
+slice: standard library data classes
+spine step: none
+public interface: def dataclass(cls); def field(*, default, compare)
+private: method generation from annotations; default-value checks
+crust delta: two new public names
+arrows: decorator -> class annotations
+```
+
+- Rejected: the tuple-based factory ties the class to tuple behavior, such as equality with plain tuples and iteration. A restricted attribute layout by default is rejected because it changes class creation, which a decorator cannot do safely.
 - Out of scope: runtime validation of field types. Serialization to other formats.
+- Verification: a type checker reads the fields of a decorated class with no plugin.
 
 ## Draft Y
 
-**Answer:** Generate the constructor and comparison methods from the annotations.
+**Answer:** Generate the constructor and comparison methods from the annotations. The generator builds source text for each method.
 
-- Constructor, in pseudo-code:
+```mermaid
+sequenceDiagram
+  participant D as Decorator
+  participant G as Code generator
+  participant E as exec
+  D->>G: field list
+  G->>E: constructor source text
+  E-->>D: constructor function
+```
+
+Title: `Dynamic view: constructor generation`.
+
+- Problem: each data class needs a generated constructor, text form, and equality method.
+- Decision: build source text and run it with `exec`:
 
 ```python
 for f in fields:
@@ -41,16 +67,48 @@ exec(f"def __init__(self, {params}):\n    {body}", globals_, ns)
 ```
 
 - Comparison: build a tuple of the fields in order, then compare the two tuples.
-- Text form: join the field names and values into one string.
+- Crux: the speed of the generated constructor.
+- Placement:
+
+```text
+slice: data classes
+spine step: none
+public interface: def dataclass(cls)
+private: def _make_init(fields, globals_) -> str; def _make_eq(fields) -> str
+crust delta: one new decorator
+arrows: decorator -> exec
+```
+
+- Rejected: one closure per field, because one generated function runs faster at call time.
+- Out of scope: keyword-only fields.
 - Verification: one test per generated method.
 
 ## Draft Z
 
 **Answer:** Reduce boilerplate for data classes.
 
+```mermaid
+flowchart LR
+  Dev["Developer"] --> Feature["Boilerplate feature"] --> Code["Less code"]
+```
+
+Title: `Flow view: data classes`.
+
 - Problem: data classes have too much code.
-- Solution: a feature that writes the code for the developer.
-- Alternatives: none.
+- Decision: a feature that writes the code for the developer.
+- Crux: less code.
+- Placement:
+
+```text
+slice: standard library
+spine step: everywhere
+public interface: a feature that writes the methods
+private: the generated code
+crust delta: a new feature
+arrows: TBD
+```
+
+- Rejected: doing nothing, because boilerplate is bad for developers, bad for reviewers, and bad for the long-term health of every code base.
 - Out of scope: other improvements.
 - Verification: developers write less code.
 

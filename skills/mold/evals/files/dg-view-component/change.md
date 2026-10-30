@@ -7,6 +7,6 @@ No other container, queue, or team changes.
 
 Actors: buyer, checkout maintainer.
 
-Tier: light.
+Tier: full.
 
 Source: our own prompt.

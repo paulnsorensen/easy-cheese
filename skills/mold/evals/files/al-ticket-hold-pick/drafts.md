@@ -4,7 +4,7 @@ The problem: two buyers must never own one seat. An abandoned checkout must free
 
 ## Draft X
 
-**Answer:** The booking service holds a seat for one buyer for a fixed time. The hold ends on payment or on expiry. A seat has at most one live hold.
+**Answer:** The booking service holds a seat for one buyer for a fixed time, until payment or expiry, with at most one live hold for each seat.
 
 ```mermaid
 sequenceDiagram
@@ -18,9 +18,9 @@ sequenceDiagram
   Buyer->>Pay: Pay
   Pay->>Booking: Confirm hold
   Expiry-)Booking: Release expired holds
-  alt confirm lands first
+  alt hold is live and confirmation commits before expiry
     Booking-->>Pay: Seat owned
-  else expiry lands first
+  else expiry has passed or release commits first
     Booking-->>Pay: Hold gone, refund
   end
 ```
@@ -28,36 +28,93 @@ sequenceDiagram
 Title: `Dynamic view: Payment and expiry race`.
 Legend: open arrowhead = asynchronous message.
 
+All shown services already exist; only the hold protocol changes.
+
 - Problem: a buyer needs a few minutes to pay. In that time no one else may take the seat, and a buyer who leaves must not block it.
+- Goals: no seat sold twice; abandoned seats return to sale.
+- Decision: a timed hold that the booking service owns.
 - Seam: the booking service owns the hold record. The payment step confirms a hold. The expiry job releases it.
 - Invariant: one seat, one live hold or one owner.
 - Failure modes: a payment that lands after expiry gets a refund and a clear message. A crash of the expiry job delays release but never double-sells.
 - Crux: the race between payment and expiry.
-- Rejected: a database lock held for the whole session blocks others and ties up connections. A hold kept only in the client cannot be trusted.
+- Placement:
+
+```text
+slice: booking
+spine step: domain
+public interface: hold seat; confirm hold; release expired holds
+private: the hold record and its expiry time
+crust delta: none; the payment step already confirms bookings
+arrows: none new
+```
+
+- Rejected: a database lock held for the whole session, because it blocks others and ties up connections. A hold kept only in the client cannot be trusted.
 - Out of scope: resale between buyers. Dynamic pricing.
+- Verification: a load test of one hundred thousand buyers for one event sells each seat at most once.
 
 ## Draft Y
 
-**Answer:** Ensure consistency at scale.
+**Answer:** Ensure consistency at scale for every buyer and every event. The right database makes this possible.
 
-- Problem: the system must be consistent and scale.
-- Solution: choose a database that scales and is consistent. Add a cache.
-- Alternatives: pick another database.
+```mermaid
+flowchart LR
+  Buyer["Buyer"] --> Site["Ticket site"] --> DB[("Scalable database")]
+```
+
+Title: `Container view: Ticket site`.
+
+- Problem: the system must be consistent and scale. On-sale days are hard, buyers are unhappy when seats vanish, and organizers lose trust.
+- Decision: choose a database that scales and is consistent. Add a cache in front of it.
+- Goals: consistency, scale, speed, fairness, and a smooth checkout for buyers, organizers, and on-call engineers.
+- Crux: consistency at scale.
+- Placement:
+
+```text
+slice: booking
+spine step: domain
+public interface: a consistent booking API
+private: the database and the cache
+crust delta: a scalable database
+arrows: ticket site -> database
+```
+
+- Rejected: a database that does not scale, because on-sale days need scale, and buyers, organizers, and engineers all depend on a system that stays up.
 - Out of scope: inconsistency.
-- Verification: load test.
+- Verification: a load test passes.
 
 ## Draft Z
 
-**Answer:** Lock the seat row while the buyer pays.
+**Answer:** Lock the seat row while the buyer pays. A cron job frees rows whose hold time has passed.
 
-```sql
-BEGIN;
-SELECT * FROM seat WHERE id = $1 AND status = 'free' FOR UPDATE;
-UPDATE seat SET status = 'held', held_by = $2 WHERE id = $1;
-COMMIT;
+```mermaid
+sequenceDiagram
+  participant App
+  participant DB as Seat table
+  App->>DB: BEGIN
+  App->>DB: SELECT the free seat FOR UPDATE
+  App->>DB: UPDATE status to held
+  App->>DB: COMMIT
 ```
 
-- Release: a cron job runs `UPDATE seat SET status = 'free' WHERE held_until < now()`.
+Title: `Dynamic view: seat lock`.
+
+- Problem: the seat table has no held status.
+- Decision: in one transaction, run `SELECT * FROM seat WHERE id = $1 AND status = 'free' FOR UPDATE`, then `UPDATE seat SET status = 'held', held_by = $2 WHERE id = $1`.
+- Release: a cron job runs `UPDATE seat SET status = 'free' WHERE held_until < now()` each minute.
+- Crux: the lock wait time.
+- Placement:
+
+```text
+slice: booking
+spine step: infra
+public interface: def lock_seat(conn, seat_id, buyer_id) -> bool
+private: def release_expired(conn) -> int
+crust delta: one new seat status value
+arrows: booking service -> seat table
+```
+
+- Rejected: `SKIP LOCKED`, because `NOWAIT` returns faster and lets the page show a taken seat at once.
+- Out of scope: a seat map cache.
 - Verification: run the statements by hand.
 
 Source: our own work. Related topic: <https://www.hellointerview.com/learn/system-design/problem-breakdowns/ticketmaster> (link only; no text copied).

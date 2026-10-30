@@ -6,6 +6,14 @@ Learners confuse the two. Reviewers cannot see the cost of dynamic dispatch at t
 
 Existing code uses the bare form widely. A change must not break that code in one step.
 
+## Recorded user decisions
+
+The user made these choices in an earlier dialogue round. They are not agent decisions.
+
+- D-1 (user): a short prefix keyword marks each trait object type. The user rejected a keyword that looks like an object word, because it implies a different language model. The user rejected a keyword from another language, because it implies that language's cost model. The user rejected a wrapper type, because it hides that the form is built in.
+- D-2 (user): a warning lint with an automatic fix comes first. The bare form becomes an error only at the next edition boundary.
+- Open (no user decision yet): whether the lint warns by default in the current edition, or only when a crate opts in.
+
 Actors: language learner, library author, language team.
 
 Tier: full.
