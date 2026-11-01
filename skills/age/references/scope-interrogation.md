@@ -36,8 +36,8 @@ Challenge unclear additions with evidence-based questions:
 - Which current consumer needs this abstraction?
 - Which parts exceed the requested behavior?
 
-Trace one representative task from its real entrypoint to its observable result.
-Trace a relevant invalid input to its rejection point and the test that proves rejection.
+When a runtime task exists, trace it from its real entrypoint to its observable result.
+When input rejection applies, trace an invalid input to its rejection point and the test that proves rejection.
 Name live boundaries that the tests do not cover.
 
 For each disputed addition, record its purpose, evidence, simpler alternative, and removal consequence.

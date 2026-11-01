@@ -7,7 +7,8 @@ Read this with `SKILL.md § Output` for a concrete report skeleton.
 Write the body in this order.
 Start with `# Age Report — <slug>`.
 Add `## Orientation` with 1-2 sentences.
-Then add `## Change inventory` with factual changes, requirement links, and unresolved scope questions before findings.
+Then add `## Change inventory` with factual changes and unresolved scope questions before findings.
+Cite requirements, user decisions, or demonstrated technical constraints for necessity.
 Add `## Press findings` only when a press report exists.
 Add `## Wiki context` only when hallouminate grounding returns a hit.
 Add `## Agent resolution` after the severity sections.
@@ -101,7 +102,7 @@ press: skipped
 <one or two factual sentences about what the diff does>
 
 ## Change inventory
-<list factual changes by category with citations and requirement links.
+<list factual changes by category with citations to requirements, user decisions, or demonstrated technical constraints.
 Distinguish documented intent, inference, and unresolved scope questions.>
 
 ## Press findings
