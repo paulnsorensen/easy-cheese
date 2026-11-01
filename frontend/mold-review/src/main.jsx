@@ -249,7 +249,7 @@ function questionStates(questions, settledForkIds) {
     if (!Array.isArray(dependencies) || dependencies.some(id => typeof id !== 'string' || !id || (!open.has(id) && !settled.has(id)))) {
       return [question.id, {kind: 'error', label: 'dependency error'}];
     }
-    const waiting = dependencies.filter(id => open.has(id) || !settled.has(id));
+    const waiting = dependencies.filter(id => open.has(id));
     return [question.id, waiting.length ? {kind: 'waiting', label: `waiting for ${waiting.join(', ')}`} : {kind: 'ready'}];
   }));
 }
@@ -266,10 +266,10 @@ function Requirements({requirements, questions, settledForkIds, states}) {
           <article className="mc-requirement" key={requirement.id}>
             <div className="mc-requirement-head"><strong>{requirement.id}</strong><span className={`mc-requirement-status mc-requirement-status--${requirement.status}`}>{requirement.status}</span></div>
             <p>{requirement.text}</p>
-            {toArray(requirement.fork_ids).map(id => {
+            {requirement.fork_ids.map(id => {
               const question = open.get(id);
-              const state = states[id];
-              return <p className="mc-requirement-fork" key={id}><strong>{id}</strong> · {question ? question.prompt || question.text : settled.has(id) ? 'settled' : 'unresolved reference'}{state?.kind !== 'ready' && state ? ` · ${state.label}` : ''}</p>;
+              const state = Object.hasOwn(states, id) ? states[id] : undefined;
+              return <p className="mc-requirement-fork" key={id}><strong>{id}</strong> · {question ? question.prompt || question.text : settled.has(id) ? 'settled' : 'unresolved reference'}{state && state.kind !== 'ready' ? ` · ${state.label}` : ''}</p>;
             })}
           </article>
         ))}
@@ -469,7 +469,7 @@ function App() {
                 <Question
                   key={question.id}
                   question={question}
-                  answer={answers[question.id]}
+                  answer={states[question.id].kind === 'ready' ? answers[question.id] : undefined}
                   state={states[question.id]}
                   onChange={value => setAnswers(current => ({...current, [question.id]: value}))}
                 />

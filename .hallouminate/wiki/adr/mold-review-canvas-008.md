@@ -1,6 +1,7 @@
 # ADR: Replace subject layouts with Mold shape views and pins
 
 Status: accepted (2026-09-27); implemented in PR #731. Supersedes [mold-review-canvas-004](./mold-review-canvas-004.md).
+Amended by [mold-review-canvas-010](./mold-review-canvas-010.md): requirements pane, fork settlement, and phone panes.
 
 ## Context
 
@@ -17,17 +18,6 @@ A conversation rail holds the agent summary, the forks, the queued notes, and th
 In annotate mode, a click on a ledger item, placement row, or decision-map item adds a numbered pin.
 Diagram artifacts get a `+ note` button, so Excalidraw and Mermaid keep their own pointer input.
 
-The Mold companion keeps full settled and draft EARS requirements in a persistent pane outside the shape tabs.[^1]
-Each requirement can show linked open forks and their waiting state.
-Draft requirements list before settled ones, so the requirements under active shaping show first.
-Publish the complete current requirement list each round, with stable requirement and fork IDs.
-
-Independent, already-explained forks can share one submission.
-A dependent fork stays visible but disabled until the agent reconciles every prerequisite in a new revision.
-Each prerequisite must appear in `settled_fork_ids` and disappear from the open `questions` list.
-Local selection, autosave, submission, and restored feedback never settle a fork.
-The browser excludes waiting answers from feedback and shows malformed or missing dependencies as errors.[^1]
-
 ## Feedback contract
 
 Feedback drops `layout` and adds `view`, `pins` (`{id, anchor, text}`), and `end_session`.
@@ -36,7 +26,6 @@ Feedback drops `layout` and adds `view`, `pins` (`{id, anchor, text}`), and `end
 The distinct ID stops `review.py` from rejecting a second submit on the same revision.
 `end_session` asks the agent to close the review; it is not Mold approval.
 The browser coerces agent-supplied fields to the expected types, so a malformed document still renders.
-It drops malformed requirement records and non-string fork references without removing valid requirements or conversation controls.[^3]
 `review.py` still stores any JSON object; the field table lives in `skills/mold/references/review-canvas.md`.
 
 ## Alternatives
@@ -47,20 +36,9 @@ It drops malformed requirement records and non-string fork references without re
 ## Consequences
 
 The TUI and backend layout cards are gone. A subject-specific mockup now arrives as a declared diagram artifact.
-A phone viewport below 56rem keeps the bottom sheet for legacy documents without requirements.
-Documents with requirements stack separate scroll panes for requirements, shapes, and conversation.
-Each pane keeps a usable minimum height in small-viewport (`svh`) units, so a collapsing browser toolbar does not resize the panes.
-The page scrolls on short screens; a viewport-bound split collapses the panes under a multi-line goal.[^2]
-A lowered legacy sheet does not hide conversation controls after switching to a requirements revision.[^3]
+A phone viewport below 56rem shows the rail as a bottom sheet.
 
 ## Related records
 
 - [Browser layouts ADR (superseded)](./mold-review-canvas-004.md)
 - [Revision-bound feedback](./mold-review-canvas-005.md)
-
-
-[^1]: skills/mold/references/review-canvas.md:39-72
-[^2]: frontend/mold-review/src/style.css:125-132; frontend/mold-review/tests/canvas.spec.js:354-431
-[^3]: frontend/mold-review/src/main.jsx:215-217,455; frontend/mold-review/tests/canvas.spec.js:469-514
-
-_Source: Mold companion requirement and fork-settlement implementation · Updated: 2026-11-01 · Supersedes: unconditional phone bottom-sheet layout · 2026-11-01_
