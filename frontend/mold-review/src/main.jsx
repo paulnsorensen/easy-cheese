@@ -84,7 +84,7 @@ function useReviewData() {
   };
 }
 
-function useAutosave({data, feedback, revision, hydrationVersion, setData, setStatus}) {
+function useAutosave({data, feedback, revision, hydrationVersion, setData, setStatus, sending}) {
   const autosave = useRef({pending: null, failed: null, busy: false, generation: {}, timer: null, promise: null});
   const lastHydrationVersion = useRef(hydrationVersion);
   const generations = useRef(data.generation || {});
@@ -113,7 +113,8 @@ function useAutosave({data, feedback, revision, hydrationVersion, setData, setSt
             ...current,
             generation: {...current.generation, [job.revision]: result.generation},
           }));
-          setStatus('Saved');
+          // A send in flight owns the status line until its submit settles.
+          if (!sending.current) setStatus('Saved');
         } catch (error) {
           autosave.current.failed = job;
           setHasFailed(true);
@@ -135,7 +136,7 @@ function useAutosave({data, feedback, revision, hydrationVersion, setData, setSt
       autosave.current.promise = null;
     }
     if (autosave.current.failed || autosave.current.pending) void flush();
-  }, [setData, setStatus]);
+  }, [setData, setStatus, sending]);
   flushRef.current = flush;
 
   useEffect(() => {
@@ -275,7 +276,8 @@ function App() {
     [serializedAnswers, notes, pins, scene, artifactValues, mermaidSource, activeView],
   );
 
-  const {flush: flushAutosave, discard: discardAutosave, hasFailed} = useAutosave({data, feedback, revision, hydrationVersion, setData, setStatus});
+  const sending = useRef(false);
+  const {flush: flushAutosave, discard: discardAutosave, hasFailed} = useAutosave({data, feedback, revision, hydrationVersion, setData, setStatus, sending});
 
   useEffect(() => {
     if (!revision) return undefined;
@@ -297,6 +299,7 @@ function App() {
   }), [annotate, pins, setPins]);
 
   async function submit(end = false) {
+    sending.current = true;
     setStatus('Sending');
     try {
       await flushAutosave();
@@ -310,6 +313,8 @@ function App() {
       setStatus(`Submitted ${result.submission_id}`);
     } catch (error) {
       setStatus(`Submit failed: ${error.message}`);
+    } finally {
+      sending.current = false;
     }
   }
 
