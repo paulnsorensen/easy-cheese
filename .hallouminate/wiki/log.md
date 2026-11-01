@@ -124,3 +124,4 @@
 - 2026-11-01 · d80e803c48823793 · merged · adr/mold-review-canvas-008.md · recorded persistent settled/draft EARS requirements, independent fork batches, agent-only prerequisite settlement, and separate phone scroll panes; all frozen retrieval probes rank the ADR first.
 - 2026-11-01 · affinage:pr-848 · merged · adr/mold-review-canvas-008.md · phone panes keep usable minimum heights and the page scrolls (screens showed 0-1 px panes at 375x667 under a long goal); drafts list before settled requirements.
 
+- 2026-11-01 · affinage:pr-848 · curated · adr/mold-review-canvas-010.md, adr/mold-review-canvas-008.md, adr/index.md · review fixes: moved the requirements, fork-settlement, and phone-pane decisions into amending ADR 010; made `settled_fork_ids` cumulative; named waiting and dependency-error states in the canvas contract.
