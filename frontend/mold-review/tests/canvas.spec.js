@@ -286,7 +286,7 @@ test('requirements remain beside shapes and only agent-settled forks unlock', as
     await expect(requirements.getByText('draft', {exact: true})).toHaveCount(2);
     await expect(requirements.locator('.mc-requirement-head strong')).toHaveText(['R-2', 'R-3', 'R-1']);
     await expect(requirements).toContainText('Choose storage');
-    await expect(requirements).toContainText('Choose migration');
+    await expect(requirements).toContainText('F-3 · Choose migration · waiting for F-1');
     await tab(page, 'diagram').click();
     await expect(requirements.getByText(document.requirements[0].text)).toBeVisible();
     await tab(page, 'all').click();
@@ -311,6 +311,11 @@ test('requirements remain beside shapes and only agent-settled forks unlock', as
     execFileSync('python3', [archive, 'review', 'publish', '--state-dir', state, '--input', input, '--base-revision', '1'], {cwd: root});
     await page.getByRole('button', {name: /new revision available/i}).click();
     await expect(migration.getByRole('radio', {name: 'Migrate'})).toBeEnabled();
+    await expect(requirements).toContainText('F-1 · settled');
+    await expect(requirements).not.toContainText('unresolved reference');
+    for (const requirement of document.requirements) {
+      await expect(requirements.getByText(requirement.text)).toBeVisible();
+    }
   } finally {
     s.child.kill();
   }
@@ -375,6 +380,7 @@ test('narrow requirements and conversation never overlap, even with a long list'
     const sent = submitResponse(page);
     await page.getByRole('button', {name: 'Send to agent'}).click();
     await sent;
+    await expect(page.getByText(/Submitted/)).toBeVisible();
     const [paneAfter, conversationAfter] = await Promise.all([pane.boundingBox(), conversation.boundingBox()]);
     expect(paneAfter.y + paneAfter.height).toBeLessThanOrEqual(conversationAfter.y);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -455,7 +461,14 @@ test('invalid dependencies report errors and restored waiting answers never subm
     for (const prompt of ['Missing fork', 'Malformed fork']) {
       await expect(conversation.getByRole('group', {name: prompt})).toContainText('dependency error');
     }
-    await expect(page.getByRole('region', {name: 'Requirements'})).toContainText('unresolved reference');
+    const pane = page.getByRole('region', {name: 'Requirements'});
+    await expect(pane).toContainText('unresolved reference');
+    await expect(pane).toContainText('F-1 · Waiting fork · waiting for F-2');
+    for (const name of ['Waiting fork', 'Cycle fork', 'Missing fork', 'Malformed fork']) {
+      await expect(conversation.getByRole('group', {name}).getByRole('radio').first()).toBeDisabled();
+    }
+    await expect(conversation.getByRole('radio', {name: 'A a', exact: true})).not.toBeChecked();
+    await expect(conversation.getByRole('radio', {name: 'C c', exact: true})).not.toBeChecked();
     await conversation.getByRole('radio', {name: 'E'}).check();
     const sent = submitResponse(page);
     await page.getByRole('button', {name: 'Send to agent'}).click();
@@ -496,12 +509,18 @@ test('malformed requirement records preserve valid requirements and feedback', a
   page.on('pageerror', error => errors.push(error.message));
   const s = await serveDocument({
     requirements: [null, false, 'invalid', {id: {}, text: {}, status: {}, fork_ids: [{}]},
+      {id: 'R-2', text: 'THE SYSTEM SHALL ignore non-string fork links.', status: 'draft', fork_ids: [{}, 'F-1']},
+      {id: 'R-3', text: 'THE SYSTEM SHALL drop an unknown status.', status: 'bogus'},
       {id: 'R-1', text: 'THE SYSTEM SHALL preserve valid requirements.', status: 'settled'}],
     questions: [{id: 'F-1', prompt: 'Choose one', options: [{id: 'a', label: 'A'}]}],
   });
   try {
     await page.goto(s.url);
-    await expect(page.getByRole('region', {name: 'Requirements'})).toContainText('THE SYSTEM SHALL preserve valid requirements.');
+    const pane = page.getByRole('region', {name: 'Requirements'});
+    await expect(pane).toContainText('THE SYSTEM SHALL preserve valid requirements.');
+    await expect(pane).toContainText('F-1 · Choose one');
+    await expect(pane.locator('.mc-requirement-fork')).toHaveCount(1);
+    await expect(pane).not.toContainText('THE SYSTEM SHALL drop an unknown status.');
     await page.getByRole('radio', {name: 'A a', exact: true}).check();
     const sent = submitResponse(page);
     await page.getByRole('button', {name: 'Send to agent'}).click();

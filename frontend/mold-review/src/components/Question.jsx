@@ -14,7 +14,7 @@ function OptionCard({option, type, name, checked, recommended, onSelect}) {
   );
 }
 
-export function Question({question, answer, state, onChange}) {
+export function Question({question, answer, state = {kind: 'ready'}, onChange}) {
   const mode = question.selection_mode || question.selectionMode || 'single';
   const selected = answer?.selected || [];
   const other = answer?.other || '';
@@ -34,9 +34,9 @@ export function Question({question, answer, state, onChange}) {
   }
 
   return (
-    <fieldset className="ec-panel ec-question question mc-question" disabled={state?.kind !== 'ready'}>
+    <fieldset className="ec-panel ec-question question mc-question" disabled={state.kind !== 'ready'}>
       <legend>{question.prompt || question.text}</legend>
-      <small className="ec-question-meta">{question.id}{meta ? ` · ${meta}` : ''}{mode === 'single' ? '' : ' · choose all that apply'}{state?.kind !== 'ready' ? ` · ${state.label}` : ''}</small>
+      <small className="ec-question-meta">{question.id}{meta ? ` · ${meta}` : ''}{mode === 'single' ? '' : ' · choose all that apply'}{state.kind !== 'ready' ? ` · ${state.label}` : ''}</small>
       <div className="ec-options">
         {(question.options || []).map(option => (
           <OptionCard
