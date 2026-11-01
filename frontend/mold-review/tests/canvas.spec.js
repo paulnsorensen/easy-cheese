@@ -253,3 +253,216 @@ test('malformed agent field types still render the question and rail', async ({p
     s.child.kill();
   }
 });
+
+
+test('requirements remain beside shapes and only agent-settled forks unlock', async ({page}) => {
+  const state = await mkdtemp(join(tmpdir(), 'mold-requirements-'));
+  const input = join(state, 'revision.json');
+  const document = {
+    goal: 'Shape the full specification',
+    requirements: [
+      {id: 'R-1', text: 'WHEN the review opens THE SYSTEM SHALL retain the complete settled requirement text.', status: 'settled'},
+      {id: 'R-2', text: 'WHEN a fork is open THE SYSTEM SHALL show the complete draft requirement text.', status: 'draft', fork_ids: ['F-1', 'F-3']},
+      {id: 'R-3', text: 'WHEN another fork is independent THE SYSTEM SHALL keep its draft requirement visible.', status: 'draft', fork_ids: ['F-2']},
+    ],
+    questions: [
+      {id: 'F-1', prompt: 'Choose storage', options: [{id: 'sqlite', label: 'SQLite'}]},
+      {id: 'F-2', prompt: 'Choose display', options: [{id: 'plain', label: 'Plain text'}]},
+      {id: 'F-3', prompt: 'Choose migration', depends_on: ['F-1'], options: [{id: 'migrate', label: 'Migrate'}]},
+    ],
+  };
+  await writeFile(input, JSON.stringify(document));
+  execFileSync('python3', [archive, 'review', 'publish', '--state-dir', state, '--input', input], {cwd: root});
+  const s = await serve(state);
+  try {
+    await page.goto(s.url);
+    const requirements = page.getByRole('region', {name: 'Requirements'});
+    const conversation = page.getByRole('complementary', {name: 'Conversation'});
+    await expect(requirements).toBeVisible();
+    for (const requirement of document.requirements) {
+      await expect(requirements.getByText(requirement.text)).toBeVisible();
+    }
+    await expect(requirements.getByText('settled', {exact: true})).toHaveCount(1);
+    await expect(requirements.getByText('draft', {exact: true})).toHaveCount(2);
+    await expect(requirements).toContainText('Choose storage');
+    await expect(requirements).toContainText('Choose migration');
+    await tab(page, 'diagram').click();
+    await expect(requirements.getByText(document.requirements[0].text)).toBeVisible();
+    await tab(page, 'all').click();
+    const boxes = await Promise.all([requirements.boundingBox(), conversation.boundingBox()]);
+    expect(boxes[0].x + boxes[0].width).toBeLessThanOrEqual(boxes[1].x);
+    const migration = conversation.getByRole('group', {name: 'Choose migration'});
+    await expect(migration.getByRole('radio', {name: 'Migrate'})).toBeDisabled();
+    await conversation.getByRole('radio', {name: 'SQLite'}).check();
+    await expect(migration.getByRole('radio', {name: 'Migrate'})).toBeDisabled();
+    await conversation.getByRole('radio', {name: 'Plain text'}).check();
+    const sent = submitResponse(page);
+    await page.getByRole('button', {name: 'Send to agent'}).click();
+    await sent;
+    expect(poll(state).feedback.answers).toEqual({
+      'F-1': {selected: ['sqlite'], other: '', selection_mode: 'single'},
+      'F-2': {selected: ['plain'], other: '', selection_mode: 'single'},
+    });
+    await expect(migration.getByRole('radio', {name: 'Migrate'})).toBeDisabled();
+    document.questions = document.questions.filter(question => question.id !== 'F-1');
+    document.settled_fork_ids = ['F-1'];
+    await writeFile(input, JSON.stringify(document));
+    execFileSync('python3', [archive, 'review', 'publish', '--state-dir', state, '--input', input, '--base-revision', '1'], {cwd: root});
+    await page.getByRole('button', {name: /new revision available/i}).click();
+    await expect(migration.getByRole('radio', {name: 'Migrate'})).toBeEnabled();
+  } finally {
+    s.child.kill();
+  }
+});
+
+
+test('declared settlement does not unlock an open prerequisite', async ({page}) => {
+  const state = await mkdtemp(join(tmpdir(), 'mold-open-prerequisite-'));
+  const input = join(state, 'revision.json');
+  const document = {
+    settled_fork_ids: ['F-1'],
+    questions: [
+      {id: 'F-1', prompt: 'Open prerequisite', options: [{id: 'keep', label: 'Keep open'}]},
+      {id: 'F-2', prompt: 'Dependent fork', depends_on: ['F-1'], options: [{id: 'go', label: 'Go'}]},
+    ],
+  };
+  await writeFile(input, JSON.stringify(document));
+  execFileSync('python3', [archive, 'review', 'publish', '--state-dir', state, '--input', input], {cwd: root});
+  const s = await serve(state);
+  try {
+    await page.goto(s.url);
+    const conversation = page.getByRole('complementary', {name: 'Conversation'});
+    const dependent = conversation.getByRole('group', {name: 'Dependent fork'});
+    await expect(dependent).toContainText('waiting for F-1');
+    await expect(dependent.getByRole('radio', {name: 'Go'})).toBeDisabled();
+    await conversation.getByRole('radio', {name: 'Keep open'}).check();
+    const sent = submitResponse(page);
+    await page.getByRole('button', {name: 'Send to agent'}).click();
+    await sent;
+    expect(poll(state).feedback.answers).toEqual({'F-1': {selected: ['keep'], other: '', selection_mode: 'single'}});
+    document.questions = document.questions.filter(question => question.id !== 'F-1');
+    await writeFile(input, JSON.stringify(document));
+    execFileSync('python3', [archive, 'review', 'publish', '--state-dir', state, '--input', input, '--base-revision', '1'], {cwd: root});
+    await page.getByRole('button', {name: /new revision available/i}).click();
+    await expect(dependent.getByRole('radio', {name: 'Go'})).toBeEnabled();
+  } finally {
+    s.child.kill();
+  }
+});
+
+test('narrow requirements and conversation never overlap, even with a long list', async ({page}) => {
+  const requirements = Array.from({length: 24}, (_, index) => ({
+    id: `R-${index + 1}`,
+    text: `WHEN event ${index + 1} occurs THE SYSTEM SHALL keep its full requirement text visible in the scrollable list.`,
+    status: index % 2 ? 'draft' : 'settled',
+  }));
+  const s = await serveDocument({requirements, questions: [{id: 'F-1', prompt: 'Choose one', options: [{id: 'a', label: 'A'}]}]});
+  try {
+    await page.setViewportSize({width: 390, height: 844});
+    await page.goto(s.url);
+    const pane = page.getByRole('region', {name: 'Requirements'});
+    const conversation = page.getByRole('complementary', {name: 'Conversation'});
+    await expect(pane.getByText(requirements[0].text)).toBeVisible();
+    await expect(conversation).toHaveCSS('position', 'static');
+    const [paneBox, conversationBox] = await Promise.all([pane.boundingBox(), conversation.boundingBox()]);
+    expect(paneBox.y + paneBox.height).toBeLessThanOrEqual(conversationBox.y);
+    expect(await pane.locator('.mc-requirements-scroll').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+    await pane.locator('.mc-requirements-scroll').evaluate(node => { node.scrollTop = node.scrollHeight; });
+    await expect(pane.getByText(requirements[23].text)).toBeVisible();
+    await tab(page, 'diagram').click();
+    await conversation.getByRole('radio', {name: 'A'}).check();
+    const sent = submitResponse(page);
+    await page.getByRole('button', {name: 'Send to agent'}).click();
+    await sent;
+    const after = await pane.boundingBox();
+    expect(after.y).toBeGreaterThanOrEqual(0);
+    expect(after.y + after.height).toBeLessThanOrEqual(844);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  } finally {
+    s.child.kill();
+  }
+});
+
+test('invalid dependencies report errors and restored waiting answers never submit', async ({page, request}) => {
+  const s = await serveDocument({
+    requirements: [{id: 'R-1', text: 'WHEN dependencies fail THE SYSTEM SHALL show the invalid state.', status: 'draft', fork_ids: ['F-1', 'missing']}],
+    questions: [
+      {id: 'F-1', prompt: 'Waiting fork', depends_on: ['F-2'], options: [{id: 'a', label: 'A'}]},
+      {id: 'F-2', prompt: 'Cycle fork', depends_on: ['F-1'], options: [{id: 'b', label: 'B'}]},
+      {id: 'F-3', prompt: 'Missing fork', depends_on: ['absent'], options: [{id: 'c', label: 'C'}]},
+      {id: 'F-4', prompt: 'Malformed fork', depends_on: 'F-1', options: [{id: 'd', label: 'D'}]},
+      {id: 'F-5', prompt: 'Independent fork', options: [{id: 'e', label: 'E'}]},
+    ],
+  });
+  try {
+    const origin = new URL(s.url).origin;
+    const response = await request.post(`${origin}/api/autosave`, {
+      headers: {'X-Mold-Token': s.token, 'Content-Type': 'application/json', Origin: origin},
+      data: {revision: 1, generation: 0, feedback: {answers: {'F-1': {selected: ['a'], other: ''}, 'F-3': {selected: ['c'], other: ''}}}},
+    });
+    expect(response.status()).toBe(200);
+    await page.goto(s.url);
+    const conversation = page.getByRole('complementary', {name: 'Conversation'});
+    await expect(conversation.getByRole('group', {name: 'Waiting fork'})).toContainText('waiting for F-2');
+    await expect(conversation.getByRole('group', {name: 'Cycle fork'})).toContainText('waiting for F-1');
+    for (const prompt of ['Missing fork', 'Malformed fork']) {
+      await expect(conversation.getByRole('group', {name: prompt})).toContainText('dependency error');
+    }
+    await expect(page.getByRole('region', {name: 'Requirements'})).toContainText('unresolved reference');
+    await conversation.getByRole('radio', {name: 'E'}).check();
+    const sent = submitResponse(page);
+    await page.getByRole('button', {name: 'Send to agent'}).click();
+    await sent;
+    expect(poll(s.state).feedback.answers).toEqual({'F-5': {selected: ['e'], other: '', selection_mode: 'single'}});
+  } finally {
+    s.child.kill();
+  }
+});
+
+test('requirements revision restores feedback after a lowered legacy phone sheet', async ({page}) => {
+  const s = await serveDocument({questions: [{id: 'F-1', prompt: 'Choose one', options: [{id: 'a', label: 'A'}]}]});
+  try {
+    await page.setViewportSize({width: 390, height: 844});
+    await page.goto(s.url);
+    await page.getByRole('button', {name: 'Lower sheet'}).click();
+    await expect(page.getByRole('button', {name: 'Raise sheet'})).toBeVisible();
+    const input = join(s.state, 'revision.json');
+    await writeFile(input, JSON.stringify({
+      requirements: [{id: 'R-1', text: 'THE SYSTEM SHALL keep feedback available.', status: 'draft'}],
+      questions: [{id: 'F-1', prompt: 'Choose one', options: [{id: 'a', label: 'A'}]}],
+    }));
+    execFileSync('python3', [archive, 'review', 'publish', '--state-dir', s.state, '--input', input, '--base-revision', '1'], {cwd: root});
+    await page.getByRole('button', {name: /new revision available/i}).click();
+    await expect(page.getByRole('region', {name: 'Requirements'})).toBeVisible();
+    await page.getByRole('radio', {name: 'A a', exact: true}).check();
+    const sent = submitResponse(page);
+    await page.getByRole('button', {name: 'Send to agent'}).click();
+    await sent;
+    expect(poll(s.state).feedback.answers['F-1'].selected).toEqual(['a']);
+  } finally {
+    s.child.kill();
+  }
+});
+
+test('malformed requirement records preserve valid requirements and feedback', async ({page}) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  const s = await serveDocument({
+    requirements: [null, false, 'invalid', {id: {}, text: {}, status: {}, fork_ids: [{}]},
+      {id: 'R-1', text: 'THE SYSTEM SHALL preserve valid requirements.', status: 'settled'}],
+    questions: [{id: 'F-1', prompt: 'Choose one', options: [{id: 'a', label: 'A'}]}],
+  });
+  try {
+    await page.goto(s.url);
+    await expect(page.getByRole('region', {name: 'Requirements'})).toContainText('THE SYSTEM SHALL preserve valid requirements.');
+    await page.getByRole('radio', {name: 'A a', exact: true}).check();
+    const sent = submitResponse(page);
+    await page.getByRole('button', {name: 'Send to agent'}).click();
+    await sent;
+    expect(poll(s.state).feedback.answers['F-1'].selected).toEqual(['a']);
+    expect(errors).toEqual([]);
+  } finally {
+    s.child.kill();
+  }
+});

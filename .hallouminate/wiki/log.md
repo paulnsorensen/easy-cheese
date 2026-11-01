@@ -119,3 +119,7 @@
 
 - 2026-10-19 · affinage:pr-838 · curated · research/c4-model-evaluation.md, research/c4-models-as-code-tools.md, sources/*.md · review fixes: linked the workingsoftware.dev source, dropped checkout-local evidence paths, gave source pages topic H1s and the sources index lane prose, split long and passive sentences.
 
+
+
+- 2026-11-01 · d80e803c48823793 · merged · adr/mold-review-canvas-008.md · recorded persistent settled/draft EARS requirements, independent fork batches, agent-only prerequisite settlement, and separate phone scroll panes; all frozen retrieval probes rank the ADR first.
+

@@ -39,7 +39,9 @@ The canvas requires only `questions`. Every other field is optional, and the can
 
 | Field | Shape | Canvas use |
 |---|---|---|
-| `questions` | `[{id, prompt, meta?, selection_mode, recommended_option_id?, options: [{id, label, tradeoff?}]}]` | Fork cards in the conversation rail |
+| `questions` | `[{id, prompt, meta?, selection_mode, recommended_option_id?, depends_on?, options: [{id, label, tradeoff?}]}]` | Open fork cards in the conversation rail |
+| `requirements` | `[{id, text, status, fork_ids?}]`; status is `settled` or `draft` | Full EARS text and linked forks in a persistent, scrollable pane outside the shape tabs |
+| `settled_fork_ids` | list of question IDs | Decisions the agent reconciled in this published revision |
 | `goal`, `goal_emphasis` | strings | Page title; the emphasis substring shows in the accent color |
 | `tier`, `stage` | strings (`stage`: `bounds`, `shape`, `sketch`, or `decision map`) | Eyebrow; `decision map` opens that view first |
 | `summary`, `agent_status` | strings | Agent message and status line above the forks |
@@ -54,13 +56,19 @@ The canvas requires only `questions`. Every other field is optional, and the can
 
 Text in `ledger`, `decision_map`, and `summary` renders `` `code` `` spans as chips. Document text always renders as inert text, never as HTML.
 
+Publish the entire current EARS requirement list each round, including settled and draft entries. Keep stable requirement and fork IDs. Link each requirement to its relevant fork cards through `fork_ids`. A linked open fork shows its prompt and waiting state; a settled fork shows its ID. An unresolved link remains visible.
+
+A question's optional `depends_on` lists prerequisite question IDs. The question is answerable only when every prerequisite is in `settled_fork_ids` and absent from `questions`. Local selection, autosave, submission, and restored feedback never settle a fork. The browser shows waiting questions but disables their controls and excludes their answers from feedback. Missing references and malformed dependencies show a dependency error. Cycles remain waiting. The agent reconciles feedback and publishes a new revision before dependent forks become answerable.
+
+Independent, already-explained forks can share one batch submission. Do not batch a dependent fork before its prerequisites settle. Legacy documents without these fields retain their existing rendering and answer behavior. Desktop requirements sit above shapes beside the conversation. Narrow screens give requirements and conversation separate, non-overlapping panes; legacy documents keep the phone sheet.
+
 `frontend/mold-review/examples/` holds three documents: `01-bounds.json`, `02-sketch.json`, and `03-decision-map.json`.
 
 ## Feedback
 
 A submission carries `answers`, `notes` (the composer text), `pins`, `annotations`, `view`, `scene`, `artifacts`, and `mermaid_source`. Each pin is `{id, anchor, text}`, where `anchor` names the part of the canvas, for example `placement › public`. `annotations` repeats the pins as numbered plain text. `end_session: true` means the user chose `send & end` and wants the Mold session to stop after this feedback.
 
-Autosave only preserves a working copy. `Send to agent` creates feedback, not approval.
+Autosave only preserves a working copy. `Send to agent` creates feedback, not approval. Waiting questions never appear in submitted `answers`, even if an earlier working copy holds an answer.
 
 Browser feedback never satisfies the taste gate, typed-plan gate, or coherence self-check.
 

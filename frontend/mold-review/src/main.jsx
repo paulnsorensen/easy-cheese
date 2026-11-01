@@ -212,6 +212,10 @@ function normalizeDocument(doc) {
     trail: toArray(doc.trail),
     revisions: toArray(doc.revisions),
     questions: toArray(doc.questions),
+    requirements: toArray(doc.requirements)
+      .filter(requirement => toText(requirement?.id) !== undefined && toText(requirement?.text) !== undefined && ['settled', 'draft'].includes(requirement?.status))
+      .map(requirement => ({...requirement, fork_ids: toArray(requirement.fork_ids).filter(id => typeof id === 'string')})),
+    settled_fork_ids: toArray(doc.settled_fork_ids),
     artifacts: toArray(doc.artifacts),
     ledger: toArray(doc.ledger).map(row => ({...row, items: toArray(row.items)})),
     placement: doc.placement ? {...doc.placement, rows: toArray(doc.placement.rows)} : doc.placement,
@@ -236,6 +240,43 @@ function availableShapes(doc) {
   };
 }
 
+function questionStates(questions, settledForkIds) {
+  const open = new Set(questions.map(question => question.id));
+  const settled = new Set(settledForkIds);
+  return Object.fromEntries(questions.map(question => {
+    const dependencies = question.depends_on;
+    if (dependencies === undefined) return [question.id, {kind: 'ready'}];
+    if (!Array.isArray(dependencies) || dependencies.some(id => typeof id !== 'string' || !id || (!open.has(id) && !settled.has(id)))) {
+      return [question.id, {kind: 'error', label: 'dependency error'}];
+    }
+    const waiting = dependencies.filter(id => open.has(id) || !settled.has(id));
+    return [question.id, waiting.length ? {kind: 'waiting', label: `waiting for ${waiting.join(', ')}`} : {kind: 'ready'}];
+  }));
+}
+
+function Requirements({requirements, questions, settledForkIds, states}) {
+  const open = new Map(questions.map(question => [question.id, question]));
+  const settled = new Set(settledForkIds);
+  return (
+    <section className="mc-requirements ec-panel" aria-label="Requirements">
+      <h2>Requirements</h2>
+      <div className="mc-requirements-scroll">
+        {requirements.map(requirement => (
+          <article className="mc-requirement" key={requirement.id}>
+            <div className="mc-requirement-head"><strong>{requirement.id}</strong><span className={`mc-requirement-status mc-requirement-status--${requirement.status}`}>{requirement.status}</span></div>
+            <p>{requirement.text}</p>
+            {toArray(requirement.fork_ids).map(id => {
+              const question = open.get(id);
+              const state = states[id];
+              return <p className="mc-requirement-fork" key={id}><strong>{id}</strong> · {question ? question.prompt || question.text : settled.has(id) ? 'settled' : 'unresolved reference'}{state?.kind !== 'ready' && state ? ` · ${state.label}` : ''}</p>;
+            })}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function App() {
   const {
     data, setData, answers, setAnswers, notes, setNotes, pins, setPins,
@@ -252,6 +293,8 @@ function App() {
   const sourceDoc = data.revision?.document;
   const doc = useMemo(() => normalizeDocument(sourceDoc || {}), [sourceDoc]);
   const questions = doc.questions || [];
+  const states = useMemo(() => questionStates(questions, doc.settled_fork_ids), [questions, doc.settled_fork_ids]);
+  const hasRequirements = doc.requirements.length > 0;
   const artifacts = doc.artifacts || [];
   const trail = doc.trail || [];
   const revisions = doc.revisions || [];
@@ -261,14 +304,14 @@ function App() {
   const show = shape => available[shape] && (activeView === 'all' ? !AUDIT_SHAPES.has(shape) : activeView === shape);
 
   const serializedAnswers = useMemo(
-    () => Object.fromEntries(questions.map(question => [
+    () => Object.fromEntries(questions.filter(question => states[question.id].kind === 'ready').map(question => [
       question.id,
       {
         ...(answers[question.id] || {}),
         selection_mode: question.selection_mode || question.selectionMode || 'single',
       },
     ])),
-    [answers, questions],
+    [answers, questions, states],
   );
   const feedback = useMemo(
     () => ({answers: serializedAnswers, notes, pins, annotations: pinText(pins), scene, artifacts: artifactValues, mermaid_source: mermaidSource, view: activeView}),
@@ -340,7 +383,7 @@ function App() {
 
   return (
     <PinProvider value={pinApi}>
-      <main className="mc-shell">
+      <main className={`mc-shell${hasRequirements ? ' mc-shell--requirements' : ''}`}>
         <header className="mc-bar">
           <span className="ec-brand"><span className="mc-brand-root"><a href="https://cheeselord.dev" target="_blank" rel="noreferrer">cheeselord.dev</a><span className="ec-brand-sep">/</span></span><b>easy-cheese</b><span className="ec-brand-sep">/</span>mold</span>
           <div className="mc-bar-tools">
@@ -365,6 +408,8 @@ function App() {
         </div>
 
         <div className="mc-body">
+          <div className="mc-workspace">
+            {hasRequirements && <Requirements requirements={doc.requirements} questions={questions} settledForkIds={doc.settled_fork_ids} states={states} />}
           <section className="mc-shapes" aria-label="Shapes">
             <nav className="ec-tabs" aria-label="Shape views">
               {['all', ...SHAPES].map(shape => (
@@ -404,8 +449,9 @@ function App() {
               {doc.shape_note && <p className="mc-note">{doc.shape_note}</p>}
             </div>
           </section>
+          </div>
 
-          <aside className={`mc-convo${sheetOpen ? '' : ' mc-convo--lowered'}`} aria-label="Conversation">
+          <aside className={`mc-convo${sheetOpen || hasRequirements ? '' : ' mc-convo--lowered'}`} aria-label="Conversation">
             <div className="mc-sheet-head">
               <span className="mc-sheet-grip" aria-hidden="true" />
               <div className="mc-row mc-row--between">
@@ -423,6 +469,7 @@ function App() {
                   key={question.id}
                   question={question}
                   answer={answers[question.id]}
+                  state={states[question.id]}
                   onChange={value => setAnswers(current => ({...current, [question.id]: value}))}
                 />
               ))}
