@@ -284,6 +284,7 @@ test('requirements remain beside shapes and only agent-settled forks unlock', as
     }
     await expect(requirements.getByText('settled', {exact: true})).toHaveCount(1);
     await expect(requirements.getByText('draft', {exact: true})).toHaveCount(2);
+    await expect(requirements.locator('.mc-requirement-head strong')).toHaveText(['R-2', 'R-3', 'R-1']);
     await expect(requirements).toContainText('Choose storage');
     await expect(requirements).toContainText('Choose migration');
     await tab(page, 'diagram').click();
@@ -374,10 +375,55 @@ test('narrow requirements and conversation never overlap, even with a long list'
     const sent = submitResponse(page);
     await page.getByRole('button', {name: 'Send to agent'}).click();
     await sent;
-    const after = await pane.boundingBox();
-    expect(after.y).toBeGreaterThanOrEqual(0);
-    expect(after.y + after.height).toBeLessThanOrEqual(844);
-    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    const [paneAfter, conversationAfter] = await Promise.all([pane.boundingBox(), conversation.boundingBox()]);
+    expect(paneAfter.y + paneAfter.height).toBeLessThanOrEqual(conversationAfter.y);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  } finally {
+    s.child.kill();
+  }
+});
+
+test('short phone keeps a requirement and a whole question card usable under a long goal', async ({page}) => {
+  const s = await serveDocument({
+    goal: 'Give the agent CLI a file-only database: no server, one directory, safe under concurrent agent writes.',
+    summary: 'Three shapes survive the shape check. A facade keeps the crust to two exports; per-entity repositories add one export per kind.',
+    requirements: Array.from({length: 6}, (_, index) => ({
+      id: `R-${index + 1}`,
+      text: `WHEN event ${index + 1} occurs THE SYSTEM SHALL keep its full requirement text visible.`,
+      status: index < 3 ? 'settled' : 'draft',
+    })),
+    questions: [{id: 'F-1', prompt: 'Which shape does the public interface take?', options: [
+      {id: 'facade', label: 'Store facade', tradeoff: 'two exports, one lock owner'},
+      {id: 'repos', label: 'Repository per entity', tradeoff: 'one export per kind'},
+      {id: 'raw', label: 'Raw sqlite3 connection', tradeoff: 'every caller owns the lock'},
+    ]}],
+  });
+  try {
+    await page.setViewportSize({width: 375, height: 667});
+    await page.goto(s.url);
+    const pane = page.getByRole('region', {name: 'Requirements'});
+    const shapes = page.locator('section.mc-shapes');
+    const conversation = page.getByRole('complementary', {name: 'Conversation'});
+    await expect(conversation.getByRole('group', {name: 'Which shape does the public interface take?'})).toBeAttached();
+    const fit = await page.evaluate(() => {
+      const scroll = document.querySelector('.mc-requirements-scroll');
+      const convo = document.querySelector('.mc-convo-scroll');
+      return {
+        requirement: scroll.clientHeight - scroll.querySelector('.mc-requirement').offsetHeight,
+        question: convo.clientHeight - convo.querySelector('.mc-question').offsetHeight,
+      };
+    });
+    expect(fit.requirement).toBeGreaterThanOrEqual(0);
+    expect(fit.question).toBeGreaterThanOrEqual(0);
+    const [paneBox, shapesBox, conversationBox] = await Promise.all([pane.boundingBox(), shapes.boundingBox(), conversation.boundingBox()]);
+    expect(paneBox.y + paneBox.height).toBeLessThanOrEqual(shapesBox.y);
+    expect(shapesBox.y + shapesBox.height).toBeLessThanOrEqual(conversationBox.y);
+    expect(conversationBox.height).toBeLessThanOrEqual(667);
+    await conversation.getByRole('radio', {name: /Raw sqlite3 connection/}).check({timeout: 5000});
+    const sent = submitResponse(page);
+    await page.getByRole('button', {name: 'Send to agent'}).click();
+    await sent;
+    expect(poll(s.state).feedback.answers['F-1'].selected).toEqual(['raw']);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   } finally {
     s.child.kill();

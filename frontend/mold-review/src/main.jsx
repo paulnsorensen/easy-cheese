@@ -257,11 +257,12 @@ function questionStates(questions, settledForkIds) {
 function Requirements({requirements, questions, settledForkIds, states}) {
   const open = new Map(questions.map(question => [question.id, question]));
   const settled = new Set(settledForkIds);
+  const draftsFirst = ['draft', 'settled'].flatMap(status => requirements.filter(requirement => requirement.status === status));
   return (
     <section className="mc-requirements ec-panel" aria-label="Requirements">
       <h2>Requirements</h2>
       <div className="mc-requirements-scroll">
-        {requirements.map(requirement => (
+        {draftsFirst.map(requirement => (
           <article className="mc-requirement" key={requirement.id}>
             <div className="mc-requirement-head"><strong>{requirement.id}</strong><span className={`mc-requirement-status mc-requirement-status--${requirement.status}`}>{requirement.status}</span></div>
             <p>{requirement.text}</p>

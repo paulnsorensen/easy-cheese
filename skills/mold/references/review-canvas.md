@@ -40,7 +40,7 @@ The canvas requires only `questions`. Every other field is optional, and the can
 | Field | Shape | Canvas use |
 |---|---|---|
 | `questions` | `[{id, prompt, meta?, selection_mode, recommended_option_id?, depends_on?, options: [{id, label, tradeoff?}]}]` | Open fork cards in the conversation rail |
-| `requirements` | `[{id, text, status, fork_ids?}]`; status is `settled` or `draft` | Full EARS text and linked forks in a persistent, scrollable pane outside the shape tabs |
+| `requirements` | `[{id, text, status, fork_ids?}]`; status is `settled` or `draft` | Full EARS text and linked forks in a persistent, scrollable pane outside the shape tabs; drafts list before settled entries |
 | `settled_fork_ids` | list of question IDs | Decisions the agent reconciled in this published revision |
 | `goal`, `goal_emphasis` | strings | Page title; the emphasis substring shows in the accent color |
 | `tier`, `stage` | strings (`stage`: `bounds`, `shape`, `sketch`, or `decision map`) | Eyebrow; `decision map` opens that view first |
@@ -60,7 +60,7 @@ Publish the entire current EARS requirement list each round, including settled a
 
 A question's optional `depends_on` lists prerequisite question IDs. The question is answerable only when every prerequisite is in `settled_fork_ids` and absent from `questions`. Local selection, autosave, submission, and restored feedback never settle a fork. The browser shows waiting questions but disables their controls and excludes their answers from feedback. Missing references and malformed dependencies show a dependency error. Cycles remain waiting. The agent reconciles feedback and publishes a new revision before dependent forks become answerable.
 
-Independent, already-explained forks can share one batch submission. Do not batch a dependent fork before its prerequisites settle. Legacy documents without these fields retain their existing rendering and answer behavior. Desktop requirements sit above shapes beside the conversation. Narrow screens give requirements and conversation separate, non-overlapping panes; legacy documents keep the phone sheet.
+Independent, already-explained forks can share one batch submission. Do not batch a dependent fork before its prerequisites settle. Legacy documents without these fields retain their existing rendering and answer behavior. Desktop requirements sit above shapes beside the conversation. Narrow screens stack requirements, shapes, and conversation in separate, non-overlapping scroll panes. Each pane keeps a usable minimum height. The page scrolls on short screens. Legacy documents keep the phone sheet.
 
 `frontend/mold-review/examples/` holds three documents: `01-bounds.json`, `02-sketch.json`, and `03-decision-map.json`.
 
