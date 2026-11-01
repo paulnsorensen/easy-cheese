@@ -19,6 +19,17 @@ body {
 .mc-goal { padding: var(--space-6) var(--space-7) var(--space-5); }
 .mc-goal-title { max-inline-size: 820px; margin: var(--space-2) 0 0; font-weight: 560; font-size: clamp(23px, 3vw, 32px); line-height: 1.12; letter-spacing: -0.035em; }
 .mc-body { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: var(--space-7); min-block-size: 0; padding: 0 var(--space-7) var(--space-6); }
+.mc-workspace { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: var(--space-5); min-block-size: 0; min-inline-size: 0; }
+.mc-workspace:not(:has(.mc-requirements)) { grid-template-rows: minmax(0, 1fr); }
+.mc-requirements { display: grid; grid-template-rows: auto minmax(0, 1fr); max-block-size: min(42dvh, 420px); min-block-size: 120px; padding: var(--space-4); }
+.mc-requirements h2 { margin: 0 0 var(--space-3); font-size: 18px; }
+.mc-requirements-scroll { overflow: auto; min-block-size: 0; }
+.mc-requirement { padding-block: var(--space-3); border-block-start: var(--border-hairline) solid var(--hairline); }
+.mc-requirement-head { display: flex; gap: var(--space-3); align-items: baseline; font: 500 0.8rem/1.5 var(--font-mono); }
+.mc-requirement-status { color: var(--text-dim); }
+.mc-requirement-status--draft { color: var(--accent); }
+.mc-requirement p { margin: var(--space-2) 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mc-requirement-fork { color: var(--text-dim); font: 400 0.8rem/1.5 var(--font-mono); }
 
 /* Shapes */
 .mc-shapes { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: var(--space-5); min-block-size: 0; }
@@ -111,6 +122,14 @@ body {
   .mc-shapes > .mc-stack { overflow: visible; }
   .mc-shapes .ec-tabs { gap: var(--space-4); }
   .mc-ledger { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  .mc-shell--requirements { display: grid; grid-template-rows: auto auto auto; block-size: auto; min-block-size: 100dvh; padding-block-end: 0; }
+  .mc-shell--requirements .mc-body { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; gap: var(--space-4); }
+  .mc-shell--requirements .mc-workspace { grid-template-rows: auto auto; }
+  .mc-shell--requirements .mc-requirements { block-size: clamp(11rem, 32svh, 20rem); max-block-size: none; min-block-size: 0; }
+  .mc-shell--requirements .mc-shapes { block-size: clamp(12rem, 35svh, 24rem); }
+  .mc-shell--requirements .mc-shapes > .mc-stack { overflow: auto; }
+  .mc-shell--requirements .mc-convo { position: static; block-size: min(36rem, 100svh); min-block-size: 0; padding: 0; border-radius: 0; box-shadow: none; }
+  .mc-shell--requirements .mc-sheet-toggle, .mc-shell--requirements .mc-sheet-grip { display: none; }
   .mc-convo { position: fixed; inset: auto 0 0 0; z-index: 30; block-size: 58dvh; padding: 0 var(--space-4); border: 0; border-block-start: var(--border-hairline) solid var(--edge); border-radius: var(--radius-lg) var(--radius-lg) 0 0; background: var(--panel); box-shadow: var(--shadow-float); }
   .mc-convo--lowered { block-size: auto; grid-template-rows: auto; }
   .mc-convo--lowered .mc-convo-scroll, .mc-convo--lowered .mc-composer { display: none; }
