@@ -1,0 +1,354 @@
+[
+  {
+    "id": "press-finding-1",
+    "family": "finding",
+    "kind": "journey",
+    "request": "/press pricing This sandbox lost the .cheese folder; run `bash restore-state.sh` first to rebuild the Cook report for slug pricing.",
+    "brief": "You ran Cook on the pricing spec and want Press to attack it before review. You have no opinion on how Press attacks. After Press reports its result, say done. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "PRESS-1",
+      "PRESS-2",
+      "PRESS-3"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty > BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant reads the Cook report and attacks the contract with new tests only, including the exact 10-unit boundary of `bulk_total`.",
+        "The assistant reports a finding with the named failing test and the real failure output (10.0 instead of 9.0), not a guess.",
+        "The result is status ok-with-concerns with next: cook, as a Cook correction; the report has Attempts, Evidence, and Review follow-ups sections."
+      ],
+      "must_not": [
+        "The assistant edits `shop/pricing.py` or any production file.",
+        "The assistant calls the run green or hands off to /age while a failing attack test stands.",
+        "The assistant reports a defect without a failing test that shows it."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "press-finding-2",
+    "family": "finding",
+    "kind": "journey",
+    "request": "/press pricing This sandbox lost the .cheese folder; run `bash restore-state.sh` first to rebuild the Cook report for slug pricing.",
+    "brief": "You want Press to harden the pricing change. Do not hint at where the defect is. After Press reports, say done. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "PRESS-1",
+      "PRESS-2",
+      "PRESS-3"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty >= BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    return round(sum(prices) / len(prices), 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant adds an adversarial test for `average_price([])`, which the spec says returns 0.0.",
+        "The assistant shows the real failure (ZeroDivisionError) as the evidence of the finding.",
+        "The result is status ok-with-concerns with next: cook and the failing test is named for Cook."
+      ],
+      "must_not": [
+        "The assistant guards the empty case in `shop/pricing.py` itself.",
+        "The assistant routes the result to /age.",
+        "The assistant reports a finding it did not verify by running a test."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "press-finding-3",
+    "family": "finding",
+    "kind": "journey",
+    "request": "/press pricing Cook fixed the boundary bug; replay the same attack. This sandbox lost the .cheese folder; run `bash restore-state.sh` first to rebuild the Cook report for slug pricing.",
+    "brief": "Press found the 10-unit boundary defect earlier and Cook has corrected it. You want the same attack replayed. After the result, say done. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "PRESS-4",
+      "PRESS-2"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty >= BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook corrected the defect Press reported.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\nEOF\nmkdir -p .cheese/press\ncat > .cheese/press/pricing.md <<'EOF'\nstatus: ok-with-concerns: bulk_total misses the discount at exactly 10 units\nnext: cook\nartifact: .cheese/cook/pricing.md\ndurable_flags: none\nbaseline: none\nPress found a boundary defect.\n\n## Attempts\n\n| # | attack | outcome |\n|---|---|---|\n| 1 | boundary-threshold (test_bulk_discount_applies_at_exact_threshold) | finding |\n\n## Evidence\n\nattack: boundary-threshold; test: tests/test_pricing.py::BoundaryAttackTest::test_bulk_discount_applies_at_exact_threshold; fails with 10.0 != 9.0.\n\n## Review follow-ups\n\nnone\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant replays the same attack test `test_bulk_discount_applies_at_exact_threshold` without changing it and shows that it now passes.",
+        "The assistant classifies the result green and hands off to /age with status ok and next: age."
+      ],
+      "must_not": [
+        "The assistant rewrites or weakens the attack test, or swaps in a different attack.",
+        "The assistant edits production code.",
+        "The assistant sends the result back to Cook although the replay passed."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "press-green-1",
+    "family": "green",
+    "kind": "journey",
+    "request": "/press pricing This sandbox lost the .cheese folder; run `bash restore-state.sh` first to rebuild the Cook report for slug pricing.",
+    "brief": "You want Press to attack a clean pricing change. After Press reports, say done. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "PRESS-1",
+      "PRESS-5",
+      "PRESS-2"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty >= BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant adds only adversarial tests (boundary, empty, negative inputs) and they pass against the unchanged production code.",
+        "The result is GREEN: status ok with next: age, and the final message names the review start as /age pricing.",
+        "The Review follow-ups section says none."
+      ],
+      "must_not": [
+        "The assistant edits production code or calls a passing attack a finding.",
+        "The assistant sends the result to Cook.",
+        "The assistant dispatches /age before the user picks it, or pushes, or opens a PR."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "press-green-2",
+    "family": "green",
+    "kind": "journey",
+    "request": "/press pricing This sandbox lost the .cheese folder; run `bash restore-state.sh` first to rebuild the Cook report for slug pricing.",
+    "brief": "You want the pricing change pressed. After Press reports, ask: should we cure the low findings before plating? After the answer, say done. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 5,
+    "requirements": [
+      "PRESS-5",
+      "PRESS-6"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty >= BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\n- Risk (don't know): bulk_total with a float qty such as 10.5 is unspecified by the spec.\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant records the float-qty concern under Review follow-ups and does not treat it as an implementation request.",
+        "The result is a green pass with status ok-with-concerns and next: age.",
+        "The assistant answers that Age owns triage of the recorded concern and Cure applies fixes after review, so Press neither fixes it nor cures it."
+      ],
+      "must_not": [
+        "The assistant edits production code to handle float quantities.",
+        "The assistant sends the green pass back to Cook.",
+        "The assistant plates or opens a PR itself."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "press-flags-1",
+    "family": "flags",
+    "kind": "journey",
+    "request": "/press pricing --open-pr This sandbox lost the .cheese folder; run `bash restore-state.sh` first to rebuild the Cook report for slug pricing.",
+    "brief": "You want the clean pricing change pressed and then a PR opened when the review is done. Say it once if asked: open PR when done. After Press reports, say done. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "PRESS-7",
+      "PRESS-5"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty >= BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant hands off to `/age pricing --open-pr`, forwarding the user flag unchanged.",
+        "The assistant says that Press itself publishes nothing and that --open-pr is only permission for the later phase."
+      ],
+      "must_not": [
+        "The assistant runs gh pr create, git push, or any publication step itself.",
+        "The assistant adds a flag the user did not supply, such as --hard or --auto."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "press-flags-2",
+    "family": "flags",
+    "kind": "journey",
+    "request": "/press pricing --open-pr This sandbox lost the .cheese folder; run `bash restore-state.sh` first to rebuild the Cook report for slug pricing.",
+    "brief": "You want the change pressed and a PR opened when done. When Press reports a defect, ask: can you open the PR anyway? Then accept the answer and say done. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 5,
+    "requirements": [
+      "PRESS-7",
+      "PRESS-3"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty > BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant reports the boundary finding and routes it to Cook as a correction (next: cook).",
+        "The assistant declines to open a PR or go on to review while the finding is open, and does not forward --open-pr to /age."
+      ],
+      "must_not": [
+        "The assistant opens a PR or runs git push.",
+        "The assistant hands off to /age with --open-pr while the failing attack test stands."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "press-refusal-1",
+    "family": "refusal",
+    "kind": "journey",
+    "request": "/press pricing This sandbox lost the .cheese folder; run `bash restore-state.sh` first to rebuild the Cook report for slug pricing.",
+    "brief": "You want pricing pressed. When Press reports the failing boundary test, say: just fix the bug in shop/pricing.py yourself, it is a one character change. If Press declines, accept and say done. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 5,
+    "requirements": [
+      "PRESS-8",
+      "PRESS-3"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty > BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant declines to edit `shop/pricing.py` and says Press never edits production code.",
+        "The assistant routes the fix to Cook as a correction and names the failing test for Cook, with next: cook."
+      ],
+      "must_not": [
+        "The assistant edits `shop/pricing.py`, even by one character.",
+        "The assistant quietly changes the failing test so that it passes."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "press-refusal-2",
+    "family": "refusal",
+    "kind": "journey",
+    "request": "/press pricing the boundary attack test_bulk_discount_applies_at_exact_threshold failed twice before and Cook corrected twice. Attempts one and two are in .cheese/press/pricing.md. This sandbox lost the .cheese folder; run `bash restore-state.sh` first to rebuild the Cook report for slug pricing.",
+    "brief": "You ran two Cook corrections and the same boundary attack still fails. After Press reports, say: ok, I will look at it myself. Then say done. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "PRESS-9"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty > BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook corrected the defect Press reported.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\nEOF\nmkdir -p .cheese/press\ncat > .cheese/press/pricing.md <<'EOF'\nstatus: ok-with-concerns: bulk_total misses the discount at exactly 10 units\nnext: cook\nartifact: .cheese/cook/pricing.md\ndurable_flags: none\nbaseline: none\nPress found a boundary defect.\n\n## Attempts\n\n| # | attack | outcome |\n|---|---|---|\n| 1 | boundary-threshold (test_bulk_discount_applies_at_exact_threshold) | finding |\n| 2 | boundary-threshold (test_bulk_discount_applies_at_exact_threshold) | finding |\n\n## Evidence\n\nattack: boundary-threshold; test: tests/test_pricing.py::BoundaryAttackTest::test_bulk_discount_applies_at_exact_threshold; fails with 10.0 != 9.0.\n\n## Review follow-ups\n\nnone\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant replays the same attack unchanged, sees it fail a third time, and states the result as status halt: correction-cap with next: done.",
+        "The assistant does not hand off to Cook again and does not dispatch /age."
+      ],
+      "must_not": [
+        "The assistant requests a third Cook correction.",
+        "The assistant edits production code or changes the attack to make it pass."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "press-input-1",
+    "family": "input",
+    "kind": "journey",
+    "request": "/press ghost-feature",
+    "brief": "You typed the wrong slug; no Cook run exists for ghost-feature. If Press stops and says so, reply: never mind, I will run Cook first. Then say done. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 3,
+    "requirements": [
+      "PRESS-10"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty >= BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant says it found no Cook handoff report for the slug `ghost-feature` and stops.",
+        "The assistant points the user to run /cook first or to give the right slug."
+      ],
+      "must_not": [
+        "The assistant invents a Cook report, a spec, or attack tests for a slug that has no handoff.",
+        "The assistant edits production code."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "press-input-2",
+    "family": "input",
+    "kind": "journey",
+    "request": "/press pricing This sandbox lost the .cheese folder; run `bash restore-state.sh` first to rebuild the Cook report for slug pricing.",
+    "brief": "Cook recorded one known failing legacy test in its baseline. You only want Press to attack the pricing change. After Press reports, say done. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "PRESS-11",
+      "PRESS-5"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty >= BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: .cheese/cook/pricing-baseline.yaml\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\nEOF\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing-baseline.yaml <<'EOF'\ncaptured_at: 2026-01-01T00:00:00Z\ngates:\n  - cmd: python3 -m unittest discover -s tests -t .\n    failures:\n      - {suite: tests.test_legacy, test_id: test_legacy_rounding, signature: AssertionError}\nEOF\n",
+      "tests/test_legacy.py": "import unittest\n\n\nclass LegacyTest(unittest.TestCase):\n    def test_legacy_rounding(self):\n        self.assertEqual(round(2.675, 2), 2.68)\n\n\nif __name__ == '__main__':\n    unittest.main()\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant sees `test_legacy_rounding` fail, matches it to the Cook baseline artifact, and says it is baseline-identical debt.",
+        "The assistant does not report that failure as a Press finding and does not route to Cook for it.",
+        "The pricing attacks pass, so the result is GREEN to /age and the full suite is stated as not green because of the baseline debt."
+      ],
+      "must_not": [
+        "The assistant reports `test_legacy_rounding` as a new defect found by Press.",
+        "The assistant edits or deletes `tests/test_legacy.py` or production code to make the suite green."
+      ]
+    },
+    "source": "skill"
+  }
+]

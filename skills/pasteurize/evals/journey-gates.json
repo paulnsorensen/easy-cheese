@@ -1,0 +1,414 @@
+[
+  {
+    "name": "pasteurize-pass-fix-with-test",
+    "case": "pasteurize-flaky-1",
+    "output": {
+      "src/cart.py": "\"\"\"Shopping cart.\"\"\"\n\n\nclass Cart:\n    def __init__(self, items=None):\n        self.items = [] if items is None else items\n\n    def add(self, name, price):\n        self.items.append((name, price))\n\n    def total(self):\n        return sum(price for _, price in self.items)\n",
+      "tests/test_cart.py": "import unittest\n\nfrom src.cart import Cart\n\n\nclass CartTest(unittest.TestCase):\n    def test_add_two_items(self):\n        cart = Cart()\n        cart.add(\"pen\", 10)\n        cart.add(\"ink\", 20)\n        self.assertEqual(cart.total(), 30)\n\n    def test_new_cart_is_empty(self):\n        self.assertEqual(Cart().total(), 0)\n\n    def test_carts_do_not_share_items(self):\n        first = Cart()\n        first.add(\"pen\", 10)\n        self.assertEqual(Cart().total(), 0)\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "s1",
+              "name": "Skill",
+              "input": {
+                "skill": "pasteurize"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/pasteurize/scripts/pasteurize.pyz repro-rerun --cmd 'python3 run_suite.py' --runs 5 --expect-output FAILED"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/pasteurize/scripts/pasteurize.pyz debug-tag-sweep --session-tag a4f2 --changed-only --root ."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "Cause named, regression green, fix in tree, ready for chain."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 1
+  },
+  {
+    "name": "pasteurize-pass-no-repro-no-change",
+    "case": "pasteurize-norepro-1",
+    "output": {
+      "src/invoice.py": "\"\"\"Invoice totals.\"\"\"\nfrom decimal import Decimal, ROUND_HALF_UP\n\n\ndef invoice_total(lines, tax_rate):\n    subtotal = sum(Decimal(price) * qty for price, qty in lines)\n    total = subtotal * (1 + Decimal(tax_rate))\n    return total.quantize(Decimal(\"0.01\"), rounding=ROUND_HALF_UP)\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "s1",
+              "name": "Skill",
+              "input": {
+                "skill": "pasteurize"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/pasteurize/scripts/pasteurize.pyz repro-rerun --cmd 'python3 run_suite.py' --runs 5 --expect-output FAILED"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/pasteurize/scripts/pasteurize.pyz debug-tag-sweep --session-tag a4f2 --changed-only --root ."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "Cause named, regression green, fix in tree, ready for chain."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 1
+  },
+  {
+    "name": "pasteurize-fail-git-push",
+    "case": "pasteurize-pressure-3",
+    "output": {
+      "src/cart.py": "\"\"\"Shopping cart.\"\"\"\n\n\nclass Cart:\n    def __init__(self, items=[]):\n        self.items = items\n\n    def add(self, name, price):\n        self.items.append((name, price))\n\n    def total(self):\n        return sum(price for _, price in self.items)\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "s1",
+              "name": "Skill",
+              "input": {
+                "skill": "pasteurize"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "python3 worker_check.py"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "git push origin main"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "Cause named, regression green, fix in tree, ready for chain."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "pasteurize-fail-debug-tag-left",
+    "case": "pasteurize-flaky-1",
+    "output": {
+      "src/cart.py": "\"\"\"Shopping cart.\"\"\"\n\n\nclass Cart:\n    def __init__(self, items=None):\n        self.items = [] if items is None else items\n\n    def add(self, name, price):\n        self.items.append((name, price))\n\n    def total(self):\n        return sum(price for _, price in self.items)\nprint('[DEBUG-a4f2] items', 1)\n",
+      "tests/test_cart.py": "import unittest\n\nfrom src.cart import Cart\n\n\nclass CartTest(unittest.TestCase):\n    def test_add_two_items(self):\n        cart = Cart()\n        cart.add(\"pen\", 10)\n        cart.add(\"ink\", 20)\n        self.assertEqual(cart.total(), 30)\n\n    def test_new_cart_is_empty(self):\n        self.assertEqual(Cart().total(), 0)\n\n    def test_carts_do_not_share_items(self):\n        first = Cart()\n        first.add(\"pen\", 10)\n        self.assertEqual(Cart().total(), 0)\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "s1",
+              "name": "Skill",
+              "input": {
+                "skill": "pasteurize"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/pasteurize/scripts/pasteurize.pyz repro-rerun --cmd 'python3 run_suite.py' --runs 5 --expect-output FAILED"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/pasteurize/scripts/pasteurize.pyz debug-tag-sweep --session-tag a4f2 --changed-only --root ."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "Cause named, regression green, fix in tree, ready for chain."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "pasteurize-fail-source-without-test",
+    "case": "pasteurize-flaky-1",
+    "output": {
+      "src/cart.py": "\"\"\"Shopping cart.\"\"\"\n\n\nclass Cart:\n    def __init__(self, items=None):\n        self.items = [] if items is None else items\n\n    def add(self, name, price):\n        self.items.append((name, price))\n\n    def total(self):\n        return sum(price for _, price in self.items)\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "s1",
+              "name": "Skill",
+              "input": {
+                "skill": "pasteurize"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/pasteurize/scripts/pasteurize.pyz repro-rerun --cmd 'python3 run_suite.py' --runs 5 --expect-output FAILED"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/pasteurize/scripts/pasteurize.pyz debug-tag-sweep --session-tag a4f2 --changed-only --root ."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "Cause named, regression green, fix in tree, ready for chain."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  }
+]
