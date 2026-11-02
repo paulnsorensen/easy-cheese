@@ -5,6 +5,7 @@ Use the bundled review canvas when visual artifacts or browser interaction help 
 ## Procedure
 
 1. Publish the review document with `python3 skills/mold/scripts/mold.pyz review publish --state-dir DIR --input FILE [--base-revision N]`.
+   Read `warnings` in its output. See [Review document](#review-document).
 2. Start `python3 skills/mold/scripts/mold.pyz review serve --state-dir DIR --port 0` and give the returned private URL to the user.
 3. Read submitted snapshots with `python3 skills/mold/scripts/mold.pyz review poll --state-dir DIR --after CURSOR --timeout SECONDS`.
 4. Reconcile each exact question and option identifier into the decision ledger. Fold `notes` and each pin's `anchor` and `text` into that ledger.
@@ -59,6 +60,16 @@ Text in `ledger`, `decision_map`, and `summary` renders `` `code` `` spans as ch
 Publish the entire current EARS requirement list each round, including settled and draft entries. Keep stable requirement and fork IDs. Link each requirement to its relevant fork cards through `fork_ids`. A linked fork shows its prompt and, when not answerable, its waiting or dependency-error state; a settled fork shows its ID. An unresolved link remains visible.
 
 A question's optional `depends_on` lists prerequisite question IDs. The question is answerable only when every prerequisite is in `settled_fork_ids` and absent from `questions`. Local selection, autosave, submission, and restored feedback never settle a fork. The browser shows waiting and dependency-error questions but disables their controls, shows no restored answer on them, and excludes their answers from feedback. Missing references and malformed dependencies show a dependency error. Cycles remain waiting. The agent reconciles feedback and publishes a new revision before dependent forks become answerable.
+
+Each `review publish` output has a `warnings` list. A warning never blocks the publish, so the revision is stored. A warning names one of these problems:
+
+- a `depends_on` value that is not a list, or an entry that is not a non-empty string
+- a `depends_on` reference that is not an open question or a `settled_fork_ids` entry
+- a prerequisite that is open in `questions` and also in `settled_fork_ids`
+- a `depends_on` cycle among open questions
+- requirement IDs from the previous revision that this revision does not have
+
+The list is empty when the document has none of these problems. Read `warnings` after each publish. If the list is not empty, correct the document. Then publish the corrected document as a new revision.
 
 Independent, already-explained forks can share one batch submission. Do not batch a dependent fork before its prerequisites settle. Legacy documents without these fields retain their existing rendering and answer behavior. Desktop requirements sit above shapes beside the conversation. Narrow screens stack requirements, shapes, and conversation in separate, non-overlapping scroll panes. Each pane keeps a usable minimum height. The page scrolls on short screens. Legacy documents keep the phone sheet.
 
