@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 
 from easy_cheese.shared.handoff import parse_handoff_slug
+from easy_cheese.skills.press.suite_shape import DEFAULT_ROW_CAP
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PRESS = REPO_ROOT / "skills" / "press"
@@ -203,6 +204,32 @@ def test_gap_analysis_preserves_the_attack() -> None:
     assert "Run the same adversarial attack. Do not change its test or fixture digest." in gap
     assert "Never weaken the attack to obtain GREEN." in gap
 
+
+def test_press_checks_test_shape_and_overlap_before_the_handoff() -> None:
+    """gh-859..864: Press extends base files, names the closest test, and runs `test-shape`."""
+    skill = _read(SKILL)
+    gap = _read(REFERENCES / "gap-analysis.md")
+    shape = _read(REPO_ROOT / "skills" / "cheese" / "references" / "test-shape.md")
+    tdd = _read(REPO_ROOT / "skills" / "cook" / "references" / "tdd-loop.md")
+    link = "cheese/references/test-shape.md"
+
+    assert link in skill and link in gap and link in tdd
+    assert "python3 skills/press/scripts/press.pyz test-shape --base <revision>" in skill
+    assert "- `## Test shape` — one row for each new test: the test, the closest existing test" in skill
+    assert "Do not create a `test_press_*` file when a test file for the module exists." in skill
+    assert "Before you add a test, name the existing test closest to it." in gap
+    assert "Do not create one hardening test for each changed behavior." not in gap
+    for rule in (
+        "Extend the existing test file for the module under test.",
+        "Put each acceptance marker on one test only.",
+        "Write one row for each equivalence class or validator branch, not one row for each value.",
+        f"Keep a table at {DEFAULT_ROW_CAP} rows or fewer.",
+        "Stack two tables only when each axis selects a different branch.",
+        'Do not write `parametrize("trial", range(N))`.',
+        "use Hypothesis with a fixed `max_examples` and `derandomize=True`",
+        "Start a subprocess, a fresh interpreter, a container, or a sandbox only when the process boundary is the contract.",
+    ):
+        assert rule in shape, rule
 
 def test_press_has_no_retired_route_or_telemetry_references() -> None:
     """`press-route`, `press-telemetry`, and the telemetry reference are gone."""

@@ -133,7 +133,6 @@ Under `.github/workflows/`:
 | `codeql.yml` | PRs, push main, weekly | CodeQL on python + actions |
 | `dependency-review.yml` | PRs to main | block vulnerable / disallowed-license deps |
 | `scorecard.yml` | weekly, branch protection changes | OpenSSF Scorecard → SARIF (default branch only) |
-| `copilot-review.yml` | PR opened/reopened/ready | add Copilot as reviewer |
 
 ### Prerequisites
 
