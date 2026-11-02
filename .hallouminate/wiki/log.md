@@ -125,3 +125,4 @@
 - 2026-11-01 · affinage:pr-848 · merged · adr/mold-review-canvas-008.md · phone panes keep usable minimum heights and the page scrolls (screens showed 0-1 px panes at 375x667 under a long goal); drafts list before settled requirements.
 
 - 2026-11-01 · affinage:pr-848 · curated · adr/mold-review-canvas-010.md, adr/mold-review-canvas-008.md, adr/index.md · review fixes: moved the requirements, fork-settlement, and phone-pane decisions into amending ADR 010; made `settled_fork_ids` cumulative; named waiting and dependency-error states in the canvas contract.
+- 2026-11-02 · cook:issue-849 · curated · adr/mold-review-canvas-010.md · `review publish` returns non-blocking `warnings` for malformed, missing, open-and-settled, and cyclic fork dependencies and for dropped requirement IDs; it warns and does not reject, so ADR 008 stays true and the browser defence stays testable.
