@@ -39,7 +39,7 @@ COMMANDS = (
     ),
     derive_command(
         _test_shape,
-        "Report test-shape findings for the new Python tests after a base revision (JSON out)",
+        "Report test-shape findings for the Python tests that changed after a base revision (JSON out)",
     ),
 )
 

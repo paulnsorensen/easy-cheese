@@ -2,8 +2,8 @@
 
 Press runs this check before its handoff. The result is a receipt, not a gate:
 Press fixes each finding in the tests that it wrote, or records why the finding
-stands. Only new test functions are checked; tests that exist at the base stay
-out of scope.
+stands. A new test function is checked in full. A test that exists at the base
+is reported only for a finding that it did not have at the base.
 """
 
 from __future__ import annotations
@@ -24,9 +24,12 @@ from easy_cheese.shared.git_utils import run_git
 DEFAULT_ROW_CAP = 8
 _PRESS_FILE = re.compile(r"test_press_(\w+)\.py|test_(\w+)_press\.py")
 _PROCESS_CALLS = frozenset({
-    "subprocess.run", "subprocess.Popen", "subprocess.call",
-    "subprocess.check_call", "subprocess.check_output", "os.system",
+    "subprocess.run", "subprocess.Popen", "subprocess.call", "subprocess.check_call",
+    "subprocess.check_output", "subprocess.getoutput", "subprocess.getstatusoutput",
+    "os.system", "os.popen", "asyncio.create_subprocess_exec", "asyncio.create_subprocess_shell",
 })
+_PROCESS_MODULES = frozenset(name.partition(".")[0] for name in _PROCESS_CALLS)
+_TRIAL_NAMES = frozenset({"trial", "trials", "attempt", "iteration", "repeat", "_"})
 _COLLECTION_WRAPPERS = frozenset({"sorted", "list", "tuple", "set"})
 _COLLECTION_VIEWS = frozenset({"items", "keys", "values"})
 
@@ -76,17 +79,26 @@ def _is_test_file(path: str) -> bool:
     return name.endswith(".py") and (name.startswith("test_") or name.endswith("_test.py"))
 
 
-def _changed_test_files(root: Path, base: str, head: str | None) -> list[tuple[str, str]]:
-    """Return `(status, path)` for each added or modified test file."""
-    diff = _git(root, ["diff", "--name-status", "--no-renames", base, *([head] if head else []), "--"])
+def _changed_test_files(root: Path, base: str, head: str | None) -> list[tuple[str, str, str | None]]:
+    """Return `(status, path, base_path)` for each added, modified, or renamed test file.
+
+    `base_path` names the file at the base. It is None for an added file.
+    """
+    diff = _git(root, ["diff", "--name-status", "-z", "--find-renames", base, *([head] if head else []), "--"])
     if diff is None:
         raise fromargs.CliError(f"git diff failed for base {base!r}")
-    entries = [tuple(line.split("\t", 1)) for line in diff.splitlines() if line]
+    fields = iter(diff.split("\0"))
+    entries: list[tuple[str, str, str | None]] = []
+    for status in fields:
+        path = next(fields, "")
+        if status.startswith("R"):
+            entries.append(("R", next(fields, ""), path))
+        elif status in ("A", "M"):
+            entries.append((status, path, path if status == "M" else None))
     if head is None:
-        untracked = _git(root, ["ls-files", "--others", "--exclude-standard"]) or ""
-        entries += [("A", path) for path in untracked.splitlines() if path]
-    changed = [(status[0], path) for status, path in entries if status[0] in "AM" and _is_test_file(path)]
-    return sorted(changed, key=lambda entry: entry[1])
+        untracked = _git(root, ["ls-files", "-z", "--others", "--exclude-standard"]) or ""
+        entries += [("A", path, None) for path in untracked.split("\0") if path]
+    return sorted((entry for entry in entries if _is_test_file(entry[1])), key=lambda entry: entry[1])
 
 
 def _tests(module: ast.Module) -> Iterator[tuple[str, TestNode]]:
@@ -99,15 +111,29 @@ def _tests(module: ast.Module) -> Iterator[tuple[str, TestNode]]:
                     yield f"{node.name}.{item.name}", item
 
 
-def _parametrize_values(test: TestNode) -> list[ast.expr]:
-    values: list[ast.expr] = []
+def _argument(decorator: ast.Call, position: int, keyword: str) -> ast.expr | None:
+    if len(decorator.args) > position:
+        return decorator.args[position]
+    return next((item.value for item in decorator.keywords if item.arg == keyword), None)
+
+
+def _argnames(names: ast.expr | None) -> frozenset[str]:
+    if isinstance(names, ast.Constant) and isinstance(names.value, str):
+        return frozenset(part.strip() for part in names.value.split(","))
+    if isinstance(names, (ast.List, ast.Tuple)):
+        return frozenset(item.value for item in names.elts if isinstance(item, ast.Constant) and isinstance(item.value, str))
+    return frozenset()
+
+
+def _tables(test: TestNode) -> list[tuple[frozenset[str], ast.expr]]:
+    """Return the argument names and the values of each parametrize table on `test`."""
+    tables: list[tuple[frozenset[str], ast.expr]] = []
     for decorator in test.decorator_list:
         if isinstance(decorator, ast.Call) and ast.unparse(decorator.func).endswith("mark.parametrize"):
-            keyword = next((item.value for item in decorator.keywords if item.arg == "argvalues"), None)
-            argument = decorator.args[1] if len(decorator.args) > 1 else keyword
-            if argument is not None:
-                values.append(argument)
-    return values
+            values = _argument(decorator, 1, "argvalues")
+            if values is not None:
+                tables.append((_argnames(_argument(decorator, 0, "argnames")), values))
+    return tables
 
 
 def _range_length(arguments: list[ast.expr]) -> int | None:
@@ -132,7 +158,8 @@ def _row_count(values: ast.expr, literals: dict[str, int]) -> int | None:
         case ast.Call(func=ast.Attribute(value=inner, attr=view), args=[]) if view in _COLLECTION_VIEWS:
             return _row_count(inner, literals)
         case _:
-            return None
+            pass
+    return None
 
 
 def _is_range(values: ast.expr) -> bool:
@@ -154,17 +181,68 @@ def _module_literals(module: ast.Module) -> dict[str, int]:
     return sizes
 
 
-def _starts_process(node: ast.AST, helpers: dict[str, TestNode], *, follow: bool = True) -> bool:
+def _process_imports(module: ast.Module) -> dict[str, str]:
+    """Map each local name that a module-level import binds to a process module or a launch call."""
+    names: dict[str, str] = {}
+    for node in module.body:
+        if isinstance(node, ast.Import):
+            names.update((alias.asname or alias.name, alias.name) for alias in node.names if alias.name in _PROCESS_MODULES)
+        elif isinstance(node, ast.ImportFrom) and node.module in _PROCESS_MODULES:
+            names.update((alias.asname or alias.name, f"{node.module}.{alias.name}") for alias in node.names)
+    return names
+
+
+@dataclass(frozen=True)
+class _Scope:
+    """The module-level names that a test can refer to."""
+
+    literals: dict[str, int]
+    helpers: dict[str, TestNode]
+    imports: dict[str, str]
+
+    @classmethod
+    def of(cls, module: ast.Module) -> _Scope:
+        helpers = {node.name: node for node in module.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        return cls(_module_literals(module), helpers, _process_imports(module))
+
+
+def _mentions_interpreter(node: ast.AST, names: frozenset[str]) -> bool:
+    return any(
+        (isinstance(child, ast.Attribute) and ast.unparse(child) == "sys.executable")
+        or (isinstance(child, ast.Name) and child.id in names)
+        for child in ast.walk(node)
+    )
+
+
+def _interpreter_names(node: ast.AST) -> frozenset[str]:
+    """Return the local names that `node` binds to a value holding `sys.executable`."""
+    return frozenset(
+        target.id
+        for child in ast.walk(node)
+        if isinstance(child, ast.Assign) and _mentions_interpreter(child.value, frozenset())
+        for target in child.targets
+        if isinstance(target, ast.Name)
+    )
+
+
+def _passes_interpreter(call: ast.Call, names: frozenset[str]) -> bool:
+    """Return whether `call` receives `sys.executable`, directly or through a local name, as a launcher argv does."""
+    arguments = [*call.args, *(keyword.value for keyword in call.keywords)]
+    return any(_mentions_interpreter(argument, names) for argument in arguments)
+
+
+def _starts_process(node: ast.AST, scope: _Scope, *, follow: bool = True) -> bool:
     """Return whether `node`, or a module helper that it calls, starts a process."""
+    names = _interpreter_names(node)
     for child in ast.walk(node):
-        if isinstance(child, ast.Attribute) and ast.unparse(child) == "sys.executable":
+        if not isinstance(child, ast.Call):
+            continue
+        called = ast.unparse(child.func)
+        head, dot, rest = called.partition(".")
+        if scope.imports.get(head, head) + dot + rest in _PROCESS_CALLS or _passes_interpreter(child, names):
             return True
-        if isinstance(child, ast.Call):
-            called = ast.unparse(child.func)
-            if called in _PROCESS_CALLS:
-                return True
-            if follow and called in helpers and _starts_process(helpers[called], helpers, follow=False):
-                return True
+        if follow and called in scope.helpers and _starts_process(scope.helpers[called], scope, follow=False):
+            return True
     return False
 
 
@@ -178,13 +256,11 @@ def _markers(test: TestNode, marker: str) -> list[str]:
     ]
 
 
-def _test_findings(
-    path: str, name: str, test: TestNode, literals: dict[str, int], helpers: dict[str, TestNode], row_cap: int
-) -> Iterator[Finding]:
-    values = _parametrize_values(test)
-    rows = [_row_count(item, literals) for item in values]
-    for item, count in zip(values, rows):
-        if _is_range(item) and (count is None or count > row_cap):
+def _test_findings(path: str, name: str, test: TestNode, scope: _Scope, row_cap: int) -> Iterator[Finding]:
+    tables = _tables(test)
+    rows = [_row_count(values, scope.literals) for _, values in tables]
+    for (names, values), count in zip(tables, rows):
+        if _is_range(values) and (count is None or count > row_cap or not names.isdisjoint(_TRIAL_NAMES)):
             trials = "an unknown number of" if count is None else str(count)
             yield Finding("range-trials", path, test.lineno, name, f"parametrize over range runs {trials} trials")
         elif count is not None and count > row_cap:
@@ -194,13 +270,10 @@ def _test_findings(
     if len(rows) > 1 and len(known) == len(rows) and cases > row_cap:
         product = " x ".join(map(str, known))
         yield Finding("cross-product-over-cap", path, test.lineno, name, f"{product} = {cases} cases, cap {row_cap}")
-    if cases > 1 and _starts_process(test, helpers):
-        yield Finding("subprocess-per-row", path, test.lineno, name, f"starts a process for each of {cases} cases")
-
-
-def _new_tests(module: ast.Module, old: ast.Module) -> Iterator[tuple[str, TestNode]]:
-    existing = {name for name, _ in _tests(old)}
-    return ((name, test) for name, test in _tests(module) if name not in existing)
+    unknown = len(known) < len(rows)
+    if (cases > 1 or unknown) and _starts_process(test, scope):
+        each = "each case" if unknown else f"each of {cases} cases"
+        yield Finding("subprocess-per-row", path, test.lineno, name, f"starts a process for {each}")
 
 
 def _parse(path: str, source: str) -> ast.Module:
@@ -208,6 +281,34 @@ def _parse(path: str, source: str) -> ast.Module:
         return ast.parse(source, filename=path)
     except SyntaxError as exc:
         raise fromargs.CliError(f"cannot parse {path}: {exc.msg} (line {exc.lineno})") from exc
+
+
+def _file_findings(
+    path: str, module: ast.Module, old: ast.Module, row_cap: int, marker: str
+) -> tuple[list[Finding], list[tuple[str, str, int, str]]]:
+    """Return the shape findings and the added acceptance markers of the tests in one changed file.
+
+    A test that `old` also holds keeps only the findings and markers that it did not have in `old`.
+    """
+    scope, old_scope, old_tests = _Scope.of(module), _Scope.of(old), dict(_tests(old))
+    findings: list[Finding] = []
+    marked: list[tuple[str, str, int, str]] = []
+    for name, test in _tests(module):
+        found = list(_test_findings(path, name, test, scope, row_cap))
+        markers = _markers(test, marker)
+        if (previous := old_tests.get(name)) is not None:
+            seen = Counter((item.kind, item.detail) for item in _test_findings(path, name, previous, old_scope, row_cap))
+            kept: list[Finding] = []
+            for item in found:
+                if seen[item.kind, item.detail] > 0:
+                    seen[item.kind, item.detail] -= 1
+                else:
+                    kept.append(item)
+            found = kept
+            markers = [value for value in markers if value not in _markers(previous, marker)]
+        findings.extend(found)
+        marked.extend((path, name, test.lineno, value) for value in markers)
+    return findings, marked
 
 
 def _beside_base(head: _Revision, path: str) -> Finding | None:
@@ -221,28 +322,31 @@ def _beside_base(head: _Revision, path: str) -> Finding | None:
 
 
 def _marker_counts(head: _Revision, marker: str) -> Counter[str]:
-    """Count each acceptance-marker value across every test file in `head`."""
+    """Count the tests in `head` that carry each acceptance-marker value."""
     before: list[str] = ["--untracked"] if head.name is None else []
     after: list[str] = [] if head.name is None else [head.name]
     pattern = rf"mark\.{re.escape(marker)}\("
-    grep = run_git(["grep", *before, "-n", "-E", "-e", pattern, *after, "--", "*.py"], cwd=head.root)
+    grep = run_git(["grep", *before, "-l", "-z", "-E", "-e", pattern, *after, "--", "*.py"], cwd=head.root)
     if grep.returncode > 1:
         raise fromargs.CliError(f"git grep failed: {grep.stderr.strip()}")
-    found = grep.stdout
-    value = re.compile(rf"""mark\.{re.escape(marker)}\(\s*["']([^"']+)["']""")
     counts: Counter[str] = Counter()
-    for line in found.splitlines():
-        located = line.removeprefix(f"{head.name}:") if head.name else line
-        path, _, content = located.partition(":")
-        if _is_test_file(path):
-            counts.update(value.findall(content))
+    for entry in grep.stdout.split("\0"):
+        path = entry.removeprefix(f"{head.name}:") if head.name else entry
+        if not _is_test_file(path):
+            continue
+        try:
+            module = ast.parse(head.read(path) or "", filename=path)
+        except SyntaxError:
+            continue
+        for _, test in _tests(module):
+            counts.update(set(_markers(test, marker)))
     return counts
 
 
 def suite_shape(
     *, base: str, head: str | None = None, row_cap: int = DEFAULT_ROW_CAP, marker: str = "ac"
 ) -> dict[str, object]:
-    """Report test-shape findings for the new Python tests after a base revision.
+    """Report test-shape findings for the Python tests that changed after a base revision.
 
     Parameters
     ----------
@@ -264,16 +368,15 @@ def suite_shape(
     tip = _Revision(root, None if head is None else _verified_revision(root, head))
     findings: list[Finding] = []
     marked: list[tuple[str, str, int, str]] = []
-    for status, path in _changed_test_files(root, _verified_revision(root, base), tip.name):
+    for status, path, base_path in _changed_test_files(root, _verified_revision(root, base), tip.name):
         if status == "A" and (finding := _beside_base(tip, path)) is not None:
             findings.append(finding)
         module = _parse(path, tip.read(path) or "")
-        old = _parse(path, _git(root, ["show", f"{base}:{path}"]) or "") if status == "M" else ast.Module([], [])
-        literals = _module_literals(module)
-        helpers = {node.name: node for node in module.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
-        for name, test in _new_tests(module, old):
-            findings.extend(_test_findings(path, name, test, literals, helpers, row_cap))
-            marked.extend((path, name, test.lineno, value) for value in _markers(test, marker))
+        old_source = _git(root, ["show", f"{base}:{base_path}"]) if base_path else None
+        old = _parse(base_path, old_source) if base_path and old_source else ast.Module([], [])
+        file_findings, file_markers = _file_findings(path, module, old, row_cap, marker)
+        findings.extend(file_findings)
+        marked.extend(file_markers)
     counts = _marker_counts(tip, marker) if marked else Counter[str]()
     findings.extend(
         Finding("repeated-ac-marker", path, line, name, f"{value} is on {counts[value]} tests")
@@ -286,7 +389,7 @@ def suite_shape(
 def build_app() -> fromargs.App:
     return fromargs.App(
         "test-shape",
-        help="Report test-shape findings for the new Python tests after a base revision.",
+        help="Report test-shape findings for the Python tests that changed after a base revision.",
         help_formatter="plain",
         default_command=suite_shape,
     )

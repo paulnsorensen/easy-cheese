@@ -19,7 +19,9 @@ import pytest
 OLD_TABLE = list(range(20))
 
 
-@pytest.mark.ac("gh-1:AC-1")
+@pytest.mark.ac(
+    "gh-1:AC-1"
+)
 def test_widget_accepts_a_name():
     assert True
 
@@ -27,6 +29,22 @@ def test_widget_accepts_a_name():
 @pytest.mark.parametrize("value", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
 def test_widget_old_table(value):
     assert value >= 0
+
+
+@pytest.mark.parametrize("value", [0, 1, 2])
+def test_widget_small_table(value):
+    assert value >= 0
+
+
+@pytest.mark.parametrize("trial", range(2))
+def test_widget_trials(trial):
+    assert trial >= 0
+'''
+
+GROWN_TABLE = '''
+@pytest.mark.ac("gh-1:AC-1")
+@pytest.mark.parametrize("value", [0, 1, 2, 3, 4, 5, 6, 7, 8])
+def test_widget_small_table(value):
 '''
 
 BASE_FILE_ADDITION = '''
@@ -39,6 +57,7 @@ def test_widget_new_table(value):
 PRESS_FILE = '''
 import subprocess
 import sys
+from subprocess import check_call
 
 import pytest
 
@@ -57,6 +76,11 @@ def test_hostile(name):
 
 @pytest.mark.parametrize("trial", range(200))
 def test_trials(trial):
+    assert trial >= 0
+
+
+@pytest.mark.parametrize("trial", range(5))
+def test_five_trials(trial):
     assert trial >= 0
 
 
@@ -82,6 +106,22 @@ def test_exit(code):
     run(f"raise SystemExit({code})")
 
 
+@pytest.mark.parametrize("code", [str(number) for number in range(2)])
+def test_aliased_exit(code):
+    check_call(["true", code])
+
+
+@pytest.mark.parametrize("code", ["0", "1"])
+def test_interpreter_argv(code, launch):
+    command = [sys.executable, "-c", code]
+    launch(command)
+
+
+@pytest.mark.parametrize("module", ["a", "b"])
+def test_argv_names_the_interpreter(module):
+    assert [sys.executable, "-m", module][0]
+
+
 def test_one_process():
     run("pass")
 
@@ -91,6 +131,7 @@ def test_classes(value):
     assert value
 
 
+# A comment that quotes a marker is not a test: @pytest.mark.ac("gh-2:AC-1")
 class TestGroup:
     @pytest.mark.ac("gh-1:AC-1")
     def test_marked(self):
@@ -106,14 +147,30 @@ def test_gizmo_has_no_base_file():
     assert True
 '''
 
+NON_ASCII_FILE = '''
+import pytest
+
+
+@pytest.mark.parametrize("value", [0, 1, 2, 3, 4, 5, 6, 7, 8])
+def test_café_table(value):
+    assert value >= 0
+'''
+
 EXPECTED = {
     ("press-file-beside-base", "tests/test_press_widget.py", ""),
     ("rows-over-cap", "tests/test_press_widget.py", "test_hostile"),
     ("range-trials", "tests/test_press_widget.py", "test_trials"),
+    ("range-trials", "tests/test_press_widget.py", "test_five_trials"),
     ("cross-product-over-cap", "tests/test_press_widget.py", "test_cross"),
     ("subprocess-per-row", "tests/test_press_widget.py", "test_exit"),
+    ("subprocess-per-row", "tests/test_press_widget.py", "test_aliased_exit"),
+    ("subprocess-per-row", "tests/test_press_widget.py", "test_interpreter_argv"),
+    ("range-trials", "tests/test_widget.py", "test_widget_trials"),
     ("repeated-ac-marker", "tests/test_press_widget.py", "TestGroup.test_marked"),
     ("rows-over-cap", "tests/test_widget.py", "test_widget_new_table"),
+    ("rows-over-cap", "tests/test_widget.py", "test_widget_small_table"),
+    ("repeated-ac-marker", "tests/test_widget.py", "test_widget_small_table"),
+    ("rows-over-cap", "tests/test_café.py", "test_café_table"),
 }
 
 
@@ -135,11 +192,16 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def press_pass(repo: Path) -> None:
-    """Add the tests that a bloated Press pass writes, without committing them."""
-    with (repo / "tests" / "test_widget.py").open("a") as handle:
-        _ = handle.write(BASE_FILE_ADDITION)
+    """Add and grow the tests that a bloated Press pass writes, without committing them."""
+    base = repo / "tests" / "test_widget.py"
+    old_table = '@pytest.mark.parametrize("value", [0, 1, 2])\ndef test_widget_small_table(value):\n'
+    trials = '@pytest.mark.parametrize("trial", range(2))\n'
+    grown = base.read_text().replace(old_table, GROWN_TABLE.lstrip())
+    grown = grown.replace(trials, '@pytest.mark.parametrize("attempt", range(2))\n' + trials)
+    _ = base.write_text(grown + BASE_FILE_ADDITION)
     _ = (repo / "tests" / "test_press_widget.py").write_text(PRESS_FILE)
     _ = (repo / "tests" / "test_press_gizmo.py").write_text(LONE_PRESS_FILE)
+    _ = (repo / "tests" / "test_café.py").write_text(NON_ASCII_FILE)
 
 
 def keys(report: dict[str, object]) -> list[tuple[str, str, str]]:
@@ -147,13 +209,15 @@ def keys(report: dict[str, object]) -> list[tuple[str, str, str]]:
     return [(item.kind, item.path, item.test) for item in findings]
 
 
-def test_each_bloat_pattern_in_new_tests_is_reported_once_and_existing_tests_are_not(repo: Path) -> None:
+def test_each_bloat_pattern_in_changed_tests_is_reported_once_and_unchanged_tests_are_not(repo: Path) -> None:
     press_pass(repo)
 
     worktree = suite_shape(base="HEAD")
 
     assert worktree["clean"] is False
     assert sorted(keys(worktree)) == sorted(EXPECTED)
+    markers = {item.detail for item in cast(list[Finding], worktree["findings"]) if item.kind == "repeated-ac-marker"}
+    assert markers == {"gh-1:AC-1 is on 3 tests"}
 
     _ = git(repo, "add", ".")
     _ = git(repo, "commit", "-qm", "press")
@@ -168,6 +232,16 @@ def test_a_diff_without_new_tests_is_clean() -> None:
     assert suite_shape(base="HEAD") == {
         "base": "HEAD", "head": "worktree", "row_cap": 8, "clean": True, "findings": [],
     }
+
+
+def test_a_renamed_test_file_is_compared_with_its_old_path(repo: Path) -> None:
+    _ = git(repo, "mv", "tests/test_widget.py", "tests/test_renamed_widget.py")
+
+    staged = suite_shape(base="HEAD")
+    _ = git(repo, "commit", "-qm", "rename")
+    committed = suite_shape(base="HEAD~1", head="HEAD")
+
+    assert (staged["clean"], committed["clean"]) == (True, True)
 
 
 @pytest.mark.parametrize(
