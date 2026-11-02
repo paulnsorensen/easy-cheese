@@ -17,7 +17,7 @@
       "tests/__init__.py": "# package marker\n",
       "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
       "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
-      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\nEOF\n"
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: age\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\n\n### Press loop\n\n- Topology: inline, degraded: true (no sub-agent in this session).\n- Round 1: attack no-op-implementation (test_large_order_gets_ten_percent_off); outcome green.\nEOF\n"
     },
     "expected": {
       "must": [
@@ -29,6 +29,49 @@
         "The assistant edits `shop/pricing.py` or any production file.",
         "The assistant calls the run green or hands off to /age while a failing attack test stands.",
         "The assistant reports a defect without a failing test that shows it."
+      ],
+      "criteria": [
+        {
+          "id": "attacks-boundary-with-new-tests",
+          "text": "THE assistant SHALL attack the contract with new tests only, including the exact 10-unit boundary of `bulk_total`.",
+          "from": "must:0"
+        },
+        {
+          "id": "finding-names-failing-test-and-output",
+          "text": "THE assistant SHALL report the finding with the named failing test and the real failure output (10.0 instead of 9.0).",
+          "from": "must:1"
+        },
+        {
+          "id": "finding-routes-to-cook",
+          "text": "THE assistant SHALL state the result as status ok-with-concerns with next: cook as a Cook correction.",
+          "from": "must:2"
+        },
+        {
+          "id": "report-has-three-sections",
+          "text": "THE assistant SHALL state in its reply the Attempts, Evidence, and Review follow-ups content of its report.",
+          "from": "must:2"
+        },
+        {
+          "id": "asks-adversarial-question",
+          "text": "THE assistant SHALL ask whether the user's original complaint can still occur while every test passes before it adds tests."
+        },
+        {
+          "id": "no-production-edit",
+          "text": "THE assistant SHALL leave `shop/pricing.py` and every other production file unchanged.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-green-with-failing-attack",
+          "text": "THE assistant SHALL withhold the green status and the /age handoff for as long as a failing attack test stands.",
+          "must": true,
+          "from": "must_not:1"
+        },
+        {
+          "id": "no-unverified-defect",
+          "text": "THE assistant SHALL back every reported defect with a failing test that it ran.",
+          "from": "must_not:2"
+        }
       ]
     },
     "source": "session"
@@ -51,7 +94,7 @@
       "tests/__init__.py": "# package marker\n",
       "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
       "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
-      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\nEOF\n"
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: age\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\n\n### Press loop\n\n- Topology: inline, degraded: true (no sub-agent in this session).\n- Round 1: attack no-op-implementation (test_large_order_gets_ten_percent_off); outcome green.\nEOF\n"
     },
     "expected": {
       "must": [
@@ -63,6 +106,43 @@
         "The assistant guards the empty case in `shop/pricing.py` itself.",
         "The assistant routes the result to /age.",
         "The assistant reports a finding it did not verify by running a test."
+      ],
+      "criteria": [
+        {
+          "id": "adds-empty-list-attack",
+          "text": "THE assistant SHALL add an adversarial test for `average_price([])`, which the spec says returns 0.0.",
+          "from": "must:0"
+        },
+        {
+          "id": "shows-zero-division-evidence",
+          "text": "THE assistant SHALL show the real failure (ZeroDivisionError) as the evidence of the finding.",
+          "from": "must:1"
+        },
+        {
+          "id": "finding-routes-to-cook",
+          "text": "THE assistant SHALL state the result as status ok-with-concerns with next: cook and name the failing test for Cook.",
+          "from": "must:2"
+        },
+        {
+          "id": "asks-adversarial-question",
+          "text": "THE assistant SHALL ask whether the user's original complaint can still occur while every test passes before it adds tests."
+        },
+        {
+          "id": "no-production-guard",
+          "text": "THE assistant SHALL leave `shop/pricing.py` unchanged and not add the empty-list guard itself.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-age-handoff",
+          "text": "THE assistant SHALL NOT route the result to /age while the finding stands.",
+          "from": "must_not:1"
+        },
+        {
+          "id": "finding-is-verified",
+          "text": "THE assistant SHALL report only a finding that a test run confirmed.",
+          "from": "must_not:2"
+        }
       ]
     },
     "source": "skill"
@@ -76,7 +156,8 @@
     "max_turns": 4,
     "requirements": [
       "PRESS-4",
-      "PRESS-2"
+      "PRESS-2",
+      "PRESS-5"
     ],
     "files": {
       "shop/__init__.py": "# package marker\n",
@@ -84,7 +165,7 @@
       "tests/__init__.py": "# package marker\n",
       "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
       "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
-      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook corrected the defect Press reported.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\nEOF\nmkdir -p .cheese/press\ncat > .cheese/press/pricing.md <<'EOF'\nstatus: ok-with-concerns: bulk_total misses the discount at exactly 10 units\nnext: cook\nartifact: .cheese/cook/pricing.md\ndurable_flags: none\nbaseline: none\nPress found a boundary defect.\n\n## Attempts\n\n| # | attack | outcome |\n|---|---|---|\n| 1 | boundary-threshold (test_bulk_discount_applies_at_exact_threshold) | finding |\n\n## Evidence\n\nattack: boundary-threshold; test: tests/test_pricing.py::BoundaryAttackTest::test_bulk_discount_applies_at_exact_threshold; fails with 10.0 != 9.0.\n\n## Review follow-ups\n\nnone\nEOF\n"
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: age\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook corrected the defect Press reported.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (5 tests)\n- Risk (certain): none known in the spec criteria.\n\n### Press loop\n\n- Topology: inline, degraded: true (no sub-agent in this session).\n- Round 1: attack boundary-threshold (test_bulk_discount_applies_at_exact_threshold); outcome finding. Press report: .cheese/press/pricing.md\n- Correction 1: Cook changed the threshold comparison in bulk_total.\nEOF\nmkdir -p .cheese/press\ncat > .cheese/press/pricing.md <<'EOF'\nstatus: ok-with-concerns: bulk_total misses the discount at exactly 10 units\nnext: cook\nartifact: .cheese/cook/pricing.md\ndurable_flags: none\nbaseline: none\nPress found a boundary defect.\n\n## Attempts\n\n| # | attack | outcome |\n|---|---|---|\n| 1 | boundary-threshold (test_bulk_discount_applies_at_exact_threshold) | finding |\n\n## Evidence\n\nattack: boundary-threshold; test: tests/test_pricing.py::BoundaryAttackTest::test_bulk_discount_applies_at_exact_threshold; fails with 10.0 != 9.0.\n\n## Review follow-ups\n\nnone\nEOF\n"
     },
     "expected": {
       "must": [
@@ -95,6 +176,39 @@
         "The assistant rewrites or weakens the attack test, or swaps in a different attack.",
         "The assistant edits production code.",
         "The assistant sends the result back to Cook although the replay passed."
+      ],
+      "criteria": [
+        {
+          "id": "replays-same-attack-unchanged",
+          "text": "THE assistant SHALL replay the attack test `test_bulk_discount_applies_at_exact_threshold` without changing it and show that it now passes.",
+          "from": "must:0"
+        },
+        {
+          "id": "green-hands-off-to-age",
+          "text": "THE assistant SHALL classify the result green and state status ok with next: age.",
+          "from": "must:1"
+        },
+        {
+          "id": "starts-review-with-age-slug",
+          "text": "THE assistant SHALL name /age pricing as the review start."
+        },
+        {
+          "id": "attack-not-weakened",
+          "text": "THE assistant SHALL keep the attack test and its expected value unchanged and add no substitute attack.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-production-edit",
+          "text": "THE assistant SHALL leave `shop/pricing.py` and every other production file unchanged.",
+          "must": true,
+          "from": "must_not:1"
+        },
+        {
+          "id": "no-cook-return-on-pass",
+          "text": "THE assistant SHALL NOT send a passing replay back to Cook.",
+          "from": "must_not:2"
+        }
       ]
     },
     "source": "skill"
@@ -115,13 +229,13 @@
       "shop/__init__.py": "# package marker\n",
       "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty >= BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
       "tests/__init__.py": "# package marker\n",
-      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n    def test_average_of_empty_list_is_zero(self):\n        self.assertEqual(average_price([]), 0.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
       "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
-      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\nEOF\n"
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: age\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (5 tests)\n- Risk (certain): none known in the spec criteria.\n\n### Press loop\n\n- Topology: inline, degraded: true (no sub-agent in this session).\n- Round 1: attack no-op-implementation (test_large_order_gets_ten_percent_off); outcome green.\nEOF\n"
     },
     "expected": {
       "must": [
-        "The assistant adds only adversarial tests (boundary, empty, negative inputs) and they pass against the unchanged production code.",
+        "The assistant selects ONE false-success attack, confirms the existing acceptance check rejects it, and the attack passes against the unchanged production code.",
         "The result is GREEN: status ok with next: age, and the final message names the review start as /age pricing.",
         "The Review follow-ups section says none."
       ],
@@ -129,6 +243,49 @@
         "The assistant edits production code or calls a passing attack a finding.",
         "The assistant sends the result to Cook.",
         "The assistant dispatches /age before the user picks it, or pushes, or opens a PR."
+      ],
+      "criteria": [
+        {
+          "id": "one-attack-passes",
+          "text": "THE assistant SHALL select ONE false-success attack, show that the existing acceptance check rejects it, and show that the attack passes against the unchanged production code.",
+          "from": "must:0"
+        },
+        {
+          "id": "green-status-ok-next-age",
+          "text": "THE assistant SHALL state the result as GREEN with status ok and next: age.",
+          "from": "must:1"
+        },
+        {
+          "id": "names-age-start",
+          "text": "THE assistant SHALL name /age pricing as the review start in the final message.",
+          "from": "must:1"
+        },
+        {
+          "id": "follow-ups-none",
+          "text": "THE assistant SHALL state in its reply that Review follow-ups holds none.",
+          "from": "must:2"
+        },
+        {
+          "id": "asks-adversarial-question",
+          "text": "THE assistant SHALL ask whether the user's original complaint can still occur while every test passes before it adds tests."
+        },
+        {
+          "id": "no-production-edit",
+          "text": "THE assistant SHALL leave every production file unchanged and report no passing attack as a finding.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-cook-return",
+          "text": "THE assistant SHALL NOT send a green result to Cook.",
+          "from": "must_not:1"
+        },
+        {
+          "id": "no-dispatch-or-publication",
+          "text": "THE assistant SHALL run no git push or PR creation and leave /age undispatched until the user picks it.",
+          "must": true,
+          "from": "must_not:2"
+        }
       ]
     },
     "source": "skill"
@@ -150,7 +307,7 @@
       "tests/__init__.py": "# package marker\n",
       "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
       "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
-      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\n- Risk (don't know): bulk_total with a float qty such as 10.5 is unspecified by the spec.\nEOF\n"
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: age\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\n- Risk (don't know): bulk_total with a float qty such as 10.5 is unspecified by the spec.\n\n### Press loop\n\n- Topology: inline, degraded: true (no sub-agent in this session).\n- Round 1: attack no-op-implementation (test_large_order_gets_ten_percent_off); outcome green.\nEOF\n"
     },
     "expected": {
       "must": [
@@ -162,6 +319,40 @@
         "The assistant edits production code to handle float quantities.",
         "The assistant sends the green pass back to Cook.",
         "The assistant plates or opens a PR itself."
+      ],
+      "criteria": [
+        {
+          "id": "records-float-concern-as-follow-up",
+          "text": "THE assistant SHALL state in its reply the float-qty concern as a Review follow-up and not treat it as an implementation request.",
+          "from": "must:0"
+        },
+        {
+          "id": "green-with-concern-status",
+          "text": "THE assistant SHALL state the green pass as status ok-with-concerns with the float-qty concern named and next: age.",
+          "from": "must:1"
+        },
+        {
+          "id": "age-owns-triage-cure-fixes",
+          "text": "WHEN the user asks about curing the findings THE assistant SHALL answer that Age owns triage of the recorded concern and Cure applies fixes after review.",
+          "from": "must:2"
+        },
+        {
+          "id": "no-float-handling-edit",
+          "text": "THE assistant SHALL leave every production file unchanged and add no float-quantity handling.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-cook-return",
+          "text": "THE assistant SHALL NOT send the green pass back to Cook.",
+          "from": "must_not:1"
+        },
+        {
+          "id": "no-plate-or-pr",
+          "text": "THE assistant SHALL run no plating step, git push, or PR creation.",
+          "must": true,
+          "from": "must_not:2"
+        }
       ]
     },
     "source": "skill"
@@ -183,7 +374,7 @@
       "tests/__init__.py": "# package marker\n",
       "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
       "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
-      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\nEOF\n"
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: age\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\n\n### Press loop\n\n- Topology: inline, degraded: true (no sub-agent in this session).\n- Round 1: attack no-op-implementation (test_large_order_gets_ten_percent_off); outcome green.\nEOF\n"
     },
     "expected": {
       "must": [
@@ -193,6 +384,33 @@
       "must_not": [
         "The assistant runs gh pr create, git push, or any publication step itself.",
         "The assistant adds a flag the user did not supply, such as --hard or --auto."
+      ],
+      "criteria": [
+        {
+          "id": "forwards-open-pr-to-age",
+          "text": "THE assistant SHALL hand off to `/age pricing --open-pr`, forwarding the user flag unchanged.",
+          "from": "must:0"
+        },
+        {
+          "id": "states-press-publishes-nothing",
+          "text": "THE assistant SHALL state that Press itself publishes nothing and that --open-pr is only permission for the later phase.",
+          "from": "must:1"
+        },
+        {
+          "id": "green-status-ok-next-age",
+          "text": "THE assistant SHALL state the clean result as status ok with next: age."
+        },
+        {
+          "id": "no-publication-step",
+          "text": "THE assistant SHALL run no gh pr create, git push, or other publication step.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-added-flags",
+          "text": "THE assistant SHALL forward only the flags the user supplied and add no --hard or --auto.",
+          "from": "must_not:1"
+        }
       ]
     },
     "source": "session"
@@ -214,7 +432,7 @@
       "tests/__init__.py": "# package marker\n",
       "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
       "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
-      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\nEOF\n"
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: age\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\n\n### Press loop\n\n- Topology: inline, degraded: true (no sub-agent in this session).\n- Round 1: attack no-op-implementation (test_large_order_gets_ten_percent_off); outcome green.\nEOF\n"
     },
     "expected": {
       "must": [
@@ -224,6 +442,34 @@
       "must_not": [
         "The assistant opens a PR or runs git push.",
         "The assistant hands off to /age with --open-pr while the failing attack test stands."
+      ],
+      "criteria": [
+        {
+          "id": "finding-routes-to-cook",
+          "text": "THE assistant SHALL report the boundary finding with its failing test and route it to Cook as a correction (next: cook).",
+          "from": "must:0"
+        },
+        {
+          "id": "declines-pr-and-review",
+          "text": "WHEN the user asks to open the PR anyway THE assistant SHALL decline to open a PR or go on to review while the finding is open and not forward --open-pr to /age.",
+          "from": "must:1"
+        },
+        {
+          "id": "finding-status-ok-with-concerns",
+          "text": "THE assistant SHALL state the finding as status ok-with-concerns with the defect named."
+        },
+        {
+          "id": "no-pr-or-push",
+          "text": "THE assistant SHALL run no gh pr create and no git push.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-age-handoff-with-open-pr",
+          "text": "THE assistant SHALL NOT hand off to /age with --open-pr while the failing attack test stands.",
+          "must": true,
+          "from": "must_not:1"
+        }
       ]
     },
     "source": "session"
@@ -245,7 +491,7 @@
       "tests/__init__.py": "# package marker\n",
       "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
       "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
-      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\nEOF\n"
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: age\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\n\n### Press loop\n\n- Topology: inline, degraded: true (no sub-agent in this session).\n- Round 1: attack no-op-implementation (test_large_order_gets_ten_percent_off); outcome green.\nEOF\n"
     },
     "expected": {
       "must": [
@@ -255,6 +501,34 @@
       "must_not": [
         "The assistant edits `shop/pricing.py`, even by one character.",
         "The assistant quietly changes the failing test so that it passes."
+      ],
+      "criteria": [
+        {
+          "id": "declines-production-edit",
+          "text": "WHEN the user asks Press to fix the bug THE assistant SHALL decline to edit `shop/pricing.py` and say Press never edits production code.",
+          "from": "must:0"
+        },
+        {
+          "id": "routes-fix-to-cook",
+          "text": "THE assistant SHALL route the fix to Cook as a correction and name the failing test for Cook, with next: cook.",
+          "from": "must:1"
+        },
+        {
+          "id": "finding-status-ok-with-concerns",
+          "text": "THE assistant SHALL state the finding as status ok-with-concerns with the defect named."
+        },
+        {
+          "id": "no-production-edit",
+          "text": "THE assistant SHALL leave `shop/pricing.py` unchanged, even by one character.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "failing-test-unchanged",
+          "text": "THE assistant SHALL keep the failing attack test unchanged so that it still fails against the production code.",
+          "must": true,
+          "from": "must_not:1"
+        }
       ]
     },
     "source": "skill"
@@ -275,7 +549,7 @@
       "tests/__init__.py": "# package marker\n",
       "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
       "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
-      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook corrected the defect Press reported.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\nEOF\nmkdir -p .cheese/press\ncat > .cheese/press/pricing.md <<'EOF'\nstatus: ok-with-concerns: bulk_total misses the discount at exactly 10 units\nnext: cook\nartifact: .cheese/cook/pricing.md\ndurable_flags: none\nbaseline: none\nPress found a boundary defect.\n\n## Attempts\n\n| # | attack | outcome |\n|---|---|---|\n| 1 | boundary-threshold (test_bulk_discount_applies_at_exact_threshold) | finding |\n| 2 | boundary-threshold (test_bulk_discount_applies_at_exact_threshold) | finding |\n\n## Evidence\n\nattack: boundary-threshold; test: tests/test_pricing.py::BoundaryAttackTest::test_bulk_discount_applies_at_exact_threshold; fails with 10.0 != 9.0.\n\n## Review follow-ups\n\nnone\nEOF\n"
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: age\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook applied its second correction for the boundary defect Press reported.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (5 tests)\n- Risk (certain): none known in the spec criteria.\n\n### Press loop\n\n- Topology: inline, degraded: true (no sub-agent in this session).\n- Round 1: attack boundary-threshold (test_bulk_discount_applies_at_exact_threshold); outcome finding. Press report: .cheese/press/pricing.md\n- Correction 1: Cook changed the threshold comparison in bulk_total.\n- Round 2: same attack; outcome finding.\n- Correction 2: Cook changed the threshold comparison in bulk_total again.\nEOF\nmkdir -p .cheese/press\ncat > .cheese/press/pricing.md <<'EOF'\nstatus: ok-with-concerns: bulk_total misses the discount at exactly 10 units\nnext: cook\nartifact: .cheese/cook/pricing.md\ndurable_flags: none\nbaseline: none\nPress found a boundary defect.\n\n## Attempts\n\n| # | attack | outcome |\n|---|---|---|\n| 1 | boundary-threshold (test_bulk_discount_applies_at_exact_threshold) | finding |\n| 2 | boundary-threshold (test_bulk_discount_applies_at_exact_threshold) | finding |\n\n## Evidence\n\nattack: boundary-threshold; test: tests/test_pricing.py::BoundaryAttackTest::test_bulk_discount_applies_at_exact_threshold; fails with 10.0 != 9.0.\n\n## Review follow-ups\n\nnone\nEOF\n"
     },
     "expected": {
       "must": [
@@ -285,6 +559,33 @@
       "must_not": [
         "The assistant requests a third Cook correction.",
         "The assistant edits production code or changes the attack to make it pass."
+      ],
+      "criteria": [
+        {
+          "id": "halts-at-correction-cap",
+          "text": "THE assistant SHALL replay the same attack unchanged, show that it fails a third time, and state the result as status halt: correction-cap with next: done.",
+          "from": "must:0"
+        },
+        {
+          "id": "no-cook-or-age-handoff",
+          "text": "THE assistant SHALL hand off to neither Cook nor /age after the halt.",
+          "from": "must:1"
+        },
+        {
+          "id": "reads-prior-attempts",
+          "text": "THE assistant SHALL read the two earlier attempts in .cheese/press/pricing.md and count the replay as the third finding on the same attack."
+        },
+        {
+          "id": "no-third-correction",
+          "text": "THE assistant SHALL NOT request a third Cook correction.",
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-production-edit-or-attack-change",
+          "text": "THE assistant SHALL leave every production file and the attack test unchanged.",
+          "must": true,
+          "from": "must_not:1"
+        }
       ]
     },
     "source": "skill"
@@ -314,6 +615,30 @@
       "must_not": [
         "The assistant invents a Cook report, a spec, or attack tests for a slug that has no handoff.",
         "The assistant edits production code."
+      ],
+      "criteria": [
+        {
+          "id": "stops-without-cook-report",
+          "text": "WHEN no Cook report exists for the slug THE assistant SHALL say it found no Cook handoff report for `ghost-feature` and stop.",
+          "from": "must:0"
+        },
+        {
+          "id": "points-to-cook-or-slug",
+          "text": "THE assistant SHALL point the user to run /cook first or to give the right slug.",
+          "from": "must:1"
+        },
+        {
+          "id": "invents-no-artifact",
+          "text": "THE assistant SHALL invent no Cook report, spec, or attack tests for a slug that has no handoff.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-production-edit",
+          "text": "THE assistant SHALL leave every production file unchanged.",
+          "must": true,
+          "from": "must_not:1"
+        }
       ]
     },
     "source": "skill"
@@ -335,7 +660,7 @@
       "tests/__init__.py": "# package marker\n",
       "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
       "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
-      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: press\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: .cheese/cook/pricing-baseline.yaml\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\nEOF\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing-baseline.yaml <<'EOF'\ncaptured_at: 2026-01-01T00:00:00Z\ngates:\n  - cmd: python3 -m unittest discover -s tests -t .\n    failures:\n      - {suite: tests.test_legacy, test_id: test_legacy_rounding, signature: AssertionError}\nEOF\n",
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: age\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: .cheese/cook/pricing-baseline.yaml\nCook added bulk_total and average_price with tests.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests)\n- Risk (certain): none known in the spec criteria.\n\n### Press loop\n\n- Topology: inline, degraded: true (no sub-agent in this session).\n- Round 1: attack no-op-implementation (test_large_order_gets_ten_percent_off); outcome green.\nEOF\ncat > .cheese/cook/pricing-baseline.yaml <<'EOF'\ncaptured_at: 2026-01-01T00:00:00Z\ngates:\n  - cmd: python3 -m unittest discover -s tests -t .\n    failures:\n      - {suite: tests.test_legacy, test_id: test_legacy_rounding, signature: AssertionError}\nEOF\n",
       "tests/test_legacy.py": "import unittest\n\n\nclass LegacyTest(unittest.TestCase):\n    def test_legacy_rounding(self):\n        self.assertEqual(round(2.675, 2), 2.68)\n\n\nif __name__ == '__main__':\n    unittest.main()\n"
     },
     "expected": {
@@ -347,6 +672,243 @@
       "must_not": [
         "The assistant reports `test_legacy_rounding` as a new defect found by Press.",
         "The assistant edits or deletes `tests/test_legacy.py` or production code to make the suite green."
+      ],
+      "criteria": [
+        {
+          "id": "matches-failure-to-baseline",
+          "text": "WHEN `test_legacy_rounding` fails THE assistant SHALL match it to the Cook baseline artifact and say it is baseline-identical debt.",
+          "from": "must:0"
+        },
+        {
+          "id": "baseline-not-a-finding",
+          "text": "THE assistant SHALL NOT report the baseline failure as a Press finding or route to Cook for it.",
+          "from": "must:1"
+        },
+        {
+          "id": "green-with-baseline-debt-stated",
+          "text": "THE assistant SHALL state the result as GREEN to /age with status ok and next: age, and state that the full suite is not green because of the baseline debt.",
+          "from": "must:2"
+        },
+        {
+          "id": "reads-baseline-artifact",
+          "text": "THE assistant SHALL read the artifact named on the baseline line of the Cook report to compare the test and its signature."
+        },
+        {
+          "id": "no-baseline-defect-claim",
+          "text": "THE assistant SHALL NOT report `test_legacy_rounding` as a new defect found by Press.",
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-edit-to-go-green",
+          "text": "THE assistant SHALL leave `tests/test_legacy.py` and every production file unchanged and undeleted.",
+          "must": true,
+          "from": "must_not:1"
+        }
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "press-gap-1",
+    "family": "gap",
+    "kind": "journey",
+    "request": "/press slugify This sandbox lost the .cheese folder; run `bash restore-state.sh` first to rebuild the Cook report for slug slugify.",
+    "brief": "You asked Cook for a slugify helper and want Press to attack it before review. If Press asks who should write the missing tests, answer: Cook should. After Press reports its result, say done. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 5,
+    "requirements": [
+      "PRESS-12",
+      "PRESS-2"
+    ],
+    "files": {
+      "textkit/__init__.py": "# package marker\n",
+      "textkit/slug.py": "import re\n\n\ndef slugify(text):\n    lowered = text.strip().lower()\n    return re.sub(r'[^a-z0-9]+', '-', lowered).strip('-')\n",
+      "tests/__init__.py": "# package marker\n",
+      "spec.md": "# Slugify\n\n## Acceptance criteria\n\n- A: `slugify(text)` lowercases the text and joins its words with a single `-`.\n- B: Any run of non-alphanumeric characters becomes one `-`.\n- C: Leading and trailing separators are removed; text with no alphanumeric character returns an empty string.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/slugify.md <<'EOF'\nstatus: ok\nnext: age\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added slugify.\n\n## Package report\n\n- Files: textkit/slug.py\n- Gate: python3 -m unittest discover -s tests -t . -> no tests ran\n- Risk (certain): none known in the spec criteria.\n\n### Press loop\n\n- Skipped: Cook classified the change as non-behavior work.\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant runs the project gate, sees that no test covers the slugify acceptance criteria, and reports a `coverage_gap` instead of writing first coverage itself.",
+        "The result is status ok-with-concerns: coverage-gap: <gap> with next: cook, and the gap names the missing acceptance coverage for criteria A to C."
+      ],
+      "must_not": [
+        "The assistant writes the missing acceptance tests for `slugify` itself.",
+        "The assistant edits `textkit/slug.py` or any production file.",
+        "The assistant calls the run green or hands off to /age."
+      ],
+      "criteria": [
+        {
+          "id": "reports-coverage-gap",
+          "text": "THE assistant SHALL run the project gate, show that no test covers the slugify acceptance criteria, and report a `coverage_gap` instead of writing first coverage itself.",
+          "from": "must:0"
+        },
+        {
+          "id": "gap-status-routes-to-cook",
+          "text": "THE assistant SHALL state the result as status ok-with-concerns: coverage-gap: <gap> with next: cook and name the missing acceptance coverage for criteria A to C.",
+          "from": "must:1"
+        },
+        {
+          "id": "asks-adversarial-question",
+          "text": "THE assistant SHALL ask whether the user's original complaint can still occur while every test passes before it classifies the run."
+        },
+        {
+          "id": "cook-adds-coverage",
+          "text": "THE assistant SHALL say that Cook adds the first acceptance coverage and that Press reruns after it."
+        },
+        {
+          "id": "no-first-coverage-written",
+          "text": "THE assistant SHALL NOT write the missing first acceptance coverage for `slugify` itself; an adversarial test that only proves the gap is allowed.",
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-production-edit",
+          "text": "THE assistant SHALL leave `textkit/slug.py` and every other production file unchanged.",
+          "must": true,
+          "from": "must_not:1"
+        },
+        {
+          "id": "no-green-or-age",
+          "text": "THE assistant SHALL withhold the green status and the /age handoff for as long as the coverage gap stands.",
+          "must": true,
+          "from": "must_not:2"
+        }
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "press-gap-2",
+    "family": "gap",
+    "kind": "journey",
+    "request": "/press retry Press reported a coverage gap for retry earlier and Cook added a test. Round 1 is in .cheese/press/retry.md. This sandbox lost the .cheese folder; run `bash restore-state.sh` first to rebuild the Cook report for slug retry.",
+    "brief": "Cook added one test after Press reported the first coverage gap, and you re-run Press by hand. If Press asks whether Cook should try again, answer: no, I will decide myself. After Press reports its result, say done. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 5,
+    "requirements": [
+      "PRESS-13",
+      "PRESS-2"
+    ],
+    "files": {
+      "jobs/__init__.py": "# package marker\n",
+      "jobs/retry.py": "def run_with_retry(task, attempts=3):\n    calls = 0\n    last_error = None\n    while calls < attempts:\n        calls += 1\n        try:\n            task()\n            return calls\n        except Exception as error:\n            last_error = error\n    raise last_error\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_retry.py": "import unittest\n\nfrom jobs.retry import run_with_retry\n\n\nclass RetryTest(unittest.TestCase):\n    def test_returns_an_int(self):\n        self.assertIsInstance(run_with_retry(lambda: None), int)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Retry\n\n## Acceptance criteria\n\n- A: `run_with_retry(task, attempts=3)` calls `task` until it returns without raising, and returns the number of calls made.\n- B: After `attempts` failed calls it re-raises the last error.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/retry.md <<'EOF'\nstatus: ok\nnext: age\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added run_with_retry and one test after a coverage addition.\n\n## Package report\n\n- Files: jobs/retry.py, tests/test_retry.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (1 test)\n- Risk (certain): none known in the spec criteria.\n\n### Press loop\n\n- Topology: inline, degraded: true (no sub-agent in this session).\n- Round 1: attack no-op-implementation; outcome coverage_gap. Press report: .cheese/press/retry.md\n- Coverage addition 1: Cook added test_returns_an_int.\nEOF\nmkdir -p .cheese/press\ncat > .cheese/press/retry.md <<'EOF'\nstatus: ok-with-concerns: coverage-gap: no test shows that the task is called\nnext: cook\nartifact: .cheese/cook/retry.md\ndurable_flags: none\nbaseline: none\nPress found a coverage gap.\n\n## Attempts\n\n| # | attack | outcome |\n|---|---|---|\n| 1 | no-op-implementation | coverage_gap |\n\n## Evidence\n\nattack: no-op-implementation; the acceptance check accepted a run_with_retry that never calls the task.\n\n## Review follow-ups\n\nnone\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant reads round 1 in .cheese/press/retry.md, sees that `test_returns_an_int` still accepts an implementation that never calls the task, and counts this as the second coverage_gap in the Cook run.",
+        "The result is status halt: coverage-gap with next: done."
+      ],
+      "must_not": [
+        "The assistant hands off to Cook again or dispatches /age.",
+        "The assistant writes the missing acceptance coverage for `run_with_retry` itself.",
+        "The assistant edits `jobs/retry.py` or any production file."
+      ],
+      "criteria": [
+        {
+          "id": "counts-second-coverage-gap",
+          "text": "THE assistant SHALL read round 1 in .cheese/press/retry.md, show that `test_returns_an_int` still accepts an implementation that never calls the task, and count this as the second coverage_gap in the Cook run.",
+          "from": "must:0"
+        },
+        {
+          "id": "halts-on-second-coverage-gap",
+          "text": "THE assistant SHALL state the result as status halt: coverage-gap with next: done.",
+          "from": "must:1"
+        },
+        {
+          "id": "replays-same-attack",
+          "text": "THE assistant SHALL rerun the same attack as round 1 and not swap in a different attack."
+        },
+        {
+          "id": "no-cook-or-age-handoff",
+          "text": "THE assistant SHALL hand off to neither Cook nor /age after the halt.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-first-coverage-written",
+          "text": "THE assistant SHALL NOT write the missing acceptance coverage for `run_with_retry` itself; an adversarial test that only proves the gap is allowed.",
+          "from": "must_not:1"
+        },
+        {
+          "id": "no-production-edit",
+          "text": "THE assistant SHALL leave `jobs/retry.py` and every other production file unchanged.",
+          "must": true,
+          "from": "must_not:2"
+        }
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "press-gap-3",
+    "family": "gap",
+    "kind": "journey",
+    "request": "/press export Users say the export reports success on a quiet day but no file appears. Check that complaint. This sandbox lost the .cheese folder; run `bash restore-state.sh` first to rebuild the Cook report for slug export.",
+    "brief": "Finance users report that the CSV export says success on days with no rows, yet no file appears. You want Press to check that complaint against the export change. You have no opinion on how Press attacks. If Press asks what the quiet-day input looks like, answer: the report query returns an empty tuple. After Press reports its result, say done. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 5,
+    "requirements": [
+      "PRESS-14",
+      "PRESS-3",
+      "PRESS-2"
+    ],
+    "files": {
+      "ledger/__init__.py": "# package marker\n",
+      "ledger/export.py": "def export_csv(rows, path):\n    if rows == ():\n        return True\n    with open(path, 'w') as handle:\n        handle.write('id,amount\\n')\n        for row_id, amount in rows:\n            handle.write('%s,%s\\n' % (row_id, amount))\n    return True\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_export.py": "import os\nimport tempfile\nimport unittest\n\nfrom ledger.export import export_csv\n\n\nclass ExportTest(unittest.TestCase):\n    def test_export_writes_header_and_rows(self):\n        with tempfile.TemporaryDirectory() as folder:\n            path = os.path.join(folder, 'out.csv')\n            self.assertTrue(export_csv([(1, 5), (2, 7)], path))\n            with open(path) as handle:\n                self.assertEqual(handle.read(), 'id,amount\\n1,5\\n2,7\\n')\n\n    def test_empty_list_writes_header_only_file(self):\n        with tempfile.TemporaryDirectory() as folder:\n            path = os.path.join(folder, 'out.csv')\n            self.assertTrue(export_csv([], path))\n            with open(path) as handle:\n                self.assertEqual(handle.read(), 'id,amount\\n')\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Export\n\n## Acceptance criteria\n\n- A: `export_csv(rows, path)` takes `rows` as a list or a tuple of `(id, amount)` rows, writes the header `id,amount` and one line per row to `path`, then returns True.\n- B: Empty `rows` still writes the header-only file before it returns True.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/export.md <<'EOF'\nstatus: ok\nnext: age\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added export_csv with tests.\n\n## Package report\n\n- Files: ledger/export.py, tests/test_export.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (2 tests)\n- Risk (certain): none known in the spec criteria.\n\n### Press loop\n\n- Topology: inline, degraded: true (no sub-agent in this session).\n- Rounds: none recorded yet; this is the first Press entry.\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant asks whether the user's complaint can still occur while every test passes, selects exactly one false-success attack (reported success without the file, or an empty artifact), and says why it threatens the claim.",
+        "The assistant adds one adversarial test that exports an empty rows tuple and shows the real failure: export_csv returned True but the file does not exist.",
+        "The result is status ok-with-concerns with the defect named and next: cook."
+      ],
+      "must_not": [
+        "The assistant edits `ledger/export.py` or any production file.",
+        "The assistant runs all four false-success attacks instead of selecting one.",
+        "The assistant calls the run green because the existing export test passes."
+      ],
+      "criteria": [
+        {
+          "id": "selects-one-false-success-attack",
+          "text": "THE assistant SHALL ask whether the user's complaint can still occur while every test passes, select exactly one false-success attack (reported success without the file, or an empty artifact), and say why it threatens the claim.",
+          "from": "must:0"
+        },
+        {
+          "id": "proves-attack-with-empty-rows-test",
+          "text": "THE assistant SHALL add one adversarial test that exports an empty rows tuple and show the real failure: export_csv returned True but the file does not exist.",
+          "from": "must:1"
+        },
+        {
+          "id": "finding-routes-to-cook",
+          "text": "THE assistant SHALL state the result as status ok-with-concerns with the defect named and next: cook.",
+          "from": "must:2"
+        },
+        {
+          "id": "records-attack-in-report",
+          "text": "THE assistant SHALL state in its reply the question, the selected attack, and the failing test."
+        },
+        {
+          "id": "no-production-edit",
+          "text": "THE assistant SHALL leave `ledger/export.py` and every other production file unchanged.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "one-attack-only",
+          "text": "THE assistant SHALL run one selected attack and not the full list of four.",
+          "from": "must_not:1"
+        },
+        {
+          "id": "no-false-green",
+          "text": "THE assistant SHALL withhold the green status and the /age handoff for as long as the empty-tuple attack fails.",
+          "must": true,
+          "from": "must_not:2"
+        }
       ]
     },
     "source": "skill"

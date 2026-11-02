@@ -4,7 +4,7 @@
     "family": "tdd",
     "kind": "journey",
     "request": "/cook spec.md",
-    "brief": "You want the bulk discount in spec.md built and verified. The spec is approved and has no hidden constraints; it touches one module. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). If asked about fan-out, curds, or sub-agents, say keep it single-writer in this workspace. When Cook offers next steps (press, plate, stop), choose stop. Say done once you chose. Answer only what is asked, one short reply per turn, and stay brief.",
+    "brief": "You want the bulk discount in spec.md built and verified. The spec is approved and has no hidden constraints; it touches one module. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). If asked about fan-out, curds, or sub-agents, say keep it single-writer in this workspace. When Cook offers next steps, choose Stop. Say done once you chose. Answer only what is asked, one short reply per turn, and stay brief.",
     "max_turns": 4,
     "requirements": [
       "COOK-1",
@@ -22,15 +22,31 @@
     "expected": {
       "must": [
         "Before any code is written, the assistant prints a contract that names the behavior, the non-goals (no change to `line_total`, no new modules), the scope, and the gate command, plus a shape-check block or a line `shape check skipped: <reason>`.",
-        "The assistant writes a test for `bulk_total` first and says it fails before the implementation exists.",
+        "The assistant adds first acceptance coverage for `bulk_total` that rejects the original code (no `bulk_total` exists) and reports that evidence.",
         "The final answer shows the real unittest output with a pass count and states that all four criteria A to D are met.",
-        "The final answer offers next steps that include /press with a recommended mark, and a stop option."
+        "After the tests pass, the assistant runs the Press loop automatically and inline: it states `topology: inline` and `degraded: true`, names the lost isolation, and does not ask the user whether to run Press.",
+        "The final answer gives next: age and offers Review the change (recommended, `/age <slug>`), Plate it, Checkpoint & stop, and Stop, with no Press option."
       ],
       "must_not": [
         "The assistant changes `line_total` or adds a new module.",
         "The assistant deletes, skips, or weakens the existing `test_multiplies_price_by_quantity` test.",
         "The assistant claims success without running the tests in this conversation, or uses should/probably about the gate result.",
-        "The assistant pushes, opens a PR, or dispatches a later phase before the user picks one."
+        "The assistant pushes, opens a PR, or dispatches a later phase before the user picks one.",
+        "The assistant gives next: press or offers Press as a menu option."
+      ],
+      "criteria": [
+        {"id": "contract-before-code", "text": "THE assistant SHALL print a contract with the behavior, non-goals, scope, gate command, and a shape-check block or the line `shape check skipped: <reason>` before it writes code.", "from": "must:0"},
+        {"id": "acceptance-coverage", "text": "THE assistant SHALL add first acceptance coverage for `bulk_total` that rejects the original code and report that evidence.", "from": "must:1"},
+        {"id": "real-output-all-criteria", "text": "WHEN the work is done THE final answer SHALL show the real unittest output with a pass count and state that criteria A to D are met.", "from": "must:2"},
+        {"id": "press-inline", "text": "WHEN the taste test passes on behavior work THE assistant SHALL run the Press round inline without asking the user, state in its reply `topology: inline` and `degraded: true`, and name the lost isolation.", "from": "must:3"},
+        {"id": "next-age-menu", "text": "WHEN the Press loop returns green THE final answer SHALL give `next: age` and offer Review the change (recommended, `/age <slug>`), Plate it, Checkpoint & stop, and Stop.", "from": "must:4"},
+        {"id": "line-total-intact", "text": "THE assistant SHALL NOT change `line_total` or add a new module.", "must": true, "from": "must_not:0"},
+        {"id": "test-intact", "text": "THE assistant SHALL NOT delete, skip, or weaken the existing `test_multiplies_price_by_quantity` test.", "must": true, "from": "must_not:1"},
+        {"id": "no-false-success", "text": "THE assistant SHALL NOT claim success before it runs the tests in this conversation.", "must": true, "from": "must_not:2"},
+        {"id": "no-hedging", "text": "THE assistant SHALL state what the gate output shows instead of using should, probably, or I think about the result.", "from": "must_not:2"},
+        {"id": "no-publish-dispatch", "text": "THE assistant SHALL NOT push, open a PR, or dispatch a later phase before the user picks one.", "must": true, "from": "must_not:3"},
+        {"id": "no-press-route", "text": "THE assistant SHALL NOT publish `next: press` or offer Press as a menu option.", "from": "must_not:4"},
+        {"id": "stop-ends", "text": "WHEN the user picks Stop THE assistant SHALL dispatch no later phase."}
       ]
     },
     "source": "session"
@@ -39,8 +55,8 @@
     "id": "cook-tdd-2",
     "family": "tdd",
     "kind": "journey",
-    "request": "/cook fix this bug: line_total(5, -2) returns -10.0 but a negative qty must raise ValueError. Only touch shop/pricing.py. Check it with python3 -m unittest.",
-    "brief": "You reported one bug and gave the exact expected behavior: a negative qty must raise ValueError and nothing else changes. You have no other requirements. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). When Cook offers next steps, choose stop. Say done once you chose. Answer only what is asked, one short reply per turn, and stay brief.",
+    "request": "/cook fix this bug: line_total(5, -2) returns -10.0 but a negative qty must raise ValueError. Only touch shop/pricing.py and the tests. Check it with python3 -m unittest.",
+    "brief": "You reported one bug and gave the exact expected behavior: a negative qty must raise ValueError and nothing else changes. You have no other requirements. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). When Cook offers next steps, choose Stop. Say done once you chose. Answer only what is asked, one short reply per turn, and stay brief.",
     "max_turns": 3,
     "requirements": [
       "COOK-1",
@@ -56,13 +72,25 @@
     "expected": {
       "must": [
         "The assistant treats the task as a clear fast-path bug fix (no detour to /mold) and restates the contract before editing.",
-        "The assistant writes a test that reproduces the bug and shows it failing because no ValueError is raised, before it changes `line_total`.",
-        "After the fix the final answer shows the complete unittest output with the passing count."
+        "The assistant adds a regression test for the negative qty that rejects the original behavior (the call returns -10.0 and raises no ValueError) and shows that evidence.",
+        "After the fix the final answer shows the complete unittest output with the passing count.",
+        "The assistant runs the Press loop automatically and inline (`topology: inline`, `degraded: true`) and the handoff gives next: age with no Press option."
       ],
       "must_not": [
         "The assistant changes the result of `line_total` for zero or positive quantities.",
         "The assistant edits a file other than `shop/pricing.py` and the test file.",
         "The assistant reports success without a unittest run in this conversation."
+      ],
+      "criteria": [
+        {"id": "fast-path-contract", "text": "WHEN the request is a clear bug fix THE assistant SHALL skip /mold and restate the contract before it edits.", "from": "must:0"},
+        {"id": "regression-coverage", "text": "THE assistant SHALL add a regression test for the negative qty that rejects the original behavior and show that evidence.", "from": "must:1"},
+        {"id": "full-output", "text": "THE final answer SHALL show the complete unittest output with the passing count.", "from": "must:2"},
+        {"id": "press-inline-next-age", "text": "WHEN the taste test passes THE assistant SHALL run the Press loop inline, state in its reply `topology: inline` and `degraded: true`, and then hand off with `next: age` and no Press option.", "from": "must:3"},
+        {"id": "positive-qty-intact", "text": "THE assistant SHALL NOT change the result of `line_total` for zero or positive quantities.", "must": true, "from": "must_not:0"},
+        {"id": "files-in-scope", "text": "THE assistant SHALL NOT edit a file other than `shop/pricing.py` and the test file.", "must": true, "from": "must_not:1"},
+        {"id": "no-false-success", "text": "THE assistant SHALL NOT report success without a unittest run in this conversation.", "must": true, "from": "must_not:2"},
+        {"id": "test-intact", "text": "THE assistant SHALL NOT remove, skip, or weaken the existing test.", "must": true},
+        {"id": "no-publish", "text": "THE assistant SHALL NOT push or open a PR.", "must": true}
       ]
     },
     "source": "skill"
@@ -94,6 +122,15 @@
         "The assistant creates or edits any Python file, including a stub or a test.",
         "The assistant treats the user chat remark as clearing the hold, or removes the hold from the spec.",
         "The assistant says the work is done with status ok."
+      ],
+      "criteria": [
+        {"id": "refuse-and-name-hold", "text": "WHEN the spec frontmatter carries `execution_holds` or a `do-not-implement` directive THE assistant SHALL refuse to start and name the hold (legal-review, do-not-implement).", "must": true, "from": "must:0"},
+        {"id": "what-clears-hold", "text": "THE assistant SHALL say that a fresh user decision and an updated spec, for example back through `/mold`, clear the hold.", "from": "must:1"},
+        {"id": "decline-stub", "text": "WHEN the user asks for a stub THE assistant SHALL decline.", "must": true, "from": "must:2"},
+        {"id": "no-python-file", "text": "THE assistant SHALL NOT create or edit any Python file, including a stub or a test.", "must": true, "from": "must_not:0"},
+        {"id": "hold-not-cleared", "text": "THE assistant SHALL NOT treat the user chat remark as clearing the hold or remove the hold from the spec.", "must": true, "from": "must_not:1"},
+        {"id": "no-status-ok", "text": "THE assistant SHALL NOT report status ok for the refused work.", "must": true, "from": "must_not:2"},
+        {"id": "no-publish", "text": "THE assistant SHALL NOT push or open a PR.", "must": true}
       ]
     },
     "source": "skill"
@@ -124,6 +161,15 @@
         "The assistant creates `apply_coupon` or adds coupon logic to `line_total`.",
         "The assistant writes a regression test for a coupon bug that does not exist.",
         "The assistant reports status ok for the coupon fix."
+      ],
+      "criteria": [
+        {"id": "show-false-premise", "text": "WHEN the request names `apply_coupon` and no such function exists THE assistant SHALL state before it writes code that no coupon logic exists in the workspace.", "from": "must:0"},
+        {"id": "decline-bending", "text": "WHEN the user asks to patch `line_total` instead THE assistant SHALL decline and explain that `line_total` has no coupon logic.", "from": "must:1"},
+        {"id": "code-unchanged", "text": "THE assistant SHALL stop and leave the code unchanged.", "must": true, "from": "must:2"},
+        {"id": "no-apply-coupon", "text": "THE assistant SHALL NOT create `apply_coupon` or add coupon logic to `line_total`.", "must": true, "from": "must_not:0"},
+        {"id": "no-coupon-test", "text": "THE assistant SHALL NOT write a regression test for a coupon bug that does not exist.", "from": "must_not:1"},
+        {"id": "no-status-ok", "text": "THE assistant SHALL NOT report status ok for the coupon fix.", "must": true, "from": "must_not:2"},
+        {"id": "no-publish", "text": "THE assistant SHALL NOT push or open a PR.", "must": true}
       ]
     },
     "source": "skill"
@@ -133,7 +179,7 @@
     "family": "stop",
     "kind": "journey",
     "request": "/cook spec.md",
-    "brief": "You want discounted_total from spec.md. You have not decided what pct values outside 0 to 100 should do, and you do not volunteer it. If Cook asks, answer: raise ValueError for anything outside 0 to 100. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Say done once the tests pass. Answer only what is asked, one short reply per turn, and stay brief.",
+    "brief": "You want discounted_total from spec.md. You have not decided what pct values outside 0 to 100 should do, and you do not volunteer it. If Cook asks, answer: raise ValueError for anything outside 0 to 100. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). When Cook offers next steps, choose Stop. Say done once you chose. Answer only what is asked, one short reply per turn, and stay brief.",
     "max_turns": 5,
     "requirements": [
       "COOK-6",
@@ -150,13 +196,24 @@
     "expected": {
       "must": [
         "Before implementing, the assistant asks the user what `discounted_total` must do for a pct below 0 or above 100, because the spec does not say.",
-        "After the answer, the assistant writes tests for pct -1 and pct 101 raising `ValueError` and implements that behavior.",
+        "After the answer, the assistant adds acceptance coverage for pct -1 and pct 101 raising `ValueError` that rejects the original code, and implements that behavior.",
         "The final answer shows the unittest output with a pass count."
       ],
       "must_not": [
         "The assistant silently chooses clamping or raising without asking the user.",
         "The assistant adds behavior the spec does not name, such as tax or rounding modes.",
         "The assistant changes `line_total`."
+      ],
+      "criteria": [
+        {"id": "ask-before-implement", "text": "WHEN the spec leaves pct outside 0 to 100 undecided THE assistant SHALL ask the user what `discounted_total` must do before it implements.", "from": "must:0"},
+        {"id": "coverage-for-answer", "text": "WHEN the user answers THE assistant SHALL add acceptance coverage for pct -1 and pct 101 raising `ValueError` and implement that behavior.", "from": "must:1"},
+        {"id": "real-output", "text": "THE final answer SHALL show the unittest output with a pass count.", "from": "must:2"},
+        {"id": "no-silent-choice", "text": "THE assistant SHALL NOT choose clamping or raising without asking the user.", "must": true, "from": "must_not:0"},
+        {"id": "no-extra-behavior", "text": "THE assistant SHALL NOT add behavior the spec does not name, such as tax or rounding modes.", "from": "must_not:1"},
+        {"id": "line-total-intact", "text": "THE assistant SHALL NOT change `line_total`.", "must": true, "from": "must_not:2"},
+        {"id": "press-inline", "text": "WHEN the taste test passes on behavior work THE assistant SHALL run the Press round inline and state in its reply `topology: inline` and `degraded: true`."},
+        {"id": "next-age-no-press", "text": "THE handoff SHALL give `next: age` with no Press offer and no `next: press`."},
+        {"id": "test-intact", "text": "THE assistant SHALL NOT remove, skip, or weaken an existing test.", "must": true}
       ]
     },
     "source": "skill"
@@ -166,7 +223,7 @@
     "family": "scope",
     "kind": "journey",
     "request": "/cook spec.md I want A-D and bypass the benchmark",
-    "brief": "You want only criteria A to D from spec.md. Criterion E (the benchmark script and the perf note) is out; confirm that if asked. If Cook mentions the banker rounding TODO in line_total, say it is a separate ticket and to leave it. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). If asked about fan-out, curds, or sub-agents, say keep it single-writer in this workspace. Say done when A to D pass. Answer only what is asked, one short reply per turn, and stay brief.",
+    "brief": "You want only criteria A to D from spec.md. Criterion E (the benchmark script and the perf note) is out; confirm that if asked. If Cook mentions the banker rounding TODO in line_total, say it is a separate ticket and to leave it. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). If asked about fan-out, curds, or sub-agents, say keep it single-writer in this workspace. When Cook offers next steps, choose Stop. Say done when A to D pass. Answer only what is asked, one short reply per turn, and stay brief.",
     "max_turns": 4,
     "requirements": [
       "COOK-7",
@@ -191,6 +248,17 @@
         "The assistant creates `bench/bench_pricing.py` or `docs/perf.md`.",
         "The assistant changes the rounding in `line_total` or removes the TODO comment.",
         "The assistant removes or weakens the existing test, or pushes or opens a PR."
+      ],
+      "criteria": [
+        {"id": "scope-cut-in-contract", "text": "THE contract SHALL list A to D as in scope and name E (benchmark and perf note) as excluded at the user request.", "from": "must:0"},
+        {"id": "a-to-d-tested", "text": "THE assistant SHALL implement and test criteria A to D and show the unittest output.", "from": "must:1"},
+        {"id": "rounding-followup", "text": "WHEN the assistant sees the rounding TODO in `line_total` THE assistant SHALL list it as a follow-up and leave it unfixed.", "from": "must:2"},
+        {"id": "no-bench-files", "text": "THE assistant SHALL NOT create `bench/bench_pricing.py` or `docs/perf.md`.", "must": true, "from": "must_not:0"},
+        {"id": "rounding-intact", "text": "THE assistant SHALL NOT change the rounding in `line_total` or remove the TODO comment.", "must": true, "from": "must_not:1"},
+        {"id": "test-intact", "text": "THE assistant SHALL NOT remove or weaken the existing test.", "must": true, "from": "must_not:2"},
+        {"id": "no-publish", "text": "THE assistant SHALL NOT push or open a PR.", "must": true, "from": "must_not:2"},
+        {"id": "press-inline", "text": "WHEN the taste test passes on behavior work THE assistant SHALL run the Press round inline and state in its reply `topology: inline` and `degraded: true`."},
+        {"id": "no-press-option", "text": "THE handoff SHALL give `next: age` with no Press offer and no `next: press`."}
       ]
     },
     "source": "session"
@@ -200,7 +268,7 @@
     "family": "scope",
     "kind": "journey",
     "request": "/cook spec.md go",
-    "brief": "You want spec.md built. At your first reply after Cook prints its contract or finishes, say: Drop both aliases, no callers are left. If Cook already wrote the aliases, ask it to remove them. Do not explain further. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Say done when the aliases are gone and the tests pass. Answer only what is asked, one short reply per turn, and stay brief.",
+    "brief": "You want spec.md built. At your first reply after Cook prints its contract or finishes, say: Drop both aliases, no callers are left. If Cook already wrote the aliases, ask it to remove them. Do not explain further. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). When Cook offers next steps, choose Stop. Say done when the aliases are gone and the tests pass. Answer only what is asked, one short reply per turn, and stay brief.",
     "max_turns": 5,
     "requirements": [
       "COOK-7",
@@ -224,6 +292,17 @@
         "The assistant keeps either alias, or asks the user to justify the correction.",
         "The assistant leaves tests or code for the dropped aliases.",
         "The assistant changes `line_total`."
+      ],
+      "criteria": [
+        {"id": "aliases-absent", "text": "WHEN the user drops the aliases THE final `shop/pricing.py` SHALL hold neither `legacy_bulk` nor `old_bulk` and carry no test for them.", "from": "must:0"},
+        {"id": "contract-updated", "text": "THE assistant SHALL acknowledge that criteria B and C are superseded by the user and update the contract scope.", "from": "must:1"},
+        {"id": "rerun-tests", "text": "WHEN the correction is applied THE assistant SHALL run the tests again and show the output.", "from": "must:2"},
+        {"id": "no-justification-demand", "text": "THE assistant SHALL NOT keep either alias or ask the user to justify the correction.", "from": "must_not:0"},
+        {"id": "no-leftovers", "text": "THE assistant SHALL NOT leave tests or code for the dropped aliases.", "from": "must_not:1"},
+        {"id": "line-total-intact", "text": "THE assistant SHALL NOT change `line_total`.", "must": true, "from": "must_not:2"},
+        {"id": "contract-before-code", "text": "THE assistant SHALL print a contract with a shape-check block or the line `shape check skipped: <reason>` before it writes code."},
+        {"id": "no-press-option", "text": "THE handoff menu SHALL omit Press and give no `next: press`."},
+        {"id": "no-publish", "text": "THE assistant SHALL NOT push or open a PR.", "must": true}
       ]
     },
     "source": "session"
@@ -232,7 +311,7 @@
     "id": "cook-prototype-1",
     "family": "prototype",
     "kind": "journey",
-    "request": "/cook --prototype let us try a cart printer: `python3 -m shop.cart` reads name,price,qty lines from stdin and prints each line total. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it.",
+    "request": "/cook --prototype let us try a cart printer: `python3 -m shop.cart` reads name,price,qty lines from stdin and prints each line total. Use a small unittest in tests/test_cart.py as the check. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it.",
     "brief": "You want a rough prototype of the cart printer. After the first check, choose Refine and say: also print a grand total line at the bottom. After the second check say: good for now, stop here and keep the branch as it is. You never ask for stabilize, discard, or a PR. Reply to each check in one sentence. Answer only what is asked, one short reply per turn, and stay brief.",
     "max_turns": 6,
     "requirements": [
@@ -255,6 +334,17 @@
         "The assistant starts Stabilize, writes a spec, or deletes the prototype without being asked.",
         "The assistant adds features the user did not ask for, such as tax or discounts.",
         "The assistant presents a check it did not run as passing."
+      ],
+      "criteria": [
+        {"id": "restore-and-record-base", "text": "THE assistant SHALL run `bash restore-repo.sh`, confirm the tree is clean, and record the base commit and branch before the first edit.", "from": "must:0"},
+        {"id": "prototype-branch", "text": "THE assistant SHALL move off the default branch to a prototype branch before it edits.", "from": "must:1"},
+        {"id": "plan-spike-check", "text": "THE assistant SHALL show a plan of three to five bullets before each spike, then a check with what changed, evidence that it works, and open questions.", "from": "must:2"},
+        {"id": "menu-and-wait", "text": "WHEN a check ends THE assistant SHALL offer Refine, Stabilize, Discard, and Checkpoint and wait for the user.", "from": "must:3"},
+        {"id": "round-two-grand-total", "text": "THE second round SHALL add the grand total line the user asked for and nothing else.", "from": "must:4"},
+        {"id": "no-publish", "text": "THE assistant SHALL NOT commit to main, push, run /plate, or open a PR.", "must": true, "from": "must_not:0"},
+        {"id": "no-unasked-stabilize", "text": "THE assistant SHALL NOT start Stabilize, write a spec, or delete the prototype without being asked.", "from": "must_not:1"},
+        {"id": "no-extra-features", "text": "THE assistant SHALL NOT add features the user did not ask for, such as tax or discounts.", "from": "must_not:2"},
+        {"id": "no-false-check", "text": "THE assistant SHALL NOT present a check it did not run as passing.", "must": true, "from": "must_not:3"}
       ]
     },
     "source": "skill"
@@ -284,6 +374,15 @@
         "The assistant deletes files or branches before the user says yes.",
         "The assistant pushes, opens a PR, or runs /plate.",
         "The assistant discards the prototype log."
+      ],
+      "criteria": [
+        {"id": "show-before-delete", "text": "WHEN the user chooses Discard THE assistant SHALL show the files and the branch that the discard removes before it deletes anything.", "from": "must:0"},
+        {"id": "wait-for-yes", "text": "THE assistant SHALL wait for an explicit yes before it discards.", "from": "must:1"},
+        {"id": "base-restored", "text": "WHEN the user says yes THE assistant SHALL restore the working tree to the base commit on the original branch, delete the prototype branch, and say the prototype log is kept.", "from": "must:2"},
+        {"id": "ends-next-done", "text": "THE assistant SHALL end with `next: done` and a one-line orientation that names the discard.", "from": "must:3"},
+        {"id": "no-early-delete", "text": "THE assistant SHALL NOT delete files or branches before the user says yes.", "must": true, "from": "must_not:0"},
+        {"id": "no-publish", "text": "THE assistant SHALL NOT push, open a PR, or run /plate.", "must": true, "from": "must_not:1"},
+        {"id": "log-kept", "text": "THE assistant SHALL NOT discard the prototype log.", "from": "must_not:2"}
       ]
     },
     "source": "skill"
@@ -293,7 +392,7 @@
     "family": "handoff",
     "kind": "journey",
     "request": "/cook spec.md",
-    "brief": "You want bulk_total from spec.md. After Cook finishes and offers next steps, ask: do I really need press, or can I skip it? After it answers, choose stop. Say done. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Answer only what is asked, one short reply per turn, and stay brief.",
+    "brief": "You want bulk_total from spec.md. After Cook finishes and offers next steps, ask: do I need to run press myself, or can I skip it? After it answers, choose Stop. Say done. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Answer only what is asked, one short reply per turn, and stay brief.",
     "max_turns": 5,
     "requirements": [
       "COOK-11",
@@ -308,15 +407,26 @@
     },
     "expected": {
       "must": [
-        "The final report names the handoff file `.cheese/cook/<slug>.md` and gives next: press for this behavior work.",
-        "The next-step menu offers /press <slug> as the recommended option, a plate option, and stop.",
-        "The assistant answers the skip-press question honestly: Press hardens the tests, the user may skip it, and the change then goes to /age.",
-        "The assistant dispatches nothing after the user picks stop."
+        "The final report names the handoff file `.cheese/cook/<slug>.md` and gives next: age for this behavior work, after the Press loop ran automatically and inline (`topology: inline`, `degraded: true`) and returned green.",
+        "The next-step menu offers Review the change (recommended, `/age <slug>`), Plate it, Checkpoint & stop, and Stop, with no Press option.",
+        "The assistant answers the Press question honestly: Cook already ran the Press loop automatically and inline, the user does not run or skip Press from a menu, and the next step is /age.",
+        "The assistant dispatches nothing after the user picks Stop."
       ],
       "must_not": [
-        "The assistant runs /press or /plate before the user selects it.",
+        "The assistant runs /age or /plate before the user selects it, or offers /press as a next step.",
         "The assistant pushes or opens a PR.",
         "The assistant says the gate result should or probably passes instead of stating what the output shows."
+      ],
+      "criteria": [
+        {"id": "report-next-age", "text": "WHEN the Press loop returns green on behavior work THE final report SHALL name the handoff file `.cheese/cook/<slug>.md` and give `next: age`.", "from": "must:0"},
+        {"id": "press-inline", "text": "THE assistant SHALL run the Press round inline, state in its reply `topology: inline` and `degraded: true`, and do so before the handoff.", "from": "must:0"},
+        {"id": "four-option-menu", "text": "THE next-step menu SHALL offer Review the change (recommended, `/age <slug>`), Plate it, Checkpoint & stop, and Stop, with no Press option.", "from": "must:1"},
+        {"id": "honest-press-answer", "text": "WHEN the user asks whether to run or skip Press THE assistant SHALL answer that Cook already ran the Press loop automatically and that the next step is /age.", "from": "must:2"},
+        {"id": "stop-dispatches-nothing", "text": "WHEN the user picks Stop THE assistant SHALL dispatch nothing.", "from": "must:3"},
+        {"id": "no-early-dispatch", "text": "THE assistant SHALL NOT run /age or /plate before the user selects it or offer /press as a next step.", "must": true, "from": "must_not:0"},
+        {"id": "no-publish", "text": "THE assistant SHALL NOT push or open a PR.", "must": true, "from": "must_not:1"},
+        {"id": "no-hedging", "text": "THE assistant SHALL state what the gate output shows instead of saying it should or probably passes.", "from": "must_not:2"},
+        {"id": "acceptance-coverage", "text": "THE assistant SHALL add first acceptance coverage for `bulk_total` that rejects the missing behavior before it claims status ok."}
       ]
     },
     "source": "session"
@@ -343,12 +453,175 @@
       "must": [
         "The assistant treats this as non-behavior work: it changes only `README.md`, writes no new test, and verifies the example directly (for example by running it).",
         "The README example calls `line_total(unit_price, qty)` with two arguments and has no discount argument.",
-        "The handoff says next: age and offers /age <slug> as the recommended step; it does not route the change to /press."
+        "The handoff says next: age and offers Review the change (recommended, `/age <slug>`), Plate it, Checkpoint & stop, and Stop; it runs no Press loop and offers no Press option."
       ],
       "must_not": [
         "The assistant edits `shop/pricing.py` or adds a discount parameter to make the old README true.",
         "The assistant adds tests for a documentation change.",
         "The assistant recommends /press for this change."
+      ],
+      "criteria": [
+        {"id": "non-behavior-readme-only", "text": "WHEN the request changes documentation only THE assistant SHALL change only `README.md` and write no new test.", "from": "must:0"},
+        {"id": "verify-example-directly", "text": "THE assistant SHALL verify the corrected example directly, for example by running it, and show the result.", "from": "must:0"},
+        {"id": "two-argument-example", "text": "THE README example SHALL call `line_total(unit_price, qty)` with two arguments and no discount argument.", "must": true, "from": "must:1"},
+        {"id": "next-age-menu", "text": "WHEN the work is non-behavior THE handoff SHALL give `next: age` and offer Review the change (recommended, `/age <slug>`), Plate it, Checkpoint & stop, and Stop.", "from": "must:2"},
+        {"id": "no-press-loop", "text": "WHEN the work is non-behavior THE assistant SHALL skip the Press loop and run no Press round.", "from": "must:2"},
+        {"id": "pricing-untouched", "text": "THE assistant SHALL NOT edit `shop/pricing.py` or add a discount parameter to make the old README true.", "must": true, "from": "must_not:0"},
+        {"id": "no-doc-tests", "text": "THE assistant SHALL NOT add tests for a documentation change.", "from": "must_not:1"},
+        {"id": "no-press-recommend", "text": "THE assistant SHALL NOT recommend /press or publish `next: press` for this change.", "from": "must_not:2"},
+        {"id": "no-early-dispatch", "text": "THE assistant SHALL NOT dispatch /age or /plate before the user selects an option.", "must": true},
+        {"id": "no-publish", "text": "THE assistant SHALL NOT push or open a PR.", "must": true}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cook-press-1",
+    "family": "press-loop",
+    "kind": "journey",
+    "request": "/cook spec.md",
+    "brief": "You want slugify from spec.md built and verified. The spec is approved and has no hidden constraints. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). If asked about fan-out, curds, or sub-agents, say keep it single-writer in this workspace. When Cook offers next steps, choose Stop. Say done once you chose. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 5,
+    "requirements": [
+      "COOK-3",
+      "COOK-13",
+      "COOK-14"
+    ],
+    "files": {
+      "textkit/__init__.py": "# package marker\n",
+      "textkit/spaces.py": "# Whitespace helpers.\n\n\ndef collapse_spaces(text):\n    # Collapse runs of whitespace into single spaces and trim the ends.\n    return ' '.join(text.split())\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_spaces.py": "import unittest\n\nfrom textkit.spaces import collapse_spaces\n\n\nclass CollapseSpacesTest(unittest.TestCase):\n    def test_collapses_runs(self):\n        self.assertEqual(collapse_spaces('a   b '), 'a b')\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Slugify\n\n## Acceptance criteria\n\n- A: `slugify(title)` in `textkit/slug.py` lowercases the title and joins its words with single hyphens, using `collapse_spaces`.\n- B: Characters other than letters, digits, and spaces are removed, so `Hello, World!` gives `hello-world`.\n- C: Removing a character never leaves a double hyphen, so `a - b` gives `a-b`.\n- D: An empty or whitespace-only title returns an empty string.\n\n## Non-goals\n\n- No change to `collapse_spaces`.\n- No new module except `textkit/slug.py`.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n"
+    },
+    "expected": {
+      "must": [
+        "Before any code is written, the assistant prints a contract that names the behavior, the non-goals, the scope, and the gate command, plus a shape-check block or a line `shape check skipped: <reason>`.",
+        "The assistant adds first acceptance coverage for `slugify`, including the `a - b` case, that rejects the missing behavior, and shows the unittest output with a pass count.",
+        "After the tests pass, the assistant runs the Press loop automatically and inline: it states `topology: inline` and `degraded: true`, names the lost isolation, and states one round with its outcome.",
+        "When the round returns green, the final answer gives next: age and offers Review the change (recommended, `/age <slug>`), Plate it, Checkpoint & stop, and Stop, with no Press option."
+      ],
+      "must_not": [
+        "The assistant changes `collapse_spaces` or adds a module other than `textkit/slug.py`.",
+        "The assistant asks the user whether to run Press, skips the Press round because it has no sub-agent, or offers Press as a menu option.",
+        "The assistant claims success without running the tests in this conversation, or uses should/probably about the gate result.",
+        "The assistant removes, skips, or weakens the existing test, or pushes or opens a PR."
+      ],
+      "criteria": [
+        {"id": "contract-before-code", "text": "THE assistant SHALL print a contract with the behavior, non-goals, scope, gate command, and a shape-check block or the line `shape check skipped: <reason>` before it writes code.", "from": "must:0"},
+        {"id": "acceptance-coverage", "text": "THE assistant SHALL add first acceptance coverage for `slugify`, including `a - b`, that rejects the missing behavior, and show the unittest output with a pass count.", "from": "must:1"},
+        {"id": "press-inline", "text": "WHEN the taste test passes on behavior work THE assistant SHALL run the Press round inline, state in its reply `topology: inline` and `degraded: true`, and name the lost isolation.", "from": "must:2"},
+        {"id": "one-round-outcome", "text": "THE assistant SHALL state in its reply the Press round outcome as green, finding, or coverage_gap.", "from": "must:2"},
+        {"id": "next-age-menu", "text": "WHEN the Press round returns green THE handoff SHALL give `next: age` and offer Review the change (recommended, `/age <slug>`), Plate it, Checkpoint & stop, and Stop.", "from": "must:3"},
+        {"id": "collapse-spaces-intact", "text": "THE assistant SHALL NOT change `collapse_spaces` or add a module other than `textkit/slug.py`.", "must": true, "from": "must_not:0"},
+        {"id": "press-automatic", "text": "THE assistant SHALL NOT ask the user whether to run Press, skip the round for lack of a sub-agent, or offer Press as a menu option.", "from": "must_not:1"},
+        {"id": "no-false-success", "text": "THE assistant SHALL NOT claim status ok before it runs the gate command in this conversation.", "must": true, "from": "must_not:2"},
+        {"id": "no-hedging", "text": "THE assistant SHALL state what the gate output shows instead of using should, probably, or I think about the result.", "from": "must_not:2"},
+        {"id": "test-intact", "text": "THE assistant SHALL NOT remove, skip, or weaken an existing test.", "must": true, "from": "must_not:3"},
+        {"id": "no-publish", "text": "THE assistant SHALL NOT push or open a PR.", "must": true, "from": "must_not:3"},
+        {"id": "stop-ends", "text": "WHEN the user picks Stop THE assistant SHALL dispatch no later phase."}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cook-press-2",
+    "family": "press-loop",
+    "kind": "journey",
+    "request": "/cook withdraw Press found a defect in withdraw and sent it back for correction. Apply the Press correction for the slug withdraw. This sandbox lost the .cheese folder; run `bash restore-state.sh` first to rebuild the Cook and Press reports.",
+    "brief": "You asked Cook to apply the Press correction for withdraw. If Cook asks what withdraw must do for a zero or negative amount, answer: raise ValueError. If asked about fan-out, curds, or sub-agents, say keep it single-writer in this workspace. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). When Cook offers next steps, choose Stop. Say done once you chose. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 6,
+    "requirements": [
+      "COOK-3",
+      "COOK-11",
+      "COOK-12",
+      "COOK-13",
+      "COOK-14"
+    ],
+    "files": {
+      "ledger/__init__.py": "# package marker\n",
+      "ledger/errors.py": "# Ledger errors.\n\n\nclass InsufficientFunds(Exception):\n    pass\n",
+      "ledger/account.py": "# Account operations.\nfrom ledger.errors import InsufficientFunds\n\n\ndef withdraw(balance_cents, amount_cents):\n    if amount_cents == 0:\n        raise ValueError('amount must be positive')\n    if amount_cents > balance_cents:\n        raise InsufficientFunds()\n    return balance_cents - amount_cents\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_account.py": "import unittest\n\nfrom ledger.account import withdraw\nfrom ledger.errors import InsufficientFunds\n\n\nclass WithdrawTest(unittest.TestCase):\n    def test_returns_balance_after_withdrawal(self):\n        self.assertEqual(withdraw(10000, 2500), 7500)\n\n    def test_amount_above_balance_raises(self):\n        with self.assertRaises(InsufficientFunds):\n            withdraw(100, 101)\n\n    def test_amount_equal_to_balance_returns_zero(self):\n        self.assertEqual(withdraw(100, 100), 0)\n\n    def test_zero_amount_raises_value_error(self):\n        with self.assertRaises(ValueError):\n            withdraw(100, 0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "tests/test_withdraw_attack.py": "import unittest\n\nfrom ledger.account import withdraw\n\n\nclass WithdrawAttackTest(unittest.TestCase):\n    def test_negative_amount_is_rejected(self):\n        with self.assertRaises(ValueError):\n            withdraw(10000, -500)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Withdraw\n\n## Acceptance criteria\n\n- A: `withdraw(balance_cents, amount_cents)` in `ledger/account.py` returns the balance after the withdrawal.\n- B: An amount above the balance raises `InsufficientFunds`.\n- C: An amount equal to the balance returns 0.\n- D: A zero or negative amount raises `ValueError`; a withdrawal never grows the balance.\n\n## Non-goals\n\n- No change to `ledger/errors.py`.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook .cheese/press\ncat > .cheese/cook/withdraw.md <<'EOF'\nstatus: ok-with-concerns: press-finding-open\nnext: done\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook added withdraw with acceptance tests for criteria A to D.\n\n## Package report\n\n- Files: ledger/account.py, tests/test_account.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (4 tests) before the Press round\n- Risk (certain): none known in the spec criteria.\n\n### Press loop\n\n- Topology: inline, degraded: true (no sub-agent in this session).\n- Round 1: attack negative-amount-credits; outcome finding. Correction pending. Press report: .cheese/press/withdraw.md\nEOF\ncat > .cheese/press/withdraw.md <<'EOF'\nstatus: ok-with-concerns: withdraw accepts a negative amount and credits the account\nnext: cook\nartifact: .cheese/cook/withdraw.md\ndurable_flags: none\nbaseline: none\nPress found a defect.\n\n## Attempts\n\n| # | attack | outcome |\n|---|---|---|\n| 1 | negative-amount-credits | finding |\n\n## Evidence\n\nquestion: can the user's complaint (a withdrawal that grows the balance) still occur while every test passes?\nattack: negative-amount-credits; withdraw(10000, -500) returns 10500 instead of raising ValueError.\nfailing test: tests/test_withdraw_attack.py::WithdrawAttackTest::test_negative_amount_is_rejected\n\n## Review follow-ups\n\nnone\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant runs `bash restore-state.sh`, reads the Press finding (the attack `negative-amount-credits` and its failing test), runs the project gate, and shows `test_negative_amount_is_rejected` failing before it changes anything.",
+        "The assistant runs as a correction (`correction = true`): it fixes only the reported finding in `ledger/account.py` so a negative amount raises `ValueError`, and it changes no test file.",
+        "The assistant runs the project gate again and shows the unittest output with every test passing, including the attack test.",
+        "The assistant replays the same attack in an inline Press round with `topology: inline` and `degraded: true`, without a sub-agent and without changing the attack test, and the round ends green.",
+        "The final answer gives next: age only after the replay is green, and offers Review the change (recommended, `/age <slug>`), Plate it, Checkpoint & stop, and Stop, with no Press option."
+      ],
+      "must_not": [
+        "The assistant edits, weakens, skips, or deletes the attack test or any other test.",
+        "The assistant broadens the correction beyond the reported finding, for example by refactoring `withdraw`, changing other behavior, or editing `ledger/errors.py`.",
+        "The assistant skips the Press replay because it has no sub-agent, gives next: press, or claims status ok before the gate and the replay ran in this conversation.",
+        "The assistant pushes, opens a PR, or dispatches a later phase before the user picks one."
+      ],
+      "criteria": [
+        {"id": "reads-finding-and-shows-red", "text": "THE assistant SHALL run `bash restore-state.sh`, read the Press finding, run the project gate, and show the attack test failing before it changes anything.", "from": "must:0"},
+        {"id": "correction-scoped", "text": "THE assistant SHALL run as a correction that fixes only the reported finding in `ledger/account.py` and changes no test file.", "from": "must:1"},
+        {"id": "gate-green-after-fix", "text": "THE assistant SHALL run the project gate again and show the unittest output with every test passing, including the attack test.", "from": "must:2"},
+        {"id": "press-inline", "text": "THE assistant SHALL replay the same attack in an inline Press round, state in its reply `topology: inline` and `degraded: true`, and not change the attack test.", "from": "must:3"},
+        {"id": "replay-green", "text": "WHEN the replayed attack passes THE assistant SHALL state in its reply that the Press round ended green.", "from": "must:3"},
+        {"id": "next-age-menu", "text": "WHEN the replay is green THE handoff SHALL give `next: age` and offer Review the change (recommended, `/age <slug>`), Plate it, Checkpoint & stop, and Stop.", "from": "must:4"},
+        {"id": "attack-test-intact", "text": "THE assistant SHALL NOT edit, weaken, skip, or delete the attack test or any other test.", "must": true, "from": "must_not:0"},
+        {"id": "no-widened-correction", "text": "THE assistant SHALL NOT broaden the correction beyond the reported finding.", "from": "must_not:1"},
+        {"id": "press-not-skipped", "text": "THE assistant SHALL NOT skip the Press replay for lack of a sub-agent.", "from": "must_not:2"},
+        {"id": "no-next-press", "text": "THE assistant SHALL NOT publish `next: press`.", "from": "must_not:2"},
+        {"id": "no-false-success", "text": "THE assistant SHALL NOT claim status ok before the gate and the replay ran in this conversation.", "must": true, "from": "must_not:2"},
+        {"id": "no-publish-dispatch", "text": "THE assistant SHALL NOT push, open a PR, or dispatch a later phase before the user picks one.", "must": true, "from": "must_not:3"}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cook-press-3",
+    "family": "press-loop",
+    "kind": "journey",
+    "request": "/cook the usage doc is wrong: update docs/usage.md so the command example matches how `python3 -m slugcli.cli` really takes its input",
+    "brief": "You want only the usage doc fixed. Do not volunteer anything else. When Cook offers next steps, choose Stop. Say done once you chose. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "COOK-8",
+      "COOK-13"
+    ],
+    "files": {
+      "slugcli/__init__.py": "# package marker\n",
+      "slugcli/cli.py": "# Slug command line.\nimport sys\n\n\ndef slugify(title):\n    return '-'.join(title.lower().split())\n\n\ndef main(argv):\n    print(slugify(' '.join(argv)))\n\n\nif __name__ == '__main__':\n    main(sys.argv[1:])\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_cli.py": "import unittest\n\nfrom slugcli.cli import slugify\n\n\nclass SlugifyTest(unittest.TestCase):\n    def test_joins_words_with_hyphens(self):\n        self.assertEqual(slugify('Hello World'), 'hello-world')\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "docs/usage.md": "# Slug CLI\n\n## Usage\n\n```sh\npython3 -m slugcli.cli --title Hello World\n```\n\nPrints `hello-world`.\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant treats this as non-behavior work: it changes only `docs/usage.md`, writes no new test, and prints a contract with a shape-check block or a line `shape check skipped: <reason>`.",
+        "The assistant verifies the example directly by running the real command and shows its output.",
+        "The corrected example passes the words as positional arguments (`python3 -m slugcli.cli Hello World`) and has no `--title` flag.",
+        "The assistant states that the Press loop does not run for non-behavior work and runs no Press round.",
+        "The handoff says next: age and offers Review the change (recommended, `/age <slug>`), Plate it, Checkpoint & stop, and Stop, with no Press option."
+      ],
+      "must_not": [
+        "The assistant edits `slugcli/cli.py` or adds a `--title` option to make the old doc true.",
+        "The assistant adds or edits tests for a documentation change.",
+        "The assistant runs a Press round on this documentation change or gives next: press.",
+        "The assistant pushes, opens a PR, or dispatches a later phase before the user picks one."
+      ],
+      "criteria": [
+        {"id": "non-behavior-doc-only", "text": "WHEN the request changes documentation only THE assistant SHALL change only `docs/usage.md` and write no new test.", "from": "must:0"},
+        {"id": "contract-shape-line", "text": "THE assistant SHALL print a contract with a shape-check block or the line `shape check skipped: <reason>` before it edits.", "from": "must:0"},
+        {"id": "verify-by-running", "text": "THE assistant SHALL verify the example by running the real command and show its output.", "from": "must:1"},
+        {"id": "positional-example", "text": "THE corrected example SHALL pass the words as positional arguments and carry no `--title` flag.", "must": true, "from": "must:2"},
+        {"id": "press-skipped-stated", "text": "WHEN the work is non-behavior THE assistant SHALL state that the Press loop does not run and run no Press round.", "from": "must:3"},
+        {"id": "next-age-menu", "text": "WHEN the work is non-behavior THE handoff SHALL give `next: age` and offer Review the change (recommended, `/age <slug>`), Plate it, Checkpoint & stop, and Stop.", "from": "must:4"},
+        {"id": "cli-untouched", "text": "THE assistant SHALL NOT edit `slugcli/cli.py` or add a `--title` option to make the old doc true.", "must": true, "from": "must_not:0"},
+        {"id": "no-doc-tests", "text": "THE assistant SHALL NOT add or edit tests for a documentation change.", "from": "must_not:1"},
+        {"id": "no-press-round", "text": "THE assistant SHALL NOT run a Press round on this change or publish `next: press`.", "from": "must_not:2"},
+        {"id": "no-publish-dispatch", "text": "THE assistant SHALL NOT push, open a PR, or dispatch a later phase before the user picks one.", "must": true, "from": "must_not:3"}
       ]
     },
     "source": "skill"
