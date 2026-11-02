@@ -377,3 +377,155 @@ def test_poll_observes_submission_saved_after_poll_starts(
     assert result == 0
     assert len(sleeps) == 1
     assert json.loads(output.getvalue())["operation_id"] == "op-late"
+
+
+def _publish_outputs(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], *documents: dict[str, object]
+) -> list[dict[str, object]]:
+    """Publish each document in order through the CLI and return each JSON output."""
+    from easy_cheese.skills.mold.review import publish_main
+
+    input_path = tmp_path / "revision.json"
+    outputs: list[dict[str, object]] = []
+    for document in documents:
+        input_path.write_text(json.dumps(document), encoding="utf-8")
+        state_dir = str(tmp_path / "state")
+        assert publish_main(["--state-dir", state_dir, "--input", str(input_path)]) == 0
+        outputs.append(json.loads(capsys.readouterr().out))
+    return outputs
+
+
+def _requirement(requirement_id: str, status: str = "settled") -> dict[str, object]:
+    return {"id": requirement_id, "text": f"WHEN {requirement_id} applies THE SYSTEM SHALL act.", "status": status}
+
+
+def test_publish_returns_empty_warnings_for_a_clean_document(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    legacy: dict[str, object] = {"questions": [{"id": "F-0", "prompt": "Legacy fork"}]}
+    first: dict[str, object] = {
+        "requirements": [_requirement("R-1", "draft") | {"fork_ids": ["F-1", "F-2"]}],
+        "questions": [
+            {"id": "F-1", "prompt": "Choose storage", "depends_on": []},
+            {"id": "F-2", "prompt": "Choose migration", "depends_on": ["F-1"]},
+        ],
+    }
+    second: dict[str, object] = {
+        "requirements": [_requirement("R-1"), _requirement("R-2", "draft")],
+        "settled_fork_ids": ["F-1"],
+        "questions": [{"id": "F-2", "prompt": "Choose migration", "depends_on": ["F-1"]}],
+    }
+
+    outputs = _publish_outputs(tmp_path, capsys, legacy, first, second)
+
+    assert [output["warnings"] for output in outputs] == [[], [], []]
+    assert set(outputs[-1]) == {"number", "document", "digest", "parent", "warnings"}
+    assert outputs[-1]["number"] == 3
+
+
+@pytest.mark.parametrize(
+    ("document", "expected"),
+    [
+        pytest.param(
+            {"questions": [{"id": "F-1", "depends_on": "F-0"}, {"depends_on": None}]},
+            [
+                "question F-1: depends_on is not a list of question IDs",
+                "questions[1]: depends_on is not a list of question IDs",
+            ],
+            id="not-a-list",
+        ),
+        pytest.param(
+            {"questions": [{"id": "F-1"}, {"id": "F-2", "depends_on": ["F-1", "", 7]}]},
+            [
+                "question F-2: depends_on[1] is not a non-empty string",
+                "question F-2: depends_on[2] is not a non-empty string",
+            ],
+            id="bad-entry",
+        ),
+        pytest.param(
+            {"settled_fork_ids": ["F-0"], "questions": [{"id": "F-1", "depends_on": ["F-0", "F-9"]}]},
+            ["question F-1: depends_on names F-9, which is not an open question or in settled_fork_ids"],
+            id="missing-reference",
+        ),
+        pytest.param(
+            {"settled_fork_ids": "F-0", "questions": [{"id": "F-1", "depends_on": ["F-0"]}]},
+            ["question F-1: depends_on names F-0, which is not an open question or in settled_fork_ids"],
+            id="settled-not-a-list",
+        ),
+        pytest.param(
+            {"settled_fork_ids": ["F-1"], "questions": [{"id": "F-1"}, {"id": "F-2", "depends_on": ["F-1"]}]},
+            [
+                "question F-2: depends_on names F-1, which is open and also in settled_fork_ids;"
+                + " the question waits until F-1 leaves questions"
+            ],
+            id="open-and-settled",
+        ),
+        pytest.param(
+            {"questions": [{"id": "F-1", "depends_on": ["F-2"]}, {"id": "F-2", "depends_on": ["F-1"]}]},
+            [
+                "depends_on cycle among open questions: the dependency graph has cycle"
+                + " F-1 -> F-2 -> F-1; these questions wait forever"
+            ],
+            id="cycle",
+        ),
+        pytest.param(
+            {"questions": [{"id": "F-3", "depends_on": ["F-3"]}]},
+            [
+                "depends_on cycle among open questions: the dependency graph has cycle"
+                + " F-3 -> F-3; these questions wait forever"
+            ],
+            id="self-cycle",
+        ),
+    ],
+)
+def test_publish_warns_about_fork_dependency_problems_and_still_stores_the_document(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    document: dict[str, object],
+    expected: list[str],
+) -> None:
+    [output] = _publish_outputs(tmp_path, capsys, document)
+
+    assert output["warnings"] == expected
+    assert MoldReview.load(tmp_path / "state" / "review.json").revisions[-1].document == document
+
+
+def test_publish_warns_when_requirements_from_the_previous_revision_are_missing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    first: dict[str, object] = {
+        "questions": [],
+        "requirements": [_requirement("R-1"), _requirement("R-2"), _requirement("R-3")],
+    }
+    changed_only: dict[str, object] = {"questions": [], "requirements": [_requirement("R-2", "draft")]}
+
+    outputs = _publish_outputs(tmp_path, capsys, first, changed_only, changed_only)
+
+    assert [output["warnings"] for output in outputs] == [
+        [],
+        ["requirements from revision 1 are missing: R-1, R-3; republish the full requirement list"],
+        [],
+    ]
+
+
+def test_publish_warnings_follow_question_then_cycle_then_requirement_order(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    first: dict[str, object] = {"questions": [], "requirements": [_requirement("R-1")]}
+    broken: dict[str, object] = {
+        "questions": [
+            {"id": "F-1", "depends_on": ["F-2"]},
+            {"id": "F-2", "depends_on": ["F-1", "F-9"]},
+            {"id": "F-3", "depends_on": "F-1"},
+        ],
+    }
+
+    outputs = _publish_outputs(tmp_path, capsys, first, broken)
+
+    assert outputs[-1]["warnings"] == [
+        "question F-2: depends_on names F-9, which is not an open question or in settled_fork_ids",
+        "question F-3: depends_on is not a list of question IDs",
+        "depends_on cycle among open questions: the dependency graph has cycle"
+        + " F-1 -> F-2 -> F-1; these questions wait forever",
+        "requirements from revision 1 are missing: R-1; republish the full requirement list",
+    ]
