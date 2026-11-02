@@ -66,18 +66,18 @@ this repo, and the CI ratchet live in
 ## The cheese pipeline
 
 The workflow skills compose into one pipeline, ordered
-**culture → mold → cut → cook → press → age → cure → plate**
-(`skills/mold/SKILL.md:125`, `skills/cook/SKILL.md:202`,
-`skills/cut/SKILL.md:183`):
+**culture → mold → cook (⇄ press) → age → cure → plate**.
+Cook dispatches Press automatically inside its own loop for behavior
+work, so Press is not a user-selected step
+([adr/acceptance-demonstration-press-fold-001](./adr/acceptance-demonstration-press-fold-001.md)):
 
 | Skill | Role in the pipeline |
 |---|---|
 | `/cheese` | Front door — classifies input, routes to the right skill |
 | `/culture` | No-write thinking / exploration |
 | `/mold` | Converge a fuzzy idea into an approved spec |
-| `/cut` | Outside-in RED evidence — prove the approved behavior fails at its declared seam, then freeze that oracle in a `GateReceipt` |
-| `/cook` | TDD-disciplined implementation of a spec |
-| `/press` | Adversarial test hardening |
+| `/cook` | Implementation of a spec; owns first acceptance coverage and the Press loop |
+| `/press` | Adversarial pass that Cook dispatches after its taste test (one false-success attack per round); `/press <slug>` stays for a manual re-run |
 | `/age` | Ten-dimension review → severity-grouped findings |
 | `/cure` | Apply selected findings as focused fixes |
 | `/plate` | Write and verify final artifacts, validate, commit, and publish one PR or a stack |
@@ -88,8 +88,8 @@ Workflow skills call source-code backends directly through the shared
 code-intelligence wrapper skills previously sat beneath the pipeline; their
 policy now lives in that shared reference. `/cook`'s fan pathway — which
 absorbed the now-retired `/ultracook` (PR #316 moved ownership; PR #317
-retired the entry point to a redirect stub) — chains cook → press → age →
-cure non-interactively in fresh-context isolation; its parallel mode
+retired the entry point to a redirect stub) — chains cook (with a per-curd Press loop) → age ↔ cure, then an
+integrated acceptance check → age ↔ cure non-interactively in fresh-context isolation; its parallel mode
 (formerly `/cheese-factory`) fans file-disjoint curds through `src/fanout/`
 into reviewable PRs (`AGENTS.md:42-49`; see
 [architecture/ultracook-agent-topology](./architecture/ultracook-agent-topology.md)).

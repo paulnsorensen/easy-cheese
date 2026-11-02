@@ -98,13 +98,22 @@ python3 skills/plate/scripts/plate.pyz gh-stack-verify \
   --trunk <github-branch-name> --remote origin
 ```
 
+The verifier skips a contiguous run of merged or queued layers at the bottom
+of the stack and reports them as `skipped`. It validates every layer above
+that run. The first open layer's base must be the trunk. A merged or queued
+layer above an open layer fails verification.
+
 The verifier fails unless all of these facts match exactly:
 
 - The local stack trunk equals the canonical GitHub branch name.
-- Every branch exists at the same local, remote, and PR head SHA.
-- Every PR is open, has auto-merge disabled, and has the expected base and head.
-- Every PR maps to the same open GitHub stack.
-- The remote stack base, ordered PR numbers, head refs, states, and SHAs match.
+- At least one open layer remains above the skipped layers.
+- Every open branch exists at the same local, remote, and PR head SHA.
+- Every open PR is open, has auto-merge disabled, and has the expected base
+  and head.
+- Every open PR maps to the same open GitHub stack.
+- The remote stack base, ordered PR numbers, head refs, states, and SHAs match
+  for the open layers. The skipped layers keep their head refs, in order, at
+  the bottom of the remote mapping.
 
 Treat any failed check as a failed publication even when `gh stack` exited zero.
 
@@ -243,6 +252,8 @@ This command does not adopt local tracking. Verify the remote stack mapping.
 ### After a bottom PR merges
 
 Run guarded `gh stack sync --remote origin`. Inspect the stack. Submit again
-only when local commits remain unpublished. Do not run `gh-stack-verify` until
-the remaining stack is fully open and publishable; merged or queued branches
-require lifecycle inspection instead.
+only when local commits remain unpublished. Then run `gh-stack-verify`. A
+native stack keeps its merged layers, so the verifier skips the merged or
+queued layers at the bottom and validates the open layers above them. A
+merged or queued layer above an open layer requires lifecycle inspection
+instead.
