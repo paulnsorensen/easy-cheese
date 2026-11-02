@@ -126,8 +126,7 @@ body {
   .mc-shell--requirements .mc-body { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; gap: var(--space-4); }
   .mc-shell--requirements .mc-workspace { grid-template-rows: auto auto; }
   .mc-shell--requirements .mc-requirements { block-size: clamp(11rem, 32svh, 20rem); max-block-size: none; min-block-size: 0; }
-  .mc-shell--requirements .mc-shapes { block-size: clamp(12rem, 35svh, 24rem); }
-  .mc-shell--requirements .mc-shapes > .mc-stack { overflow: auto; }
+  .mc-shell--requirements .mc-shapes > .mc-stack { block-size: clamp(12rem, 35svh, 24rem); overflow: auto; }
   .mc-shell--requirements .mc-convo { position: static; block-size: min(36rem, 100svh); min-block-size: 0; padding: 0; border-radius: 0; box-shadow: none; }
   .mc-shell--requirements .mc-sheet-toggle, .mc-shell--requirements .mc-sheet-grip { display: none; }
   .mc-convo { position: fixed; inset: auto 0 0 0; z-index: 30; block-size: 58dvh; padding: 0 var(--space-4); border: 0; border-block-start: var(--border-hairline) solid var(--edge); border-radius: var(--radius-lg) var(--radius-lg) 0 0; background: var(--panel); box-shadow: var(--shadow-float); }

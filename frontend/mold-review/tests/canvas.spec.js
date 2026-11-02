@@ -436,6 +436,30 @@ test('short phone keeps a requirement and a whole question card usable under a l
   }
 });
 
+for (const viewport of [{width: 375, height: 667}, {width: 844, height: 390}]) {
+  test(`phone shape content keeps a usable height at ${viewport.width}x${viewport.height}`, async ({page}) => {
+    const s = await serveDocument({
+      requirements: [{id: 'R-1', text: 'THE SYSTEM SHALL keep the shape content usable.', status: 'draft', fork_ids: ['F-1']}],
+      questions: [{id: 'F-1', prompt: 'Choose one', options: [{id: 'a', label: 'A'}]}],
+    });
+    try {
+      await page.setViewportSize(viewport);
+      await page.goto(s.url);
+      const stack = page.locator('.mc-shapes > .mc-stack');
+      await stack.scrollIntoViewIfNeeded();
+      expect(await stack.evaluate(element => element.clientHeight)).toBeGreaterThanOrEqual(160);
+      const [shapesBox, conversationBox] = await Promise.all([
+        page.locator('section.mc-shapes').boundingBox(),
+        page.getByRole('complementary', {name: 'Conversation'}).boundingBox(),
+      ]);
+      expect(shapesBox.y + shapesBox.height).toBeLessThanOrEqual(conversationBox.y);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    } finally {
+      s.child.kill();
+    }
+  });
+}
+
 test('invalid dependencies report errors and restored waiting answers never submit', async ({page, request}) => {
   const s = await serveDocument({
     requirements: [{id: 'R-1', text: 'WHEN dependencies fail THE SYSTEM SHALL show the invalid state.', status: 'draft', fork_ids: ['F-1', 'missing']}],
