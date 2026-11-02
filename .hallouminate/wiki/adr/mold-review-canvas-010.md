@@ -41,16 +41,22 @@ A lowered legacy sheet does not hide conversation controls after switching to a 
 ## Consequences
 
 On a phone, a requirements document scrolls the page past the panes. Each pane scrolls its own content.
-`review.py` does not validate these fields; that validation stays open.
+`review publish` checks these fields and returns non-blocking `warnings` in its output.[^6]
+It warns about malformed or missing `depends_on` references, open prerequisites in `settled_fork_ids`, `depends_on` cycles, and dropped requirement IDs.
+The agent sees each problem in the same turn and republishes a corrected document.
+The check warns and does not reject.
+A rejection breaks the ADR 008 rule that `review.py` stores any JSON object.
+A rejection also stops the browser tests from publishing broken documents, so the browser defence becomes untestable.
 
 ## Related records
 
 - [Replace subject layouts with Mold shape views and pins](./mold-review-canvas-008.md)
 
-[^1]: `skills/mold/references/review-canvas.md:40-71`; `frontend/mold-review/src/main.jsx:260`
+[^1]: `skills/mold/references/review-canvas.md:41-82`; `frontend/mold-review/src/main.jsx:260`
 [^2]: `frontend/mold-review/src/main.jsx:243-255`; `frontend/mold-review/tests/canvas.spec.js:258-322`, `:325-357`, and `:463-504`
 [^3]: `frontend/mold-review/src/main.jsx:215-217`; `frontend/mold-review/tests/canvas.spec.js:531-557`
 [^4]: `frontend/mold-review/src/style.css:125-131`; `frontend/mold-review/tests/canvas.spec.js:359-390`, `:392-437`, and `:439-461`
 [^5]: `frontend/mold-review/tests/canvas.spec.js:506-529`
+[^6]: `src/easy_cheese/skills/mold/review.py:505-603`; `tests/python/test_mold_review.py:382-531`; broken documents in `frontend/mold-review/tests/canvas.spec.js:325-357` and `:463-504`
 
-_Source: PR #848; `skills/mold/references/review-canvas.md`, `frontend/mold-review/src/main.jsx`, `frontend/mold-review/src/style.css`, `frontend/mold-review/tests/canvas.spec.js` · Updated: 2026-11-02_
+_Source: PR #848, issue #849; `skills/mold/references/review-canvas.md`, `src/easy_cheese/skills/mold/review.py`, `frontend/mold-review/src/main.jsx`, `frontend/mold-review/src/style.css`, `frontend/mold-review/tests/canvas.spec.js` · Updated: 2026-11-02_
