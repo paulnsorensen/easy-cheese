@@ -1,0 +1,60 @@
+# Enable GitHub auto-merge on a Dependabot patch or minor bump when the PR
+# opens. GitHub then merges the PR only after the required status checks of
+# the base branch pass. The policy matches bin/dep-harvest-scan in
+# octopus-peach-sink-zero/routines: a major bump, a minor bump from 0.x, a
+# language toolchain bump, and an unknown version stay with a human.
+#
+# A merge that auto-merge does with GITHUB_TOKEN does not start push
+# workflows on the base branch. The next human merge starts them.
+name: dependabot auto-merge
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  arm:
+    name: arm auto-merge
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # auto-merge squashes the PR into the base branch
+      pull-requests: write # enable auto-merge on the PR
+    steps:
+      - id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: policy
+        name: Check bump policy
+        env:
+          DEPS: ${{ steps.meta.outputs.updated-dependencies-json }}
+        run: |
+          arm=$(jq -r '
+            def toolchain: ascii_downcase | IN("rust", "node", "nodejs", "python", "go", "golang");
+            def from_zero: ltrimstr("v") | startswith("0.");
+            length > 0 and all(.[];
+              (.prevVersion // "") != ""
+              and (.dependencyName | toolchain | not)
+              and (.updateType == "version-update:semver-patch"
+                or (.updateType == "version-update:semver-minor"
+                  and (.prevVersion | from_zero | not))))
+          ' <<<"${DEPS:-[]}")
+          echo "arm=$arm" >> "$GITHUB_OUTPUT"
+          echo "arm=$arm for: $(jq -r '[.[] | "\(.dependencyName) \(.prevVersion) -> \(.newVersion) (\(.updateType))"] | join(", ")' <<<"${DEPS:-[]}")"
+
+      - name: Enable auto-merge
+        if: steps.policy.outputs.arm == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --squash "$PR_URL"
