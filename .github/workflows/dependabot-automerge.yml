@@ -1,16 +1,23 @@
-# Enable GitHub auto-merge on a Dependabot patch or minor bump when the PR
-# opens. GitHub then merges the PR only after the required status checks of
-# the base branch pass. The policy matches bin/dep-harvest-scan in
-# octopus-peach-sink-zero/routines: a major bump, a minor bump from 0.x, a
-# language toolchain bump, and an unknown version stay with a human.
+# Enable GitHub auto-merge on a Dependabot patch or minor bump to main. GitHub
+# then merges the PR only after the required status checks of main pass. The
+# policy matches bin/dep-harvest-scan in octopus-peach-sink-zero/routines: a
+# major bump, a minor bump from 0.x, a language toolchain bump, and an unknown
+# version stay with a human. A new push to the PR checks the policy again and
+# disables auto-merge when the bump no longer fits it.
+#
+# pull_request_target runs this file from main, not from the PR. A Dependabot
+# PR that bumps dependabot/fetch-metadata thus cannot run the new action with
+# the write token before a human reviews it. The job never checks out or runs
+# PR code.
 #
 # A merge that auto-merge does with GITHUB_TOKEN does not start push
 # workflows on the base branch. The next human merge starts them.
 name: dependabot auto-merge
 
 on:
-  pull_request:
-    types: [opened, reopened]
+  pull_request_target: # zizmor: ignore[dangerous-triggers] no checkout; reads PR metadata only
+    branches: [main]
+    types: [opened, reopened, synchronize]
 
 permissions: {}
 
@@ -24,6 +31,7 @@ jobs:
     if: >-
       github.event.pull_request.user.login == 'dependabot[bot]'
       && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
     permissions:
       contents: write # auto-merge squashes the PR into the base branch
@@ -38,6 +46,8 @@ jobs:
         name: Check bump policy
         env:
           DEPS: ${{ steps.meta.outputs.updated-dependencies-json }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
           arm=$(jq -r '
             def toolchain: ascii_downcase | IN("rust", "node", "nodejs", "python", "go", "golang");
@@ -49,8 +59,14 @@ jobs:
                 or (.updateType == "version-update:semver-minor"
                   and (.prevVersion | from_zero | not))))
           ' <<<"${DEPS:-[]}")
+          # fetch-metadata reads only the first commit. A commit from another author stays with a human.
+          others=$(gh pr view "$PR_URL" --json commits \
+            --jq '[.commits[].authors[].login | select(. != "dependabot[bot]")] | length')
+          if (( others > 0 )); then
+            arm=false
+          fi
           echo "arm=$arm" >> "$GITHUB_OUTPUT"
-          echo "arm=$arm for: $(jq -r '[.[] | "\(.dependencyName) \(.prevVersion) -> \(.newVersion) (\(.updateType))"] | join(", ")' <<<"${DEPS:-[]}")"
+          echo "arm=$arm, $others commit author(s) other than dependabot, for: $(jq -r '[.[] | "\(.dependencyName) \(.prevVersion) -> \(.newVersion) (\(.updateType))"] | join(", ")' <<<"${DEPS:-[]}")"
 
       - name: Enable auto-merge
         if: steps.policy.outputs.arm == 'true'
@@ -58,3 +74,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: gh pr merge --auto --squash "$PR_URL"
+
+      - name: Disable auto-merge
+        if: steps.policy.outputs.arm != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |-
+          armed=$(gh pr view "$PR_URL" --json autoMergeRequest --jq '.autoMergeRequest != null')
+          if [[ $armed == true ]]; then
+            gh pr merge --disable-auto "$PR_URL"
+          fi
