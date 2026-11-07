@@ -30,6 +30,38 @@ The gate enforces the rules listed under Gate rules below.
 - `tests-fail` runs unittest in a copy of `output/` when Python changed and `output/tests/` exists.
 - `unverified-ok` fails a `status: ok` claim after a Python write with no later shell step.
 
+## Judge evidence
+
+The judge sees the request, the brief, the case files, the transcript, the output files, and the reference.
+It does not see the tool trace.
+The transcript keeps only the last message of each agent turn, and the harness asks for that message as JSON in `result_json`.
+The output files skip every path part that starts with a dot, so the judge never sees `.cheese/`.
+A progress message inside a turn (the contract, a red run, the gate output) therefore reaches only the gate, not the judge.
+
+A `must` criterion zeroes the case below level 3, so it must name evidence the judge has: a property of the output files compared with the case files, or a claim in a reply.
+The gate owns "the tests ran in this conversation": `unverified-ok` needs a shell step after the last Python write, and `tests-fail` runs the suite on `output/`.
+The judge then checks with `success-matches-output` or `check-matches-output` that the output files do not contradict a claim in a reply.
+These criteria zero a case only on a contradiction, such as a claimed fix that the code lacks.
+A claimed check that leaves no file, such as an ad-hoc command, is not a contradiction; the gate and, later, the trace grade it.
+
+### Trace-only criteria
+
+These criteria grade behavior that only the tool trace shows.
+They stay optional, so a reasonable run loses mean level on them but never scores 0.
+Tighten each one, or make it `must`, when the judge receives the full tool trace.
+
+| Case | Criterion | Trace evidence to check |
+|---|---|---|
+| `cook-tdd-1` | `contract-before-code` | The contract message comes before the first Python write. |
+| `cook-tdd-1` | `acceptance-coverage` | A unittest run fails before `bulk_total` exists. |
+| `cook-tdd-1`, `cook-tdd-2`, `cook-press-1`, `cook-press-2` | `success-matches-output` | Also require a gate run after the last write, with its output. |
+| `cook-tdd-2` | `fast-path-contract`, `regression-coverage` | The contract message comes before the edit, and the new test fails first. |
+| `cook-prototype-1` | `restore-and-record-base`, `prototype-branch`, `plan-before-spike` | `bash restore-repo.sh` and the branch switch come before the first edit, and a plan message comes before each spike. |
+| `cook-prototype-1` | `check-matches-output` | Also require the check command in the trace of that round. |
+| `cook-press-1` | `contract-before-code`, `red-first` | The contract message and a red unittest run come before `textkit/slug.py` is written. |
+| `cook-press-2` | `reads-finding-and-shows-red` | `bash restore-state.sh`, a read of `.cheese/press/withdraw.md`, and a red gate run come before the edit. |
+| every case | `no-publish`, `no-publish-dispatch` | No `git push`, `gh pr create`, or `/age` or `/plate` start before the user picks one. The gate already fails a push or a PR. |
+
 ## Out of scope offline
 
 - The fan pathway (curds, waves, sub-agent coders) needs the `Agent` tool, which a journey does not grant.
