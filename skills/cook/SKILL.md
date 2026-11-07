@@ -276,7 +276,7 @@ Generated bundle command inventory: [`references/commands.md`](references/comman
 
 A saved Mold spec is not execution authority. Start Cook only when the user requests the selected scope and route.
 A standalone task, including `--spec` alone, may skip finalization.
-Spec-hold refusal: refuse a `--spec` run whose frontmatter has `execution_holds` or a `do-not-implement` or `do-not-proceed` `request_directive`.
+Spec-hold refusal: if frontmatter has `execution_holds` or `do-not-implement`/`do-not-proceed` `request_directive`, refuse the `--spec` run and every stub or test.
 Refuse a non-`ready` `--result` file; a ready one passes `cook.pyz validate-result` before `execute_bound_plan`.
 Follow [`references/fan-pathway.md`](references/fan-pathway.md) § Direct Mold-to-Cook ingress.
-Run the fresh-agent regression scenarios in [`references/evals.md`](references/evals.md) when this boundary changes.
+When this boundary changes, run the scenarios in [`references/evals.md`](references/evals.md).

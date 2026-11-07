@@ -71,3 +71,4 @@ Tighten each one, or make it `must`, when the judge receives the full tool trace
 - The `.cheese/` handoff files are hidden from the judge, so the stated status and `next:` in the transcript carry the handoff evidence.
 - The `coverage_gap` and correction-cap halts of the Press loop are not covered.
 - The prototype spike asks for a unittest check so the `source-without-test` gate passes.
+- The Codex task sandbox keeps `workspace/.git` read-only, so `restore-repo.sh` fails in `cook-prototype-1` and `cook-prototype-2` until the skillz Codex harness grants `workspace/.git` write. The Claude task harness allows it.
