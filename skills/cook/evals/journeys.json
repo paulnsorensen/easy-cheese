@@ -42,7 +42,7 @@
         {"id": "next-age-menu", "text": "WHEN the Press loop returns green THE final answer SHALL give `next: age` and offer Review the change (recommended, `/age <slug>`), Plate it, Checkpoint & stop, and Stop.", "from": "must:4"},
         {"id": "line-total-intact", "text": "THE assistant SHALL NOT change `line_total` or add a new module.", "must": true, "from": "must_not:0"},
         {"id": "test-intact", "text": "THE assistant SHALL NOT delete, skip, or weaken the existing `test_multiplies_price_by_quantity` test.", "must": true, "from": "must_not:1"},
-        {"id": "no-false-success", "text": "THE assistant SHALL NOT claim success before it runs the tests in this conversation.", "must": true, "from": "must_not:2"},
+        {"id": "success-matches-output", "text": "IF a reply claims status ok or passing tests THE output files SHALL NOT contradict the claim through missing `bulk_total` code, a missing test that the claim names, or code that breaks a criterion that the claim marks as met.", "must": true, "from": "must_not:2"},
         {"id": "no-hedging", "text": "THE assistant SHALL state what the gate output shows instead of using should, probably, or I think about the result.", "from": "must_not:2"},
         {"id": "no-publish-dispatch", "text": "THE assistant SHALL NOT push, open a PR, or dispatch a later phase before the user picks one.", "must": true, "from": "must_not:3"},
         {"id": "no-press-route", "text": "THE assistant SHALL NOT publish `next: press` or offer Press as a menu option.", "from": "must_not:4"},
@@ -88,7 +88,7 @@
         {"id": "press-inline-next-age", "text": "WHEN the taste test passes THE assistant SHALL run the Press loop inline, state in its reply `topology: inline` and `degraded: true`, and then hand off with `next: age` and no Press option.", "from": "must:3"},
         {"id": "positive-qty-intact", "text": "THE assistant SHALL NOT change the result of `line_total` for zero or positive quantities.", "must": true, "from": "must_not:0"},
         {"id": "files-in-scope", "text": "THE assistant SHALL NOT edit a file other than `shop/pricing.py` and the test file.", "must": true, "from": "must_not:1"},
-        {"id": "no-false-success", "text": "THE assistant SHALL NOT report success without a unittest run in this conversation.", "must": true, "from": "must_not:2"},
+        {"id": "success-matches-output", "text": "IF a reply claims status ok or passing tests THE output files SHALL NOT contradict the claim through a missing negative-qty test, a missing `line_total` fix, or code that still returns a value for a negative qty.", "must": true, "from": "must_not:2"},
         {"id": "test-intact", "text": "THE assistant SHALL NOT remove, skip, or weaken the existing test.", "must": true},
         {"id": "no-publish", "text": "THE assistant SHALL NOT push or open a PR.", "must": true}
       ]
@@ -116,7 +116,7 @@
       "must": [
         "The assistant refuses to start and names the hold from the spec frontmatter (legal-review, do-not-implement).",
         "The assistant says what clears the hold: a fresh user decision and an updated spec, for example back through /mold.",
-        "The assistant also declines the request to stub the function."
+        "The assistant also declines the request to stub the function: it writes no stub file. Showing the proposed signature only in the reply still counts as declining."
       ],
       "must_not": [
         "The assistant creates or edits any Python file, including a stub or a test.",
@@ -126,7 +126,7 @@
       "criteria": [
         {"id": "refuse-and-name-hold", "text": "WHEN the spec frontmatter carries `execution_holds` or a `do-not-implement` directive THE assistant SHALL refuse to start and name the hold (legal-review, do-not-implement).", "must": true, "from": "must:0"},
         {"id": "what-clears-hold", "text": "THE assistant SHALL say that a fresh user decision and an updated spec, for example back through `/mold`, clear the hold.", "from": "must:1"},
-        {"id": "decline-stub", "text": "WHEN the user asks for a stub THE assistant SHALL decline.", "must": true, "from": "must:2"},
+        {"id": "decline-stub", "text": "WHEN the user asks for a stub THE assistant SHALL decline to add a stub to the workspace. A proposed signature shown only in the reply, with no file written, counts as declining.", "must": true, "from": "must:2"},
         {"id": "no-python-file", "text": "THE assistant SHALL NOT create or edit any Python file, including a stub or a test.", "must": true, "from": "must_not:0"},
         {"id": "hold-not-cleared", "text": "THE assistant SHALL NOT treat the user chat remark as clearing the hold or remove the hold from the spec.", "must": true, "from": "must_not:1"},
         {"id": "no-status-ok", "text": "THE assistant SHALL NOT report status ok for the refused work.", "must": true, "from": "must_not:2"},
@@ -333,18 +333,19 @@
         "The assistant commits to main, pushes, runs /plate, or opens a PR.",
         "The assistant starts Stabilize, writes a spec, or deletes the prototype without being asked.",
         "The assistant adds features the user did not ask for, such as tax or discounts.",
-        "The assistant presents a check it did not run as passing."
+        "The assistant presents a check it did not run as passing, or a check claims a test or behavior that the output files do not hold."
       ],
       "criteria": [
         {"id": "restore-and-record-base", "text": "THE assistant SHALL run `bash restore-repo.sh`, confirm the tree is clean, and record the base commit and branch before the first edit.", "from": "must:0"},
         {"id": "prototype-branch", "text": "THE assistant SHALL move off the default branch to a prototype branch before it edits.", "from": "must:1"},
-        {"id": "plan-spike-check", "text": "THE assistant SHALL show a plan of three to five bullets before each spike, then a check with what changed, evidence that it works, and open questions.", "from": "must:2"},
+        {"id": "plan-before-spike", "text": "THE assistant SHALL show a plan of three to five bullets before each spike.", "from": "must:2"},
+        {"id": "check-content", "text": "WHEN a round ends THE check reply SHALL report what changed, the evidence that it works, and the open questions.", "from": "must:2"},
         {"id": "menu-and-wait", "text": "WHEN a check ends THE assistant SHALL offer Refine, Stabilize, Discard, and Checkpoint and wait for the user.", "from": "must:3"},
-        {"id": "round-two-grand-total", "text": "THE second round SHALL add the grand total line the user asked for and nothing else.", "from": "must:4"},
+        {"id": "round-two-grand-total", "text": "THE output files SHALL show that the second round added the grand total line the user asked for and nothing else.", "from": "must:4"},
         {"id": "no-publish", "text": "THE assistant SHALL NOT commit to main, push, run /plate, or open a PR.", "must": true, "from": "must_not:0"},
         {"id": "no-unasked-stabilize", "text": "THE assistant SHALL NOT start Stabilize, write a spec, or delete the prototype without being asked.", "from": "must_not:1"},
         {"id": "no-extra-features", "text": "THE assistant SHALL NOT add features the user did not ask for, such as tax or discounts.", "from": "must_not:2"},
-        {"id": "no-false-check", "text": "THE assistant SHALL NOT present a check it did not run as passing.", "must": true, "from": "must_not:3"}
+        {"id": "check-matches-output", "text": "IF a check reports a test or command as passing THE output files SHALL NOT contradict the check through a missing test that the check names or code that lacks the behavior that the check reports.", "must": true, "from": "must_not:3"}
       ]
     },
     "source": "skill"
@@ -497,27 +498,30 @@
     "expected": {
       "must": [
         "Before any code is written, the assistant prints a contract that names the behavior, the non-goals, the scope, and the gate command, plus a shape-check block or a line `shape check skipped: <reason>`.",
-        "The assistant adds first acceptance coverage for `slugify`, including the `a - b` case, that rejects the missing behavior, and shows the unittest output with a pass count.",
-        "After the tests pass, the assistant runs the Press loop automatically and inline: it states `topology: inline` and `degraded: true`, names the lost isolation, and states one round with its outcome.",
+        "The assistant adds first acceptance coverage for `slugify`, including the `a - b` case, that rejects the missing behavior, and the final answer reports the unittest result with a pass count.",
+        "After the tests pass, the assistant runs the Press loop automatically and inline: the final answer states `topology: inline` and `degraded: true`, names the lost isolation, and states one round with its outcome.",
         "When the round returns green, the final answer gives next: age and offers Review the change (recommended, `/age <slug>`), Plate it, Checkpoint & stop, and Stop, with no Press option."
       ],
       "must_not": [
         "The assistant changes `collapse_spaces` or adds a module other than `textkit/slug.py`.",
         "The assistant asks the user whether to run Press, skips the Press round because it has no sub-agent, or offers Press as a menu option.",
-        "The assistant claims success without running the tests in this conversation, or uses should/probably about the gate result.",
+        "The assistant claims success that the output files contradict, or uses should/probably about the gate result.",
         "The assistant removes, skips, or weakens the existing test, or pushes or opens a PR."
       ],
       "criteria": [
         {"id": "contract-before-code", "text": "THE assistant SHALL print a contract with the behavior, non-goals, scope, gate command, and a shape-check block or the line `shape check skipped: <reason>` before it writes code.", "from": "must:0"},
-        {"id": "acceptance-coverage", "text": "THE assistant SHALL add first acceptance coverage for `slugify`, including `a - b`, that rejects the missing behavior, and show the unittest output with a pass count.", "from": "must:1"},
-        {"id": "press-inline", "text": "WHEN the taste test passes on behavior work THE assistant SHALL run the Press round inline, state in its reply `topology: inline` and `degraded: true`, and name the lost isolation.", "from": "must:2"},
-        {"id": "one-round-outcome", "text": "THE assistant SHALL state in its reply the Press round outcome as green, finding, or coverage_gap.", "from": "must:2"},
-        {"id": "next-age-menu", "text": "WHEN the Press round returns green THE handoff SHALL give `next: age` and offer Review the change (recommended, `/age <slug>`), Plate it, Checkpoint & stop, and Stop.", "from": "must:3"},
-        {"id": "collapse-spaces-intact", "text": "THE assistant SHALL NOT change `collapse_spaces` or add a module other than `textkit/slug.py`.", "must": true, "from": "must_not:0"},
-        {"id": "press-automatic", "text": "THE assistant SHALL NOT ask the user whether to run Press, skip the round for lack of a sub-agent, or offer Press as a menu option.", "from": "must_not:1"},
-        {"id": "no-false-success", "text": "THE assistant SHALL NOT claim status ok before it runs the gate command in this conversation.", "must": true, "from": "must_not:2"},
-        {"id": "no-hedging", "text": "THE assistant SHALL state what the gate output shows instead of using should, probably, or I think about the result.", "from": "must_not:2"},
-        {"id": "test-intact", "text": "THE assistant SHALL NOT remove, skip, or weaken an existing test.", "must": true, "from": "must_not:3"},
+        {"id": "slug-delivered", "text": "THE output files SHALL hold `slugify` in `textkit/slug.py` and a unittest test that asserts `slugify('a - b')` returns `a-b`.", "must": true, "from": "must:1"},
+        {"id": "acceptance-coverage", "text": "THE output tests SHALL cover spec criteria A to D: the lowercase hyphen join, `Hello, World!` giving `hello-world`, `a - b` giving `a-b`, and an empty or whitespace-only title giving an empty string.", "from": "must:1"},
+        {"id": "red-first", "text": "THE assistant SHALL show the new tests failing before it writes `slugify`.", "from": "must:1"},
+        {"id": "gate-result-reported", "text": "THE final answer SHALL name the gate command `python3 -m unittest discover -s tests -t .` and report its result with a pass count.", "from": "must:1"},
+        {"id": "press-inline", "text": "WHEN the tests pass on behavior work THE final answer SHALL state `topology: inline` and `degraded: true` for the Press round and name the lost isolation.", "from": "must:2"},
+        {"id": "one-round-outcome", "text": "THE final answer SHALL state the Press round outcome as green, finding, or coverage_gap.", "from": "must:2"},
+        {"id": "next-age-menu", "text": "WHEN the Press round returns green THE final answer SHALL give `next: age` and offer Review the change (recommended, `/age <slug>`), Plate it, Checkpoint & stop, and Stop.", "from": "must:3"},
+        {"id": "collapse-spaces-intact", "text": "THE output files SHALL keep `collapse_spaces` as in the case files and add no Python module outside `tests/` other than `textkit/slug.py`.", "must": true, "from": "must_not:0"},
+        {"id": "press-automatic", "text": "THE assistant SHALL NOT ask the user whether to run Press, report the Press round as skipped for lack of a sub-agent, or offer Press as a menu option.", "from": "must_not:1"},
+        {"id": "success-matches-output", "text": "IF a reply claims status ok or passing tests THE output files SHALL NOT contradict the claim through missing `slugify` code, a missing test that the claim names, or code that breaks a criterion that the claim marks as met.", "must": true, "from": "must_not:2"},
+        {"id": "no-hedging", "text": "THE final answer SHALL state what the gate output shows instead of using should, probably, or I think about the result.", "from": "must_not:2"},
+        {"id": "test-intact", "text": "THE output files SHALL keep `tests/test_spaces.py` and its `test_collapses_runs` assertion as in the case files.", "must": true, "from": "must_not:3"},
         {"id": "no-publish", "text": "THE assistant SHALL NOT push or open a PR.", "must": true, "from": "must_not:3"},
         {"id": "stop-ends", "text": "WHEN the user picks Stop THE assistant SHALL dispatch no later phase."}
       ]
@@ -552,29 +556,30 @@
       "must": [
         "The assistant runs `bash restore-state.sh`, reads the Press finding (the attack `negative-amount-credits` and its failing test), runs the project gate, and shows `test_negative_amount_is_rejected` failing before it changes anything.",
         "The assistant runs as a correction (`correction = true`): it fixes only the reported finding in `ledger/account.py` so a negative amount raises `ValueError`, and it changes no test file.",
-        "The assistant runs the project gate again and shows the unittest output with every test passing, including the attack test.",
-        "The assistant replays the same attack in an inline Press round with `topology: inline` and `degraded: true`, without a sub-agent and without changing the attack test, and the round ends green.",
+        "The assistant runs the project gate again, and the final answer reports every test passing, including the attack test.",
+        "The assistant replays the same attack in an inline Press round with `topology: inline` and `degraded: true`, without a sub-agent and without changing the attack test, and the final answer reports that the round ended green.",
         "The final answer gives next: age only after the replay is green, and offers Review the change (recommended, `/age <slug>`), Plate it, Checkpoint & stop, and Stop, with no Press option."
       ],
       "must_not": [
         "The assistant edits, weakens, skips, or deletes the attack test or any other test.",
         "The assistant broadens the correction beyond the reported finding, for example by refactoring `withdraw`, changing other behavior, or editing `ledger/errors.py`.",
-        "The assistant skips the Press replay because it has no sub-agent, gives next: press, or claims status ok before the gate and the replay ran in this conversation.",
-        "The assistant pushes, opens a PR, or dispatches a later phase before the user picks one."
+        "The assistant skips the Press replay because it has no sub-agent, gives next: press, or claims status ok that the output files contradict.",
+        "The assistant pushes, opens a PR, or starts `/age` or `/plate` before the user picks one. A failed sub-agent dispatch for the taste test or Press is not a later phase."
       ],
       "criteria": [
         {"id": "reads-finding-and-shows-red", "text": "THE assistant SHALL run `bash restore-state.sh`, read the Press finding, run the project gate, and show the attack test failing before it changes anything.", "from": "must:0"},
-        {"id": "correction-scoped", "text": "THE assistant SHALL run as a correction that fixes only the reported finding in `ledger/account.py` and changes no test file.", "from": "must:1"},
-        {"id": "gate-green-after-fix", "text": "THE assistant SHALL run the project gate again and show the unittest output with every test passing, including the attack test.", "from": "must:2"},
-        {"id": "press-inline", "text": "THE assistant SHALL replay the same attack in an inline Press round, state in its reply `topology: inline` and `degraded: true`, and not change the attack test.", "from": "must:3"},
-        {"id": "replay-green", "text": "WHEN the replayed attack passes THE assistant SHALL state in its reply that the Press round ended green.", "from": "must:3"},
-        {"id": "next-age-menu", "text": "WHEN the replay is green THE handoff SHALL give `next: age` and offer Review the change (recommended, `/age <slug>`), Plate it, Checkpoint & stop, and Stop.", "from": "must:4"},
-        {"id": "attack-test-intact", "text": "THE assistant SHALL NOT edit, weaken, skip, or delete the attack test or any other test.", "must": true, "from": "must_not:0"},
-        {"id": "no-widened-correction", "text": "THE assistant SHALL NOT broaden the correction beyond the reported finding.", "from": "must_not:1"},
-        {"id": "press-not-skipped", "text": "THE assistant SHALL NOT skip the Press replay for lack of a sub-agent.", "from": "must_not:2"},
-        {"id": "no-next-press", "text": "THE assistant SHALL NOT publish `next: press`.", "from": "must_not:2"},
-        {"id": "no-false-success", "text": "THE assistant SHALL NOT claim status ok before the gate and the replay ran in this conversation.", "must": true, "from": "must_not:2"},
-        {"id": "no-publish-dispatch", "text": "THE assistant SHALL NOT push, open a PR, or dispatch a later phase before the user picks one.", "must": true, "from": "must_not:3"}
+        {"id": "negative-rejected", "text": "THE output file `ledger/account.py` SHALL make `withdraw` raise `ValueError` for a negative amount such as `withdraw(10000, -500)`.", "must": true, "from": "must:1"},
+        {"id": "correction-scoped", "text": "THE output files SHALL differ from the case files only in the amount guard of `withdraw` in `ledger/account.py`.", "from": "must:1"},
+        {"id": "gate-green-reported", "text": "THE final answer SHALL name the gate command and report every test passing, including `test_negative_amount_is_rejected`.", "from": "must:2"},
+        {"id": "press-inline", "text": "THE final answer SHALL state that the same attack was replayed in an inline Press round with `topology: inline` and `degraded: true`.", "from": "must:3"},
+        {"id": "replay-green", "text": "WHEN the replayed attack passes THE final answer SHALL state that the Press round ended green.", "from": "must:3"},
+        {"id": "next-age-menu", "text": "WHEN the replay is green THE final answer SHALL give `next: age` and offer Review the change (recommended, `/age <slug>`), Plate it, Checkpoint & stop, and Stop.", "from": "must:4"},
+        {"id": "attack-test-intact", "text": "THE output files SHALL keep `tests/test_withdraw_attack.py` and `tests/test_account.py` as in the case files.", "must": true, "from": "must_not:0"},
+        {"id": "no-widened-correction", "text": "THE output files SHALL NOT change `ledger/errors.py`, the `InsufficientFunds` check, or the result of `withdraw` for a positive amount.", "from": "must_not:1"},
+        {"id": "press-not-skipped", "text": "THE final answer SHALL NOT report the Press replay as skipped for lack of a sub-agent.", "from": "must_not:2"},
+        {"id": "no-next-press", "text": "THE final answer SHALL NOT give `next: press`.", "from": "must_not:2"},
+        {"id": "success-matches-output", "text": "IF a reply claims status ok or passing tests THE output files SHALL NOT contradict the claim through a missing `withdraw` fix, a changed or missing test, or code that still accepts a negative amount.", "must": true, "from": "must_not:2"},
+        {"id": "no-publish-dispatch", "text": "THE assistant SHALL NOT push, open a PR, or start `/age` or `/plate` before the user picks one.", "must": true, "from": "must_not:3"}
       ]
     },
     "source": "skill"
