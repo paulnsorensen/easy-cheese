@@ -92,7 +92,8 @@ if any(is_py(rel) and workspace.raw_changed(rel) for rel in workspace.output):
     before = unittest_results(Path("."))
     after = unittest_results(Path("output"))
     if before is not None and after is not None:
-        if any(state == "ok" and after.get(test, "ok") != "ok" for test, state in before.items()):
+        # A test that vanished (an import error hides it) counts as regressed.
+        if any(state == "ok" and after.get(test) != "ok" for test, state in before.items()):
             failures.add("test-regressed")
 
 emit(failures)

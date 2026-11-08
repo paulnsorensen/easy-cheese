@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import posixpath
+import re
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -20,6 +21,7 @@ from journey_gates.common import (
 )
 from journey_gates.common import _basename as _basename
 from journey_gates.common import _commands as _commands
+from journey_gates.common import _git_subcommand as _git_subcommand
 
 # gate:strip-end
 import shutil
@@ -89,6 +91,8 @@ def replayed_baseline(ws: Workspace) -> Optional[dict[str, bytes]]:
 
 def workspace_rel(ws: Workspace, path: str) -> Optional[str]:
     """The workspace-relative form of a write target, or None when it lies outside."""
+    if "$" in path or "`" in path:
+        return None  # an unexpanded variable; the tree replay judges the result
     if not path.startswith("/"):
         rel = posixpath.normpath(path)
     elif ws.root and posixpath.normpath(path).startswith(ws.root + "/"):
@@ -96,6 +100,21 @@ def workspace_rel(ws: Workspace, path: str) -> Optional[str]:
     else:
         return None
     return None if rel.startswith("..") else rel
+
+
+def read_only_stash(command: str) -> bool:
+    """Every `git stash` in the step is `git stash list` or `git stash show`."""
+    try:
+        commands = [argv for argv, _ in _commands(command) if argv]
+    except Exception:
+        return False
+    for argv in commands:
+        if _basename(argv[0]) != "git":
+            continue
+        sub, index = _git_subcommand(argv)
+        if sub == "stash" and argv[index + 1 : index + 2] not in (["list"], ["show"]):
+            return False
+    return True
 
 
 def in_place_targets(argv: list[str]) -> list[str]:
@@ -118,9 +137,10 @@ def in_place_targets(argv: list[str]) -> list[str]:
         if word.startswith("--in-place"):
             in_place = True
         elif word.startswith("-") and not word.startswith("--") and len(word) > 1:
-            in_place = in_place or "i" in word[1:]
-            has_script = has_script or (name == "perl" and word[-1] in "eE")
+            # Only switches that take no value may precede `i` in one cluster.
+            in_place = in_place or bool(re.match(r"^-[nErsuz]*i" if name == "sed" else r"^-[pnlaswT0-9]*i", word))
             if name == "perl" and word[-1] in "eE":
+                has_script = True
                 index += 1
         elif not word.startswith("-"):
             files.append(word)
@@ -135,8 +155,11 @@ failures: set[str] = set()
 if not workspace.has_turn:
     failures.add("no-trace")
 rule_publication(workspace, failures, commit=True)
-for facts in workspace.facts.values():
-    if facts.git & GIT_MUTATIONS:
+for index, facts in workspace.facts.items():
+    mutations = facts.git & GIT_MUTATIONS
+    if mutations == {"stash"} and read_only_stash(workspace.steps[index][1]):
+        continue
+    if mutations:
         failures.add("git-mutation")
 
 visible = sorted(

@@ -16,13 +16,15 @@ from journey_gates.common import (
 )
 from journey_gates.common import _basename as _basename
 from journey_gates.common import _commands as _commands
+from journey_gates.common import _git_subcommand as _git_subcommand
 
 # gate:strip-end
 
 GIT_PUBLISH = {"commit", "push", "tag"}
 GENERATED = re.compile(r"(?<![\w.-])\.cheese/notes/|/projections/")
 IN_PLACE = re.compile(r"\b(?:sed|perl)\s+(?:-\S+\s+)*-[a-zA-Z]*i")
-SECRET = re.compile(r"AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|sk-[A-Za-z0-9]{20,}")
+SECRET = re.compile(r"AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|(?<![A-Za-z0-9_-])sk-[A-Za-z0-9]{20,}")
+TAG_LIST_FLAGS = {"-l", "--list", "--contains", "--no-contains", "--points-at", "--merged", "--no-merged", "--sort", "--column"}
 
 
 def _new_text(tool: str, args: Any) -> list[str]:
@@ -76,14 +78,36 @@ def wheypoint_subcommands(command: str) -> list[str]:
         return re.findall(r"wheypoint(?:\.pyz)?[\"']?\s+(validate|checkpoint)\b", command)
     found: list[str] = []
     for argv in parsed:
-        # The CLI runs as `wheypoint ...` or `python3 <path>/wheypoint.pyz ...`.
-        for index, word in enumerate(argv[:2]):
+        # The CLI runs as `wheypoint ...` or `python3 [options] <path>/wheypoint.pyz ...`.
+        for index, word in enumerate(argv):
             if _basename(word) in ("wheypoint.pyz", "wheypoint"):
                 rest = [w for w in argv[index + 1 :] if not w.startswith("-")]
                 if rest:
                     found.append(rest[0])
                 break
+            if index > 0 and not word.startswith("-"):
+                break  # the first operand after the interpreter is not the CLI
     return found
+
+
+def lists_tags_only(command: str) -> bool:
+    """Every `git tag` in the step lists tags and creates none."""
+    try:
+        parsed = [argv for argv, _ in _commands(command) if argv]
+    except Exception:
+        return False
+    for argv in parsed:
+        if _basename(argv[0]) != "git":
+            continue
+        sub, index = _git_subcommand(argv)
+        args = argv[index + 1 :]
+        if sub != "tag":
+            continue
+        flags = {w.split("=", 1)[0] for w in args if w.startswith("-")}
+        listing = bool(flags & TAG_LIST_FLAGS) or any(w.startswith("-n") for w in args)
+        if not listing and any(not w.startswith("-") for w in args):
+            return False
+    return True
 
 
 workspace = Workspace()
@@ -91,8 +115,11 @@ failures: set[str] = set()
 if not workspace.has_turn:
     failures.add("no-trace")
 
-for facts in workspace.facts.values():
-    if facts.git & GIT_PUBLISH or facts.pr:
+for index, facts in workspace.facts.items():
+    published = facts.git & GIT_PUBLISH
+    if published == {"tag"} and lists_tags_only(workspace.steps[index][1]):
+        published = set()
+    if published or facts.pr:
         failures.add("git-publish")
 
 validated = False
