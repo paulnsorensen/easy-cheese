@@ -2,7 +2,10 @@
 
 These journeys drive `/skillz autoimprove` for `/age`.
 Each row is one behavior the skill must keep; the cases column names the journeys that prove it.
-The gate enforces that `/age` stays review-only: it writes nothing outside `.cheese/` (no Write or Edit on a source path, no `sed -i`, no shell redirect or Python write to a source file) and runs no mutating git command such as `git commit` or `git push`.
+The gate keeps `/age` review-only. It fails a run that commits, pushes, opens a PR, or runs a git command that changes the tree, the index, or history (`git checkout`, `git stash`, `git reset`, and others).
+It fails a run whose Write, Edit, redirect, `tee`, `sed -i`, or `perl -i` lands on a visible workspace file, and a run whose final tree differs from the tree that `restore-repo.sh` rebuilds.
+The gate sources live in `scripts/journey_gates/`; `scripts/journey_gate_compiler.py` inlines them into `autoimprove.json`.
+The judge never sees `.cheese/`, so every criterion judges what the reply states.
 
 | ID | Behavior | Cases |
 |---|---|---|
@@ -11,7 +14,7 @@ The gate enforces that `/age` stays review-only: it writes nothing outside `.che
 | `AGE-3` | Uses the given or derived slug and prints the report path `.cheese/age/<slug>.md`. | `age-find-1`, `age-find-2`, `age-handoff-1`, `age-scope-1` |
 | `AGE-4` | Reviews a committed range such as `main..feature` instead of the empty working diff. | `age-find-3` |
 | `AGE-5` | Agrees with a clean diff, invents no finding, asks nothing, and ends with `next: done`. | `age-handoff-1` |
-| `AGE-6` | With findings, hands off to `/cure` with an announced selection and no gate when no reason to ask exists. | `age-handoff-2`, `age-handoff-3` |
+| `AGE-6` | With findings, hands off to `/cure` with an announced selection and no gate when no reason to ask exists. | `age-handoff-2` |
 | `AGE-7` | With `--safe`, asks which findings to cure and honours the user's severity choice. | `age-handoff-3` |
 | `AGE-8` | Limits the review to the paths named by `--scope`. | `age-scope-1` |
 | `AGE-9` | Adapts when the user narrows the scope after the first report. | `age-scope-2` |

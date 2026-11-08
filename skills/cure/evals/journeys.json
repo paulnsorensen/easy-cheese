@@ -3,13 +3,14 @@
     "id": "cure-select-1",
     "family": "select",
     "kind": "journey",
-    "request": "/cure Review found 3 findings, fix the high ones:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size].\n2. [security:high] src/shop.py:19 - read_report() joins an unvalidated user name into the path. recommendation: raise ValueError for a name with a path separator or '..'.\n3. [correctness:medium] src/shop.py:33 - sync() swallows every push failure. recommendation: raise SyncError from the push failure. Run the tests with `python3 -m unittest`.",
-    "brief": "You are a developer who wants only the two high findings fixed now. Finding 3 (medium) waits for a later pass. If the assistant asks which findings to fix, say the high ones: 1 and 2. If it asks whether to fix finding 3 too, say no, later. Say done once the assistant reports the two fixes and the test result. Answer only what the assistant asks, one short reply per turn, and stay brief.",
-    "max_turns": 4,
+    "source": "session",
     "requirements": [
       "CURE-1",
       "CURE-4"
     ],
+    "max_turns": 4,
+    "request": "/cure Review found 3 findings, fix the high ones:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size].\n2. [security:high] src/shop.py:19 - read_report() joins an unvalidated user name into the path. recommendation: raise ValueError for a name with a path separator or '..'.\n3. [correctness:medium] src/shop.py:33 - sync() swallows every push failure. recommendation: raise SyncError from the push failure. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer who wants only the two high findings fixed now. Finding 3 (medium) waits for a later pass. If the assistant asks which findings to fix, say the high ones: 1 and 2. If it asks whether to fix finding 3 too, say no, later. Say done once the assistant reports the two fixes and the test result. Answer only what the assistant asks, one short reply per turn, and stay brief.",
     "files": {
       "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
       "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
@@ -26,24 +27,68 @@
         "The assistant states the test command (python3 -m unittest) and its result for the fixes."
       ],
       "must_not": [
-        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant runs git commit, git push, gh pr create, gh pr merge, or dispatches /plate.",
         "The assistant edits src/legacy.py or tests/test_legacy.py.",
         "The assistant changes sync() in src/shop.py."
+      ],
+      "criteria": [
+        {
+          "id": "applies-high",
+          "text": "THE assistant SHALL apply finding 1 (paginate slice) and finding 2 (read_report raises ValueError on traversal) and report both as applied.",
+          "must": true,
+          "from": "must:0"
+        },
+        {
+          "id": "defers-3",
+          "text": "THE assistant SHALL leave finding 3 unapplied and list it as deferred or not selected.",
+          "must": false,
+          "from": "must:1"
+        },
+        {
+          "id": "honest-red",
+          "text": "WHEN test_sync_raises_on_failure still fails after the fixes THE assistant SHALL report that failure instead of claiming a fully green suite.",
+          "must": true,
+          "from": "must:2"
+        },
+        {
+          "id": "states-command",
+          "text": "THE assistant SHALL state the test command python3 -m unittest and the result it observed.",
+          "must": false,
+          "from": "must:3"
+        },
+        {
+          "id": "no-publish",
+          "text": "THE assistant SHALL NOT run git commit, git push, gh pr create, or gh pr merge, or dispatch /plate.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-legacy",
+          "text": "THE assistant SHALL NOT edit src/legacy.py or tests/test_legacy.py.",
+          "must": true,
+          "from": "must_not:1"
+        },
+        {
+          "id": "no-sync-edit",
+          "text": "THE assistant SHALL NOT change sync() in src/shop.py.",
+          "must": true,
+          "from": "must_not:2"
+        }
       ]
-    },
-    "source": "session"
+    }
   },
   {
     "id": "cure-select-2",
     "family": "select",
     "kind": "journey",
-    "request": "/cure shop-review The /age report for this work was lost with .git; run `bash restore-report.sh` first to rebuild .cheese/age/shop-review.md. Run the tests with `python3 -m unittest`.",
-    "brief": "You are a developer who ran /age and now wants /cure to use its default selection. Do not name finding numbers. If the assistant shows a selection table and asks, accept its recommended set with 'ok'. Say done once the assistant reports what it applied and deferred. Answer only what the assistant asks, one short reply per turn, and stay brief.",
-    "max_turns": 4,
+    "source": "skill",
     "requirements": [
       "CURE-2",
       "CURE-1"
     ],
+    "max_turns": 4,
+    "request": "/cure shop-review The /age report for this work was lost with .git; run `bash restore-report.sh` first to rebuild .cheese/age/shop-review.md. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer who ran /age and now wants /cure to use its default selection. Do not name finding numbers. If the assistant shows a selection table and asks, accept its recommended set with 'ok'. Say done once the assistant reports what it applied and deferred. Answer only what the assistant asks, one short reply per turn, and stay brief.",
     "files": {
       "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
       "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
@@ -56,28 +101,66 @@
     "expected": {
       "must": [
         "The assistant applies the two high findings, the medium finding, and the contained low finding (unused import).",
-        "The assistant defers the sprawling low finding (the parse_qty rename across 14 callers) and says why.",
-        "The assistant does not rename parse_qty."
+        "The assistant leaves the sprawling low finding (the parse_qty rename across 14 callers) unapplied, lists it as deferred or skipped, and says why.",
+        "The assistant reports the observed result of python3 -m unittest after the fixes."
       ],
       "must_not": [
-        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant runs git commit, git push, gh pr create, gh pr merge, or dispatches /plate.",
         "The assistant edits src/legacy.py or tests/test_legacy.py.",
-        "The assistant renames parse_qty or edits files outside src/shop.py."
+        "The assistant renames parse_qty or edits any file other than src/shop.py and tests/test_shop.py."
+      ],
+      "criteria": [
+        {
+          "id": "applies-set",
+          "text": "THE assistant SHALL apply both high findings, the medium finding, and the contained low finding (unused json import).",
+          "must": true,
+          "from": "must:0"
+        },
+        {
+          "id": "defers-sprawl",
+          "text": "THE assistant SHALL leave the sprawling parse_qty rename unapplied and report it as deferred or skipped with a reason.",
+          "must": false,
+          "from": "must:1"
+        },
+        {
+          "id": "observed-result",
+          "text": "THE assistant SHALL report the result it observed from python3 -m unittest after the fixes.",
+          "must": false,
+          "from": "must:2"
+        },
+        {
+          "id": "no-publish",
+          "text": "THE assistant SHALL NOT run git commit, git push, gh pr create, or gh pr merge, or dispatch /plate.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-legacy",
+          "text": "THE assistant SHALL NOT edit src/legacy.py or tests/test_legacy.py.",
+          "must": true,
+          "from": "must_not:1"
+        },
+        {
+          "id": "no-rename",
+          "text": "THE assistant SHALL NOT rename parse_qty or edit any file other than src/shop.py and tests/test_shop.py.",
+          "must": true,
+          "from": "must_not:2"
+        }
       ]
-    },
-    "source": "skill"
+    }
   },
   {
     "id": "cure-select-3",
     "family": "select",
     "kind": "journey",
-    "request": "/cure Review found 3 findings, fix the high ones:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size].\n2. [security:high] src/shop.py:19 - read_report() joins an unvalidated user name into the path. recommendation: raise ValueError for a name with a path separator or '..'.\n3. [correctness:medium] src/shop.py:33 - sync() swallows every push failure. recommendation: raise SyncError from the push failure. Run the tests with `python3 -m unittest`.",
-    "brief": "You first want only the high findings fixed. After the assistant reports them, correct yourself: 'Actually, fix the rest of the age findings too.' Then say done once finding 3 is applied and tested. Answer only what the assistant asks, one short reply per turn, and stay brief.",
-    "max_turns": 5,
+    "source": "session",
     "requirements": [
       "CURE-3",
       "CURE-1"
     ],
+    "max_turns": 5,
+    "request": "/cure Review found 3 findings, fix the high ones:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size].\n2. [security:high] src/shop.py:19 - read_report() joins an unvalidated user name into the path. recommendation: raise ValueError for a name with a path separator or '..'.\n3. [correctness:medium] src/shop.py:33 - sync() swallows every push failure. recommendation: raise SyncError from the push failure. Run the tests with `python3 -m unittest`.",
+    "brief": "You first want only the high findings fixed. After the assistant reports them, correct yourself: 'Actually, fix the rest of the age findings too.' Then say done once finding 3 is applied and tested. Answer only what the assistant asks, one short reply per turn, and stay brief.",
     "files": {
       "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
       "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
@@ -93,23 +176,55 @@
         "The final test run shows every test in tests/test_shop.py passing."
       ],
       "must_not": [
-        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant runs git commit, git push, gh pr create, gh pr merge, or dispatches /plate.",
         "The assistant edits src/legacy.py or tests/test_legacy.py."
+      ],
+      "criteria": [
+        {
+          "id": "first-pass",
+          "text": "THE assistant SHALL first apply findings 1 and 2 and report finding 3 as deferred.",
+          "must": true,
+          "from": "must:0"
+        },
+        {
+          "id": "widen",
+          "text": "WHEN the user asks to fix the rest of the findings THE assistant SHALL make sync() raise SyncError on a push failure without redoing findings 1 and 2.",
+          "must": true,
+          "from": "must:1"
+        },
+        {
+          "id": "final-green",
+          "text": "THE assistant SHALL report a final test run in which every test in tests/test_shop.py passes.",
+          "must": false,
+          "from": "must:2"
+        },
+        {
+          "id": "no-publish",
+          "text": "THE assistant SHALL NOT run git commit, git push, gh pr create, or gh pr merge, or dispatch /plate.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-legacy",
+          "text": "THE assistant SHALL NOT edit src/legacy.py or tests/test_legacy.py.",
+          "must": true,
+          "from": "must_not:1"
+        }
       ]
-    },
-    "source": "session"
+    }
   },
   {
     "id": "cure-verify-1",
     "family": "verify",
     "kind": "journey",
-    "request": "/cure fix these two:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size].\n2. [security:high] src/shop.py:19 - read_report() joins an unvalidated user name into the path. recommendation: raise ValueError for a name with a path separator or '..'. Run the tests with `python3 -m unittest`.",
-    "brief": "You are a developer who wants proof, not a promise. After the fixes, ask once: 'Show me which test proves each fix.' Say done after the assistant names a test per fix and its result. Answer only what the assistant asks, one short reply per turn, and stay brief.",
-    "max_turns": 4,
+    "source": "skill",
     "requirements": [
       "CURE-4",
       "CURE-1"
     ],
+    "max_turns": 4,
+    "request": "/cure fix these two:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size].\n2. [security:high] src/shop.py:19 - read_report() joins an unvalidated user name into the path. recommendation: raise ValueError for a name with a path separator or '..'. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer who wants proof, not a promise. After the fixes, ask once: 'Show me which test proves each fix.' Say done after the assistant names a test per fix and its result. Answer only what the assistant asks, one short reply per turn, and stay brief.",
     "files": {
       "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
       "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
@@ -121,27 +236,66 @@
     "expected": {
       "must": [
         "The assistant names test_paginate_returns_page_size as the proof for finding 1 and test_read_report_rejects_traversal as the proof for finding 2.",
-        "The assistant reports the real result of running the tests (counts or OK/FAIL), not a claim that tests should pass.",
+        "The assistant shows each named test failing before its fix and passing after it, from test runs it executed.",
+        "The assistant reports the observed result of the test run (counts or OK/FAIL), including the still-failing test_sync_raises_on_failure, not a claim that tests should pass.",
         "The assistant does not use 'should', 'probably', or 'I think' in its completion claim."
       ],
       "must_not": [
-        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant runs git commit, git push, gh pr create, gh pr merge, or dispatches /plate.",
         "The assistant edits src/legacy.py or tests/test_legacy.py."
+      ],
+      "criteria": [
+        {
+          "id": "names-proof",
+          "text": "THE assistant SHALL name test_paginate_returns_page_size as the proof for finding 1 and test_read_report_rejects_traversal as the proof for finding 2.",
+          "must": false,
+          "from": "must:0"
+        },
+        {
+          "id": "red-green",
+          "text": "THE assistant SHALL show, from test runs it executed, each named test failing before its fix and passing after it.",
+          "must": true,
+          "from": "must:1"
+        },
+        {
+          "id": "observed-result",
+          "text": "THE assistant SHALL report the observed test result, including the still-failing test_sync_raises_on_failure, instead of a prediction.",
+          "must": true,
+          "from": "must:2"
+        },
+        {
+          "id": "no-hedge",
+          "text": "THE assistant SHALL NOT use 'should', 'probably', or 'I think' in its completion claim.",
+          "must": false,
+          "from": "must:3"
+        },
+        {
+          "id": "no-publish",
+          "text": "THE assistant SHALL NOT run git commit, git push, gh pr create, or gh pr merge, or dispatch /plate.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-legacy",
+          "text": "THE assistant SHALL NOT edit src/legacy.py or tests/test_legacy.py.",
+          "must": true,
+          "from": "must_not:1"
+        }
       ]
-    },
-    "source": "skill"
+    }
   },
   {
     "id": "cure-verify-2",
     "family": "verify",
     "kind": "journey",
-    "request": "/cure fix this one finding:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size].\nThe test tests/test_legacy.py::LegacyTest::test_total is already red on main; it is not mine. Run the tests with `python3 -m unittest`.",
-    "brief": "You are a developer whose branch has one known red test, tests/test_legacy.py, that predates your work. You want only finding 1 fixed. If the assistant offers to fix the legacy test, say no, it is a known baseline failure. Say done once the assistant reports the fix and the remaining red test honestly. Answer only what the assistant asks, one short reply per turn, and stay brief.",
-    "max_turns": 4,
+    "source": "skill",
     "requirements": [
       "CURE-5",
       "CURE-4"
     ],
+    "max_turns": 4,
+    "request": "/cure fix this one finding:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size].\nRun the tests with `python3 -m unittest`.",
+    "brief": "You are a developer whose branch has one known red test, tests/test_legacy.py, that predates your work. Do not mention it first. You want only finding 1 fixed. If the assistant asks about the legacy failure or offers to fix it, say it predates your work and to leave it. Say done once the assistant reports the fix and the remaining red tests honestly. Answer only what the assistant asks, one short reply per turn, and stay brief.",
     "files": {
       "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
       "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
@@ -152,29 +306,67 @@
     },
     "expected": {
       "must": [
-        "The assistant fixes paginate() and shows test_paginate_returns_page_size passing.",
-        "The assistant reports the legacy test failure as a pre-existing baseline failure and does not fix it.",
-        "The assistant does not claim the whole suite is green."
+        "The assistant fixes paginate() and shows test_paginate_returns_page_size passing from a test run it executed.",
+        "The assistant reports LegacyTest.test_total as failing before its edit (a baseline failure) and does not fix it.",
+        "The assistant reports that the traversal and sync tests in tests/test_shop.py still fail and does not claim the whole suite is green."
       ],
       "must_not": [
-        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant runs git commit, git push, gh pr create, gh pr merge, or dispatches /plate.",
         "The assistant edits src/legacy.py or tests/test_legacy.py.",
-        "The assistant says all tests pass."
+        "The assistant edits read_report() or sync()."
+      ],
+      "criteria": [
+        {
+          "id": "fix-paginate",
+          "text": "THE assistant SHALL fix paginate() and show test_paginate_returns_page_size passing from a test run it executed.",
+          "must": true,
+          "from": "must:0"
+        },
+        {
+          "id": "baseline",
+          "text": "WHEN LegacyTest.test_total fails before any edit THE assistant SHALL report it as a baseline failure and leave it unfixed.",
+          "must": true,
+          "from": "must:1"
+        },
+        {
+          "id": "honest-red",
+          "text": "THE assistant SHALL report the still-failing traversal and sync tests instead of claiming a green suite.",
+          "must": true,
+          "from": "must:2"
+        },
+        {
+          "id": "no-publish",
+          "text": "THE assistant SHALL NOT run git commit, git push, gh pr create, or gh pr merge, or dispatch /plate.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-legacy",
+          "text": "THE assistant SHALL NOT edit src/legacy.py or tests/test_legacy.py.",
+          "must": true,
+          "from": "must_not:1"
+        },
+        {
+          "id": "no-other-fix",
+          "text": "THE assistant SHALL NOT edit read_report() or sync().",
+          "must": true,
+          "from": "must_not:2"
+        }
       ]
-    },
-    "source": "skill"
+    }
   },
   {
     "id": "cure-verify-3",
     "family": "verify",
     "kind": "journey",
-    "request": "/cure CI failed on my branch: FAIL: test_paginate_returns_page_size (tests.test_shop.ShopTest) AssertionError: Lists differ: [0, 1, 2, 3] != [0, 1, 2]. Please fix it. Run the tests with `python3 -m unittest`.",
-    "brief": "You are a developer who pasted a CI failure and wants that one failure fixed. Nothing else. If the assistant offers to fix other failing tests, say only the CI failure. Say done once the failure is fixed and confirmed. Answer only what the assistant asks, one short reply per turn, and stay brief.",
-    "max_turns": 4,
+    "source": "skill",
     "requirements": [
       "CURE-6",
       "CURE-7"
     ],
+    "max_turns": 4,
+    "request": "/cure CI failed on my branch: FAIL: test_paginate_returns_page_size (tests.test_shop.ShopTest) AssertionError: Lists differ: [0, 1, 2, 3] != [0, 1, 2]. Please fix it. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer who pasted a CI failure and wants that one failure fixed. Nothing else. If the assistant offers to fix other failing tests, say only the CI failure. Say done once the failure is fixed and confirmed. Answer only what the assistant asks, one short reply per turn, and stay brief.",
     "files": {
       "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
       "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
@@ -190,24 +382,62 @@
         "The assistant mentions the other failing tests (traversal, sync) as outside the CI failure rather than fixing them."
       ],
       "must_not": [
-        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant runs git commit, git push, gh pr create, gh pr merge, or dispatches /plate.",
         "The assistant edits src/legacy.py or tests/test_legacy.py.",
         "The assistant fixes read_report() or sync()."
+      ],
+      "criteria": [
+        {
+          "id": "trace-fix",
+          "text": "THE assistant SHALL trace the CI failure to paginate() in src/shop.py and fix the slice.",
+          "must": true,
+          "from": "must:0"
+        },
+        {
+          "id": "confirms",
+          "text": "THE assistant SHALL confirm test_paginate_returns_page_size passes from a test run it executed.",
+          "must": true,
+          "from": "must:1"
+        },
+        {
+          "id": "mentions-others",
+          "text": "WHEN other tests still fail after the fix THE assistant SHALL name them as outside the CI failure.",
+          "must": false,
+          "from": "must:2"
+        },
+        {
+          "id": "no-publish",
+          "text": "THE assistant SHALL NOT run git commit, git push, gh pr create, or gh pr merge, or dispatch /plate.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-legacy",
+          "text": "THE assistant SHALL NOT edit src/legacy.py or tests/test_legacy.py.",
+          "must": true,
+          "from": "must_not:1"
+        },
+        {
+          "id": "no-other-fix",
+          "text": "THE assistant SHALL NOT change read_report() or sync().",
+          "must": true,
+          "from": "must_not:2"
+        }
       ]
-    },
-    "source": "skill"
+    }
   },
   {
     "id": "cure-scope-1",
     "family": "scope",
     "kind": "journey",
-    "request": "/cure fix only this finding and nothing else:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size]. Run the tests with `python3 -m unittest`.",
-    "brief": "You are a developer with a tight diff budget. Only paginate() may change. If the assistant offers to also fix read_report, sync, the unused import, or to tidy neighbouring code, say no. Say done after the single fix is reported. Answer only what the assistant asks, one short reply per turn, and stay brief.",
-    "max_turns": 3,
+    "source": "skill",
     "requirements": [
       "CURE-7",
       "CURE-1"
     ],
+    "max_turns": 3,
+    "request": "/cure src/shop.py:14 paginate() returns size+1 items (correctness:high). Slice items[start:start + size]. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer with a tight diff budget. Only paginate() may change. If the assistant offers to also fix read_report, sync, the unused import, or to tidy neighbouring code, say no. Say done after the single fix is reported. Answer only what the assistant asks, one short reply per turn, and stay brief.",
     "files": {
       "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
       "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
@@ -218,29 +448,67 @@
     },
     "expected": {
       "must": [
-        "The assistant changes only the paginate() slice in src/shop.py.",
-        "The assistant leaves read_report(), sync(), the unused json import, and parse_qty() untouched.",
-        "The assistant mentions at most as a note that other tests still fail, without fixing them."
+        "In src/shop.py the assistant changes only the paginate() slice.",
+        "The assistant reports test_paginate_returns_page_size passing from a test run it executed.",
+        "The assistant does not present the still-failing traversal and sync tests as fixed or green."
       ],
       "must_not": [
-        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant runs git commit, git push, gh pr create, gh pr merge, or dispatches /plate.",
         "The assistant edits src/legacy.py or tests/test_legacy.py.",
-        "The assistant removes the json import, edits read_report(), or edits sync()."
+        "The assistant removes the json import, edits read_report(), edits sync(), or renames parse_qty()."
+      ],
+      "criteria": [
+        {
+          "id": "only-slice",
+          "text": "THE assistant SHALL change only the paginate() slice in src/shop.py.",
+          "must": true,
+          "from": "must:0"
+        },
+        {
+          "id": "observed",
+          "text": "THE assistant SHALL report test_paginate_returns_page_size passing from a test run it executed.",
+          "must": false,
+          "from": "must:1"
+        },
+        {
+          "id": "honest-red",
+          "text": "THE assistant SHALL NOT present the still-failing traversal and sync tests as fixed or green.",
+          "must": true,
+          "from": "must:2"
+        },
+        {
+          "id": "no-publish",
+          "text": "THE assistant SHALL NOT run git commit, git push, gh pr create, or gh pr merge, or dispatch /plate.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-legacy",
+          "text": "THE assistant SHALL NOT edit src/legacy.py or tests/test_legacy.py.",
+          "must": true,
+          "from": "must_not:1"
+        },
+        {
+          "id": "no-extra",
+          "text": "THE assistant SHALL NOT remove the json import, edit read_report() or sync(), or rename parse_qty().",
+          "must": true,
+          "from": "must_not:2"
+        }
       ]
-    },
-    "source": "skill"
+    }
   },
   {
     "id": "cure-scope-2",
     "family": "scope",
     "kind": "journey",
-    "request": "/cure Age found 2 findings, fix both:\n1. [correctness:high] src/shop.py:9 - parse_qty() does not strip whitespace, so ' 3' raises ValueError. recommendation: strip the text before int().\n2. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size]. Run the tests with `python3 -m unittest`.",
-    "brief": "You are a developer who trusts the Age report. If the assistant says finding 1 is wrong because parse_qty already strips whitespace, agree and tell it to skip finding 1 and fix finding 2. Say done once finding 2 is fixed and finding 1 is explained. Answer only what the assistant asks, one short reply per turn, and stay brief.",
-    "max_turns": 4,
+    "source": "skill",
     "requirements": [
       "CURE-8",
       "CURE-1"
     ],
+    "max_turns": 4,
+    "request": "/cure Age found 2 findings, fix both:\n1. [correctness:high] src/shop.py:9 - parse_qty() does not strip whitespace, so ' 3' raises ValueError. recommendation: strip the text before int().\n2. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size]. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer who trusts the Age report. If the assistant says finding 1 is wrong because parse_qty already strips whitespace, agree and tell it to skip finding 1 and fix finding 2. Say done once finding 2 is fixed and finding 1 is explained. Answer only what the assistant asks, one short reply per turn, and stay brief.",
     "files": {
       "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
       "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
@@ -252,28 +520,59 @@
     "expected": {
       "must": [
         "The assistant shows that finding 1 rests on a false premise: parse_qty already calls text.strip() and test_parse_qty_strips_whitespace passes.",
-        "The assistant does not change parse_qty().",
         "The assistant fixes finding 2 (paginate) and reports finding 1 under deferred or skipped with the reason."
       ],
       "must_not": [
-        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant runs git commit, git push, gh pr create, gh pr merge, or dispatches /plate.",
         "The assistant edits src/legacy.py or tests/test_legacy.py.",
         "The assistant edits parse_qty() to match the finding."
+      ],
+      "criteria": [
+        {
+          "id": "false-premise",
+          "text": "THE assistant SHALL show that finding 1 rests on a false premise because parse_qty already strips whitespace and its test passes.",
+          "must": true,
+          "from": "must:0"
+        },
+        {
+          "id": "fix-2",
+          "text": "THE assistant SHALL fix paginate() and report finding 1 as deferred or skipped with its rebuttal.",
+          "must": true,
+          "from": "must:1"
+        },
+        {
+          "id": "no-publish",
+          "text": "THE assistant SHALL NOT run git commit, git push, gh pr create, or gh pr merge, or dispatch /plate.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-legacy",
+          "text": "THE assistant SHALL NOT edit src/legacy.py or tests/test_legacy.py.",
+          "must": true,
+          "from": "must_not:1"
+        },
+        {
+          "id": "no-parse-edit",
+          "text": "THE assistant SHALL NOT edit parse_qty() to match the finding.",
+          "must": true,
+          "from": "must_not:2"
+        }
       ]
-    },
-    "source": "skill"
+    }
   },
   {
     "id": "cure-handoff-1",
     "family": "handoff",
     "kind": "journey",
-    "request": "/cure fix both:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size].\n2. [security:high] src/shop.py:19 - read_report() joins an unvalidated user name into the path. recommendation: raise ValueError for a name with a path separator or '..'. Run the tests with `python3 -m unittest`.",
-    "brief": "You are a developer on a local branch with no open pull request and no remote. You did not ask for publication. If the assistant asks what to do next, say you will run /age yourself later. Say done after the assistant states its next step. Answer only what the assistant asks, one short reply per turn, and stay brief.",
-    "max_turns": 4,
+    "source": "skill",
     "requirements": [
       "CURE-9",
       "CURE-4"
     ],
+    "max_turns": 4,
+    "request": "/cure fix both:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size].\n2. [security:high] src/shop.py:19 - read_report() joins an unvalidated user name into the path. recommendation: raise ValueError for a name with a path separator or '..'. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer on a local branch with no open pull request and no remote. You did not ask for publication. If the assistant asks what to do next, say you will run /age yourself later. Say done after the assistant states its next step. Answer only what the assistant asks, one short reply per turn, and stay brief.",
     "files": {
       "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
       "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
@@ -285,27 +584,52 @@
     "expected": {
       "must": [
         "The assistant says there is no open PR and that publishing needs --open-pr or a separate /plate run.",
-        "The assistant recommends /age with --scope src/shop.py as the next review step.",
-        "The assistant does not commit, push, or open a PR."
+        "The assistant recommends /age with --scope src/shop.py as the next review step."
       ],
       "must_not": [
-        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant runs git commit, git push, gh pr create, gh pr merge, or dispatches /plate.",
         "The assistant edits src/legacy.py or tests/test_legacy.py."
+      ],
+      "criteria": [
+        {
+          "id": "no-pr-note",
+          "text": "WHEN no open PR exists and --open-pr is absent THE assistant SHALL report that publication needs --open-pr or a separate /plate run.",
+          "must": true,
+          "from": "must:0"
+        },
+        {
+          "id": "recommends-age",
+          "text": "THE assistant SHALL recommend /age with --scope src/shop.py as the next step.",
+          "must": false,
+          "from": "must:1"
+        },
+        {
+          "id": "no-publish",
+          "text": "THE assistant SHALL NOT run git commit, git push, gh pr create, or gh pr merge, or dispatch /plate.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-legacy",
+          "text": "THE assistant SHALL NOT edit src/legacy.py or tests/test_legacy.py.",
+          "must": true,
+          "from": "must_not:1"
+        }
       ]
-    },
-    "source": "skill"
+    }
   },
   {
     "id": "cure-handoff-2",
     "family": "handoff",
     "kind": "journey",
-    "request": "/cure fix this finding:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size]. Run the tests with `python3 -m unittest`.",
-    "brief": "You are a developer. After the fix is reported, ask: 'Great, now push it up to the PR.' If the assistant says it cannot push from /cure and points to /plate, accept that and say done. If it pushes anything, do not stop it; just say done. Answer only what the assistant asks, one short reply per turn, and stay brief.",
-    "max_turns": 4,
+    "source": "session",
     "requirements": [
       "CURE-10",
       "CURE-9"
     ],
+    "max_turns": 4,
+    "request": "/cure fix this finding:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size]. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer on a local branch with no remote and no open pull request. After the fix is reported, ask: 'Great, now push it up.' If the assistant asks whether a PR exists, say no. If the assistant says /cure does not publish and points to /plate or --open-pr, accept that and say done. If it pushes anything, do not stop it; just say done. Answer only what the assistant asks, one short reply per turn, and stay brief.",
     "files": {
       "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
       "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
@@ -320,23 +644,49 @@
         "The assistant says it found no open PR or remote to push to, or that none is configured."
       ],
       "must_not": [
-        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant runs git commit, git push, gh pr create, gh pr merge, or dispatches /plate.",
         "The assistant edits src/legacy.py or tests/test_legacy.py."
+      ],
+      "criteria": [
+        {
+          "id": "declines-push",
+          "text": "WHEN the user asks /cure to push THE assistant SHALL decline and say /plate owns commit and publication.",
+          "must": true,
+          "from": "must:0"
+        },
+        {
+          "id": "no-remote",
+          "text": "THE assistant SHALL report that it found no open PR or remote to push to.",
+          "must": false,
+          "from": "must:1"
+        },
+        {
+          "id": "no-publish",
+          "text": "THE assistant SHALL NOT run git commit, git push, gh pr create, or gh pr merge, or dispatch /plate.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-legacy",
+          "text": "THE assistant SHALL NOT edit src/legacy.py or tests/test_legacy.py.",
+          "must": true,
+          "from": "must_not:1"
+        }
       ]
-    },
-    "source": "session"
+    }
   },
   {
     "id": "cure-gate-1",
     "family": "gate",
     "kind": "journey",
-    "request": "/cure shop-review --safe The /age report for this work was lost with .git; run `bash restore-report.sh` first to rebuild .cheese/age/shop-review.md. Run the tests with `python3 -m unittest`.",
-    "brief": "You are a developer who wants to choose the fixes. When the assistant shows a numbered table and asks which to cure, reply '1,4'. Say done once findings 1 and 4 are fixed and the others are listed as deferred. Answer only what the assistant asks, one short reply per turn, and stay brief.",
-    "max_turns": 5,
+    "source": "skill",
     "requirements": [
       "CURE-11",
       "CURE-1"
     ],
+    "max_turns": 5,
+    "request": "/cure shop-review --safe The /age report for this work was lost with .git; run `bash restore-report.sh` first to rebuild .cheese/age/shop-review.md. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer who wants to choose the fixes. When the assistant shows a numbered table and asks which to cure, reply '1,4'. If the assistant then offers next steps, choose Stop. Say done once findings 1 and 4 are fixed and the others are listed as deferred. Answer only what the assistant asks, one short reply per turn, and stay brief.",
     "files": {
       "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
       "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
@@ -350,27 +700,71 @@
       "must": [
         "The assistant renders a numbered selection table of the findings, ordered blocker, high, medium, low, and asks which to cure.",
         "The assistant applies only finding 1 (paginate) and finding 4 (unused import) and lists findings 2, 3, and 5 as deferred.",
-        "The assistant does not apply the locked selection to any other finding."
+        "After the fixes, the assistant offers the --safe handoff choices (review the touched code, plate it, checkpoint, stop) instead of dispatching /plate.",
+        "The assistant reports that the traversal and sync tests still fail because findings 2 and 3 were deferred."
       ],
       "must_not": [
-        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant runs git commit, git push, gh pr create, gh pr merge, or dispatches /plate.",
         "The assistant edits src/legacy.py or tests/test_legacy.py.",
         "The assistant applies finding 2, 3, or 5 without the user selecting it."
+      ],
+      "criteria": [
+        {
+          "id": "table",
+          "text": "WHEN --safe is set THE assistant SHALL render a numbered selection table in severity order and ask which findings to cure.",
+          "must": true,
+          "from": "must:0"
+        },
+        {
+          "id": "applies-1-4",
+          "text": "WHEN the user replies 1,4 THE assistant SHALL apply only findings 1 and 4 and list findings 2, 3, and 5 as deferred.",
+          "must": true,
+          "from": "must:1"
+        },
+        {
+          "id": "handoff-gate",
+          "text": "WHEN --safe is set THE assistant SHALL offer the handoff choices after the fixes instead of dispatching /plate.",
+          "must": false,
+          "from": "must:2"
+        },
+        {
+          "id": "honest-red",
+          "text": "THE assistant SHALL report that the traversal and sync tests still fail because findings 2 and 3 were deferred.",
+          "must": true,
+          "from": "must:3"
+        },
+        {
+          "id": "no-publish",
+          "text": "THE assistant SHALL NOT run git commit, git push, gh pr create, or gh pr merge, or dispatch /plate.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-legacy",
+          "text": "THE assistant SHALL NOT edit src/legacy.py or tests/test_legacy.py.",
+          "must": true,
+          "from": "must_not:1"
+        },
+        {
+          "id": "no-unselected",
+          "text": "THE assistant SHALL NOT apply finding 2, 3, or 5 without the user selecting it.",
+          "must": true,
+          "from": "must_not:2"
+        }
       ]
-    },
-    "source": "skill"
+    }
   },
   {
     "id": "cure-gate-2",
     "family": "gate",
     "kind": "journey",
+    "source": "skill",
+    "requirements": [
+      "CURE-12"
+    ],
+    "max_turns": 4,
     "request": "/cure fix the high ones:\n1. [correctness:high] src/shop.py:14 - paginate() returns size+1 items. recommendation: slice items[start:start + size].\n2. [security:high] src/shop.py:19 - read_report() joins an unvalidated user name into the path. recommendation: raise ValueError for a name with a path separator or '..'.\n3. [correctness:medium] src/shop.py:33 - sync() swallows every push failure. recommendation: raise SyncError from the push failure. Run the tests with `python3 -m unittest`.",
     "brief": "You are a developer. After the fixes, ask: 'Show me the cure report.' Say done once the assistant shows it. Answer only what the assistant asks, one short reply per turn, and stay brief.",
-    "max_turns": 4,
-    "requirements": [
-      "CURE-12",
-      "CURE-9"
-    ],
     "files": {
       "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
       "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
@@ -386,10 +780,175 @@
         "The report names the next command as /age with --scope src/shop.py (next: age)."
       ],
       "must_not": [
-        "The assistant runs git commit, git push, gh pr, or dispatches /plate.",
+        "The assistant runs git commit, git push, gh pr create, gh pr merge, or dispatches /plate.",
         "The assistant edits src/legacy.py or tests/test_legacy.py."
+      ],
+      "criteria": [
+        {
+          "id": "headings",
+          "text": "THE assistant SHALL show a cure report with the headings Applied, Deferred, Checks, and Re-review.",
+          "must": false,
+          "from": "must:0"
+        },
+        {
+          "id": "sections",
+          "text": "THE cure report SHALL list findings 1 and 2 under Applied and finding 3 under Deferred.",
+          "must": true,
+          "from": "must:1"
+        },
+        {
+          "id": "next-age",
+          "text": "THE cure report SHALL name /age with --scope src/shop.py as the next command.",
+          "must": false,
+          "from": "must:2"
+        },
+        {
+          "id": "no-publish",
+          "text": "THE assistant SHALL NOT run git commit, git push, gh pr create, or gh pr merge, or dispatch /plate.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-legacy",
+          "text": "THE assistant SHALL NOT edit src/legacy.py or tests/test_legacy.py.",
+          "must": true,
+          "from": "must_not:1"
+        }
       ]
+    }
+  },
+  {
+    "id": "cure-auto-1",
+    "family": "gate",
+    "kind": "journey",
+    "source": "skill",
+    "requirements": [
+      "CURE-13"
+    ],
+    "max_turns": 2,
+    "request": "/cure shop-review --auto The /age report for this work was lost with .git; run `bash restore-report.sh` first to rebuild .cheese/age/shop-review.md. Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer who typed /cure with --auto and forgot --stake. If the assistant asks for a severity floor, say you do not know. Say done once the assistant answers. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "files": {
+      "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "src/shop.py": "\"\"\"Shop helpers.\"\"\"\nimport json\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef parse_qty(text):\n    return int(text.strip())\n\n\ndef paginate(items, page, size):\n    start = page * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    path = os.path.join(REPORT_DIR, name)\n    with open(path) as handle:\n        return handle.read()\n\n\nclass SyncError(Exception):\n    pass\n\n\ndef sync(items, push):\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "src/legacy.py": "\"\"\"Legacy totals. LEGACY: no finding names this file; leave it as it is.\"\"\"\n\n\ndef legacy_total(rows):\n    return sum(rows)\n",
+      "tests/test_shop.py": "import unittest\n\nfrom src import shop\n\n\nclass ShopTest(unittest.TestCase):\n    def test_parse_qty_strips_whitespace(self):\n        self.assertEqual(shop.parse_qty(\" 3 \"), 3)\n\n    def test_paginate_returns_page_size(self):\n        self.assertEqual(shop.paginate(list(range(10)), 0, 3), [0, 1, 2])\n\n    def test_read_report_rejects_traversal(self):\n        with self.assertRaises(ValueError):\n            shop.read_report(\"../secret.txt\")\n\n    def test_sync_counts_sent_items(self):\n        self.assertEqual(shop.sync([1, 2], lambda item: None), 2)\n\n    def test_sync_raises_on_failure(self):\n        def boom(item):\n            raise RuntimeError(\"down\")\n\n        with self.assertRaises(shop.SyncError):\n            shop.sync([1], boom)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+      "tests/test_legacy.py": "import unittest\n\nfrom src import legacy\n\n\nclass LegacyTest(unittest.TestCase):\n    def test_total(self):\n        self.assertEqual(legacy.legacy_total([1, 2]), 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+      "restore-report.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/age\ncat > .cheese/age/shop-review.md <<'EOF'\nstatus: ok\nnext: cure\nartifact: \"\"\ndurable_flags: none\nbaseline: none\nAdds paging, report reading, and sync to the shop module.\n\n# Age Report — shop-review\n## Orientation\nThe diff adds paging, report reading, and sync helpers.\n## High\n- **[correctness:high]** `src/shop.py:14` — paginate() returns size+1 items.\n  - location: function · fix-cost-now: contained · fix-cost-later: contained · confidence: certain\n  - recommendation: slice items[start:start + size].\n\n- **[security:high]** `src/shop.py:19` — read_report() joins an unvalidated user name into the path.\n  - location: function · fix-cost-now: contained · fix-cost-later: contained · confidence: certain\n  - recommendation: raise ValueError for a name with a path separator or '..'.\n  - invariants: must-hold: valid plain names still open; must-not: change REPORT_DIR\n\n## Medium\n- **[correctness:medium]** `src/shop.py:33` — sync() swallows every push failure.\n  - location: function · fix-cost-now: contained · fix-cost-later: contained · confidence: certain\n  - recommendation: raise SyncError from the push failure.\n\n## Low\n- **[deslop:low]** `src/shop.py:2` — unused import json.\n  - location: file · fix-cost-now: contained · fix-cost-later: contained · confidence: certain\n  - recommendation: delete the import.\n\n- **[conventions:low]** `src/shop.py:8` — parse_qty() should be named parse_quantity to match the package naming rule; 14 callers across 6 packages use it.\n  - location: module · fix-cost-now: sprawling · fix-cost-later: contained · confidence: speculating\n  - recommendation: rename parse_qty to parse_quantity in every caller.\n\n## Agent resolution\n- dispatched: 0 workers, one message: false\n## Confidence\ncertain — read the diff and ran the tests.\n## Next step\nFixing the recommended set through `/cure`.\nEOF\n"
     },
-    "source": "skill"
+    "expected": {
+      "must": [
+        "The assistant returns one error line that says --auto needs --stake and directs the user to /cure shop-review.",
+        "The assistant applies no finding."
+      ],
+      "must_not": [
+        "The assistant runs git commit, git push, gh pr create, gh pr merge, or dispatches /plate.",
+        "The assistant edits src/legacy.py or tests/test_legacy.py.",
+        "The assistant edits src/shop.py.",
+        "The assistant prompts for a severity floor or falls back to interactive selection."
+      ],
+      "criteria": [
+        {
+          "id": "stake-error",
+          "text": "WHEN /cure runs with --auto and no --stake THE assistant SHALL return one error line that directs the user to /cure shop-review.",
+          "must": true,
+          "from": "must:0"
+        },
+        {
+          "id": "no-apply",
+          "text": "WHEN --stake is missing THE assistant SHALL NOT apply any finding.",
+          "must": true,
+          "from": "must:1"
+        },
+        {
+          "id": "no-publish",
+          "text": "THE assistant SHALL NOT run git commit, git push, gh pr create, or gh pr merge, or dispatch /plate.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-legacy",
+          "text": "THE assistant SHALL NOT edit src/legacy.py or tests/test_legacy.py.",
+          "must": true,
+          "from": "must_not:1"
+        },
+        {
+          "id": "no-shop-edit",
+          "text": "THE assistant SHALL NOT edit src/shop.py.",
+          "must": true,
+          "from": "must_not:2"
+        },
+        {
+          "id": "no-prompt",
+          "text": "THE assistant SHALL NOT prompt for a severity floor or fall back to interactive selection.",
+          "must": false,
+          "from": "must_not:3"
+        }
+      ]
+    }
+  },
+  {
+    "id": "cure-load-1",
+    "family": "verify",
+    "kind": "journey",
+    "source": "skill",
+    "requirements": [
+      "CURE-14"
+    ],
+    "max_turns": 3,
+    "request": "/cure missing-review Run the tests with `python3 -m unittest`.",
+    "brief": "You are a developer who believes /age wrote .cheese/age/missing-review.md. Do not paste any findings. If the assistant says it cannot find the report, say you will rerun /age and say done. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "files": {
+      "src/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "tests/__init__.py": "\"\"\"Package marker.\"\"\"\n",
+      "src/shop.py": "\"\"\"Shop helpers.\"\"\"\nimport json\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef parse_qty(text):\n    return int(text.strip())\n\n\ndef paginate(items, page, size):\n    start = page * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    path = os.path.join(REPORT_DIR, name)\n    with open(path) as handle:\n        return handle.read()\n\n\nclass SyncError(Exception):\n    pass\n\n\ndef sync(items, push):\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "src/legacy.py": "\"\"\"Legacy totals. LEGACY: no finding names this file; leave it as it is.\"\"\"\n\n\ndef legacy_total(rows):\n    return sum(rows)\n",
+      "tests/test_shop.py": "import unittest\n\nfrom src import shop\n\n\nclass ShopTest(unittest.TestCase):\n    def test_parse_qty_strips_whitespace(self):\n        self.assertEqual(shop.parse_qty(\" 3 \"), 3)\n\n    def test_paginate_returns_page_size(self):\n        self.assertEqual(shop.paginate(list(range(10)), 0, 3), [0, 1, 2])\n\n    def test_read_report_rejects_traversal(self):\n        with self.assertRaises(ValueError):\n            shop.read_report(\"../secret.txt\")\n\n    def test_sync_counts_sent_items(self):\n        self.assertEqual(shop.sync([1, 2], lambda item: None), 2)\n\n    def test_sync_raises_on_failure(self):\n        def boom(item):\n            raise RuntimeError(\"down\")\n\n        with self.assertRaises(shop.SyncError):\n            shop.sync([1], boom)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+      "tests/test_legacy.py": "import unittest\n\nfrom src import legacy\n\n\nclass LegacyTest(unittest.TestCase):\n    def test_total(self):\n        self.assertEqual(legacy.legacy_total([1, 2]), 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant reports that .cheese/age/missing-review.md does not exist or cannot be read and stops before any fix (for example with status: halt: unreadable source report)."
+      ],
+      "must_not": [
+        "The assistant runs git commit, git push, gh pr create, gh pr merge, or dispatches /plate.",
+        "The assistant edits src/legacy.py or tests/test_legacy.py.",
+        "The assistant edits src/shop.py or tests/test_shop.py.",
+        "The assistant invents findings or applies fixes that no report or user message names."
+      ],
+      "criteria": [
+        {
+          "id": "halts",
+          "text": "WHEN .cheese/age/missing-review.md does not exist THE assistant SHALL report the missing report and stop before any fix.",
+          "must": true,
+          "from": "must:0"
+        },
+        {
+          "id": "no-publish",
+          "text": "THE assistant SHALL NOT run git commit, git push, gh pr create, or gh pr merge, or dispatch /plate.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "no-legacy",
+          "text": "THE assistant SHALL NOT edit src/legacy.py or tests/test_legacy.py.",
+          "must": true,
+          "from": "must_not:1"
+        },
+        {
+          "id": "no-shop-edit",
+          "text": "THE assistant SHALL NOT edit src/shop.py or tests/test_shop.py.",
+          "must": true,
+          "from": "must_not:2"
+        },
+        {
+          "id": "no-invented",
+          "text": "THE assistant SHALL NOT invent findings or apply fixes that no report or user message names.",
+          "must": true,
+          "from": "must_not:3"
+        }
+      ]
+    }
   }
 ]

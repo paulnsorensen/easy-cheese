@@ -2,18 +2,16 @@
 
 A skill that ships `evals/journeys.json` holds multi-turn journey cases: a
 simulated user converses with an agent that runs the skill, a command gate
-checks the raw trace and the output files, and a judge scores the transcript.
-The runner reads cases only from a run's `cases.draft.json`, so these tests
-hold the committed suite to the runner's documented rules, check that the
-cases cover every behavior in `evals/journeys.md`, and run each gate on the
-recorded pass and fail traces in `evals/journey-gates.json`.
+checks the raw trace and the output files, and a judge grades each case's
+EARS criteria. These tests hold the committed suite to the runner's intake
+rules and check that the cases cover every behavior in `evals/journeys.md`.
+The gate programs and their recorded traces have their own tests.
 """
 
 from __future__ import annotations
 
 import json
 import re
-import subprocess
 from collections import Counter
 from pathlib import Path, PurePosixPath
 from typing import cast
@@ -26,15 +24,19 @@ SUITES = sorted(path.parents[1] for path in SKILLS_DIR.glob("*/evals/journeys.js
 
 # The runner's `_intake.py` constants and `_cases.py` fixture rules.
 HOLDOUT_MINIMUM = 6
-MINIMUM_FAMILIES = 3
+MINIMUM_FAMILIES = 4
 RESERVED_ROOTS = {"home", "tmp", "output", "capture", "answer.json", "response-schema.json", "AGENTS.md", "CLAUDE.md"}
-CASE_FIELDS = {"id", "family", "kind", "request", "brief", "max_turns", "requirements", "files", "expected", "source"}
-CONTRACT_FIELDS = {"schema_version", "status", "skill", "invocation", "kinds", "helper", "editable", "surface", "statistics"}
-GATE_SECONDS = 20
+CASE_FIELDS = {"id", "family", "kind", "request", "brief", "max_turns", "requirements", "files", "expected", "source", "regression"}
+EXPECTED_FIELDS = {"must", "must_not", "questions", "final_stop", "criteria"}
+CRITERION_FIELDS = {"id", "text", "must", "from"}
+CONTRACT_FIELDS = {"schema_version", "status", "skill", "invocation", "kinds", "helper", "editable", "surface", "statistics", "harness_phrases"}
 REQUIREMENT_ROW = re.compile(r"^\|\s*`?([A-Z][A-Z0-9]*-\d+)`?\s*\|")
+CRITERION_ID = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+# One optional WHEN/WHILE/IF/WHERE clause, then one `THE <subject> SHALL <response>`.
+EARS = re.compile(r"^(?:(?:WHEN|WHILE|IF|WHERE) .+? )?THE .+? SHALL .+$", re.DOTALL)
+SOURCE_ITEM = re.compile(r"^(must|must_not):(\d+)$")
 
 JsonObject = dict[str, object]
-
 
 def _load(path: Path) -> object:
     return cast(object, json.loads(path.read_text(encoding="utf-8")))
@@ -82,35 +84,6 @@ def _kinds(contract: JsonObject) -> dict[str, JsonObject]:
     kinds = _object(contract.get("kinds"), "contract kinds")
     return {name: _object(grader, f"kind {name}") for name, grader in kinds.items()}
 
-
-def _scored_kind(contract: JsonObject) -> str:
-    kinds = _kinds(contract)
-    return "task" if "task" in kinds else next(iter(kinds))
-
-
-def _gate_score(code: int, stdout: str) -> float:
-    """Mirror the runner's `_command_score`: exit 0 and a JSON object with a score from 0 to 1."""
-    if code != 0:
-        return 0.0
-    try:
-        data = cast(object, json.loads(stdout))
-    except ValueError:
-        return 0.0
-    if not isinstance(data, dict):
-        return 0.0
-    score = cast(JsonObject, data).get("score")
-    if isinstance(score, bool) or not isinstance(score, (int, float)) or not 0 <= score <= 1:
-        return 0.0
-    return float(score)
-
-
-def _scenarios() -> list[tuple[Path, JsonObject]]:
-    found: list[tuple[Path, JsonObject]] = []
-    for skill in SUITES:
-        path = skill / "evals" / "journey-gates.json"
-        if path.exists():
-            found += [(skill, scenario) for scenario in _objects(_load(path), f"{skill.name} journey-gates.json")]
-    return found
 
 
 def _param_id(value: object) -> str:
@@ -162,11 +135,35 @@ def test_journey_holdout_can_fill(skill: Path) -> None:
     """Splits go by family: one family to train, one to validation, the rest to holdout."""
     families = Counter(_text(case, "family") for case in _cases(skill))
     assert len(families) >= MINIMUM_FAMILIES, f"{len(families)} families; the runner needs {MINIMUM_FAMILIES}"
-    if _scored_kind(_contract(skill)) == "journey":
-        largest = sum(count for _, count in families.most_common(2))
-        assert families.total() - largest >= HOLDOUT_MINIMUM, (
-            f"family sizes {dict(families)} can leave fewer than {HOLDOUT_MINIMUM} holdout cases"
-        )
+    largest = sum(count for _, count in families.most_common(2))
+    assert families.total() - largest >= HOLDOUT_MINIMUM, (
+        f"family sizes {dict(families)} can leave fewer than {HOLDOUT_MINIMUM} holdout cases"
+    )
+
+
+@pytest.mark.parametrize("skill", SUITES, ids=_param_id)
+def test_journey_criteria_are_ears_and_trace_to_the_reference(skill: Path) -> None:
+    """skillz intake stops a judged case without valid `expected.criteria`."""
+    for case in _cases(skill):
+        name = _text(case, "id")
+        expected = _object(case.get("expected"), f"{name} expected")
+        assert not set(expected) - EXPECTED_FIELDS, f"{name}: unknown expected fields"
+        assert expected.get("must") or expected.get("must_not"), f"{name}: expected needs must or must_not"
+        criteria = _objects(expected.get("criteria"), f"{name} criteria")
+        assert criteria, f"{name}: no criteria"
+        ids = [_text(item, "id") for item in criteria]
+        assert len(ids) == len(set(ids)), f"{name}: duplicate criterion ids"
+        assert any(item.get("must") is True for item in criteria), f"{name}: no dealbreaker criterion"
+        for item in criteria:
+            label = f"{name}/{_text(item, 'id')}"
+            assert not set(item) - CRITERION_FIELDS, f"{label}: unknown fields"
+            assert CRITERION_ID.match(_text(item, "id")), f"{label}: bad id"
+            assert EARS.match(_text(item, "text")), f"{label}: not one EARS statement"
+            assert item.get("must", False) in (True, False), f"{label}: must is a boolean"
+            source = SOURCE_ITEM.match(_text(item, "from"))
+            if source:
+                items = cast(list[object], expected.get(source.group(1)) or [])
+                assert int(source.group(2)) < len(items), f"{label}: from points past the list"
 
 
 @pytest.mark.parametrize("skill", SUITES, ids=_param_id)
@@ -197,14 +194,16 @@ def test_journey_contract_pairs_the_journey_grader(skill: Path) -> None:
     assert "reference" in _text(journey, "rubric"), "the rubric must grade against reference"
     for kind, grader in kinds.items():
         assert (kind == "journey") == (grader.get("grader") == "journey"), f"kind {kind} pairs the wrong grader"
+    assert set(kinds) == {"journey"}, "a journey contract scores only the journey kind"
     seeds = skill / "evals" / "evals.json"
     if seeds.exists():
         document = _load(seeds)
         if isinstance(document, dict):
             document = cast(JsonObject, document).get("evals")
-        entries = _objects(document, f"{skill.name} evals.json")
-        tasks = [entry for entry in entries if entry.get("assertions") and entry.get("expected_skill", skill.name) is not None]
-        assert not tasks or "task" in kinds, "evals.json seeds task cases, so the contract needs a task kind"
+        # skillz checks the family of every seed task entry, even in a journey-only run.
+        for entry in _objects(document, f"{skill.name} evals.json"):
+            if entry.get("kind", "task") == "task":
+                assert _text(entry, "family").strip(), f"evals.json task entry {_text(entry, 'name')} has no family"
 
 
 @pytest.mark.parametrize("skill", SUITES, ids=_param_id)
@@ -217,27 +216,3 @@ def test_journey_gate_has_pass_and_fail_traces(skill: Path) -> None:
     assert {_text(scenario, "case") for scenario in scenarios} <= case_ids, "a gate trace names an unknown case"
 
 
-@pytest.mark.parametrize(("skill", "scenario"), _scenarios(), ids=_param_id)
-def test_journey_gate_verdict(skill: Path, scenario: JsonObject, tmp_path: Path) -> None:
-    """Run the gate as the runner does: fixtures at the root, output/ files, trace/events.jsonl."""
-    case = next(case for case in _cases(skill) if _text(case, "id") == _text(scenario, "case"))
-    workspace = tmp_path / "workspace"
-    files = _text_map(case.get("files"), "case files")
-    outputs = {f"output/{name}": text for name, text in _text_map(scenario.get("output"), "scenario output").items()}
-    for name, text in {**files, **outputs}.items():
-        target = workspace / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        _ = target.write_text(text, encoding="utf-8")
-    trace = _objects(scenario.get("trace"), "scenario trace")
-    (workspace / "trace").mkdir(parents=True)
-    _ = (workspace / "trace" / "events.jsonl").write_text(
-        "".join(json.dumps(event) + "\n" for event in trace), encoding="utf-8"
-    )
-    for runtime in ("home", "tmp"):
-        (workspace / runtime).mkdir()
-    argv = _texts(_kinds(_contract(skill))["journey"].get("argv")) or []
-    env = {"PATH": "/usr/bin:/bin", "HOME": str(workspace / "home"), "TMPDIR": str(workspace / "tmp")}
-    proc = subprocess.run(argv, cwd=workspace, env=env, capture_output=True, text=True, timeout=GATE_SECONDS, check=False)
-    assert _gate_score(proc.returncode, proc.stdout) == scenario.get("score"), (
-        f"gate scored {proc.stdout.strip()!r} (exit {proc.returncode}); stderr: {proc.stderr[-800:]}"
-    )
