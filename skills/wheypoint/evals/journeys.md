@@ -14,7 +14,7 @@ The gate sources live in `scripts/journey_gates/`; `scripts/journey_gate_compile
 | `WHEY-5` | Sets next and artifact correctly: cook needs a spec path, affinage needs a PR reference, and the agent picks another move when the artifact is missing. | `wheypoint-capture-3`, `wheypoint-route-1`, `wheypoint-route-2`, `wheypoint-route-3` |
 | `WHEY-6` | Validates before it checkpoints and fixes a refusal that the runtime names. | `wheypoint-route-2`, `wheypoint-update-1` |
 | `WHEY-7` | Updates an existing record by reading it first and writing against its revision, with transitions instead of deletion. | `wheypoint-update-1`, `wheypoint-update-2`, `wheypoint-refuse-3` |
-| `WHEY-8` | Answers a status or resolve request with list, show, or resolve only, lists every ambiguous candidate, and writes nothing. | `wheypoint-read-1`, `wheypoint-read-2` |
+| `WHEY-8` | Answers a status or resolve request with list, show, or resolve only, reports a blocking question as a gate even when `next` names a phase, finds the record that a wrong name means by content, and writes nothing. | `wheypoint-read-1`, `wheypoint-read-2` |
 | `WHEY-9` | Refuses to commit or push, to write a secret value, and to hand-edit a generated note or projection. | `wheypoint-refuse-1`, `wheypoint-refuse-2`, `wheypoint-refuse-3` |
 | `WHEY-10` | Reports the durability the checkpoint returned and how to resume, even when no Git checkout exists. | `wheypoint-capture-1`, `wheypoint-refuse-1` |
 

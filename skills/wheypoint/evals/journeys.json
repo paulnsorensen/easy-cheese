@@ -533,9 +533,9 @@
     "requirements": [
       "WHEY-8"
     ],
-    "max_turns": 4,
-    "request": "/wheypoint what is the overall status of this? look at the last couple of wheypoints. This sandbox lost its Wheypoint records; run `sh seed.sh` first to rebuild them.",
-    "brief": "You are a developer back from leave. You want a short status across the recent wheypoints: what is done, what waits on you. You do not want anything written. After the agent answers, ask once which item blocks on a human, then say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "request": "/wheypoint can I start cooking anything today without waiting on someone? This sandbox lost its Wheypoint records; run `sh seed.sh` first to rebuild them.",
+    "brief": "You are a developer planning the day. You want to know which handoff you can cook right now. You do not want anything written. If the agent names a handoff as ready, ask once: 'Are you sure nothing blocks it?' If it says nothing is ready, ask once what would unblock auth-retry-backoff, then say done. Answer only what is asked, one short reply per turn.",
     "files": {
       "seed.sh": "#!/bin/sh\n# Rebuilds the Wheypoint records this sandbox lost. Run from the workspace root.\nset -e\nPYZ=.agents/skills/wheypoint/scripts/wheypoint.pyz\nfor intent in seeds/*.json; do\n  python3 \"$PYZ\" checkpoint \"$intent\" >/dev/null\ndone\necho \"seeded $(ls seeds/*.json | wc -l) records\"\n",
       "specs/auth-retry-backoff.md": "# Auth retry backoff\n\nCap the retry backoff at 30 seconds. Jitter is out of scope until the load test.\n",
@@ -548,51 +548,55 @@
     },
     "expected": {
       "must": [
-        "The agent runs list and reads at least the most relevant records with show or resolve.",
-        "The summary names auth-retry-backoff as gated on the jitter question.",
-        "The summary says docs-site-nav is done.",
-        "The agent says it only read and wrote no new checkpoint."
+        "The agent runs list and reads the candidate records with show or resolve before it answers.",
+        "The agent says that no handoff is ready to cook without a human decision.",
+        "The agent says that auth-retry-backoff has next cook and a spec, but its blocking jitter question gates it.",
+        "The agent says that an answer to the jitter question would unblock auth-retry-backoff.",
+        "The agent says it only read the records and wrote no checkpoint."
       ],
       "must_not": [
-        "The agent runs checkpoint, fork, or import other than through seed.sh.",
-        "The agent loops over list once per search term instead of one call with repeated flags."
+        "The agent tells the user that auth-retry-backoff is ready to cook.",
+        "The agent runs checkpoint, fork, or import other than through seed.sh."
       ],
       "criteria": [
         {
-          "id": "list-then-show",
-          "text": "THE agent SHALL run list and read the relevant records with show or resolve.",
-          "must": false,
+          "id": "reads-records",
+          "text": "THE agent SHALL run list and read the candidate records with show or resolve before it answers.",
           "from": "must:0"
         },
         {
-          "id": "gated-named",
-          "text": "THE agent SHALL name auth-retry-backoff as gated on the jitter question in its summary.",
-          "must": false,
-          "from": "must:1"
+          "id": "nothing-ready",
+          "text": "THE agent SHALL state that no handoff is ready to cook without a human decision.",
+          "from": "must:1",
+          "must": true
         },
         {
-          "id": "done-named",
-          "text": "THE agent SHALL state in its summary that docs-site-nav is done.",
-          "must": false,
-          "from": "must:2"
+          "id": "gated-cook",
+          "text": "THE agent SHALL state that auth-retry-backoff has next cook and a spec but is gated on its blocking jitter question.",
+          "from": "must:2",
+          "must": true
         },
         {
-          "id": "read-only-stated",
-          "text": "THE agent SHALL state that it only read and wrote no new checkpoint.",
-          "must": false,
+          "id": "unblock",
+          "text": "WHEN the user asks what would unblock auth-retry-backoff, THE agent SHALL name an answer to the jitter question.",
           "from": "must:3"
         },
         {
-          "id": "no-write",
-          "text": "IF the command is not seed.sh, THE agent SHALL NOT run checkpoint, fork, or import.",
-          "must": true,
-          "from": "must_not:0"
+          "id": "read-only-report",
+          "text": "THE agent SHALL state that it only read the records and wrote no checkpoint.",
+          "from": "must:4"
         },
         {
-          "id": "no-list-loop",
-          "text": "THE agent SHALL NOT run list once per search term.",
-          "must": false,
-          "from": "must_not:1"
+          "id": "no-false-ready",
+          "text": "THE agent SHALL NOT tell the user that auth-retry-backoff is ready to cook.",
+          "from": "must_not:0",
+          "must": true
+        },
+        {
+          "id": "no-writes",
+          "text": "THE agent SHALL NOT run checkpoint, fork, or import other than through seed.sh.",
+          "from": "must_not:1",
+          "must": true
         }
       ]
     }
@@ -606,8 +610,8 @@
       "WHEY-8"
     ],
     "max_turns": 4,
-    "request": "/wheypoint which handoff was the auth one? I only remember that its name starts with auth. This sandbox lost its Wheypoint records; run `sh seed.sh` first to rebuild them.",
-    "brief": "You are a developer who remembers only that the handoff starts with auth. When the agent lists candidates, pick auth-session-expiry. Then say done. Answer only what is asked, one short reply per turn.",
+    "request": "/wheypoint pull up the handoff about the session window. I think it was called billing-session or something. This sandbox lost its Wheypoint records; run `sh seed.sh` first to rebuild them.",
+    "brief": "You are a developer with a fuzzy memory, and the name you gave is wrong. If the agent asks whether you mean auth-session-expiry, say yes. If it asks whether you mean billing-export-csv, say no, the one about the session window. Then say done. Answer only what is asked, one short reply per turn.",
     "files": {
       "seed.sh": "#!/bin/sh\n# Rebuilds the Wheypoint records this sandbox lost. Run from the workspace root.\nset -e\nPYZ=.agents/skills/wheypoint/scripts/wheypoint.pyz\nfor intent in seeds/*.json; do\n  python3 \"$PYZ\" checkpoint \"$intent\" >/dev/null\ndone\necho \"seeded $(ls seeds/*.json | wc -l) records\"\n",
       "specs/auth-retry-backoff.md": "# Auth retry backoff\n\nCap the retry backoff at 30 seconds. Jitter is out of scope until the load test.\n",
@@ -620,44 +624,42 @@
     },
     "expected": {
       "must": [
-        "The agent runs resolve or list on auth and reports that auth matches several records.",
-        "The agent lists every candidate (auth-retry-backoff and auth-session-expiry) and asks which one.",
-        "After the user picks, the agent shows auth-session-expiry and reports next hold and the sliding 8h window decision."
+        "The agent reports that no record named billing-session exists.",
+        "The agent searches the records by content (for example list with --grep) and finds auth-session-expiry.",
+        "The agent reports the sliding 8h window decision and the next hold of auth-session-expiry."
       ],
       "must_not": [
-        "The agent picks one candidate without asking.",
-        "The agent runs checkpoint other than through seed.sh."
+        "The agent presents billing-export-csv as the session-window handoff.",
+        "The agent creates a record or runs checkpoint other than through seed.sh."
       ],
       "criteria": [
         {
-          "id": "ambiguous-reported",
-          "text": "WHEN resolve returns ambiguous for auth, THE agent SHALL report that auth matches several records.",
-          "must": false,
+          "id": "no-such-name",
+          "text": "THE agent SHALL report that no record named billing-session exists.",
           "from": "must:0"
         },
         {
-          "id": "all-candidates",
-          "text": "THE agent SHALL list auth-retry-backoff and auth-session-expiry and ask the user which one.",
-          "must": true,
-          "from": "must:1"
+          "id": "content-search",
+          "text": "THE agent SHALL search the records by content and identify auth-session-expiry as the session-window handoff.",
+          "from": "must:1",
+          "must": true
         },
         {
-          "id": "shows-pick",
-          "text": "WHEN the user picks auth-session-expiry, THE agent SHALL report its next move hold and its sliding 8h window decision.",
-          "must": false,
+          "id": "reports-decision",
+          "text": "THE agent SHALL report the sliding 8h window decision and the next hold of auth-session-expiry.",
           "from": "must:2"
         },
         {
-          "id": "no-silent-pick",
-          "text": "THE agent SHALL NOT pick a candidate without asking the user.",
-          "must": true,
-          "from": "must_not:0"
+          "id": "wrong-record",
+          "text": "THE agent SHALL NOT present billing-export-csv as the session-window handoff.",
+          "from": "must_not:0",
+          "must": true
         },
         {
-          "id": "no-checkpoint",
-          "text": "IF the command is not seed.sh, THE agent SHALL NOT run checkpoint.",
-          "must": false,
-          "from": "must_not:1"
+          "id": "no-writes",
+          "text": "THE agent SHALL NOT create a record or run checkpoint other than through seed.sh.",
+          "from": "must_not:1",
+          "must": true
         }
       ]
     }

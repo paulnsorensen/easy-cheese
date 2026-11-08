@@ -57,6 +57,12 @@ Its replayed output is the case `files`, overlaid by the fixture `output` map, m
 Keep only changed files in `output`, so a case edit does not break the fixture.
 A restored Press finding report carries `digest: sha256:<hex> (<test path>)`, the SHA-256 of the seeded attack test file. Press stops when the digest is missing. Recompute it when you edit that test file.
 
+
+
+A `restore-repo.sh` fixture runs inside the Claude Code sandbox, which keeps `.git/config` and `.git/hooks` read-only and puts dotfile placeholders in the workspace root (skillz-that-grillz#703).
+Write the Git identity and any `core.hooksPath` to `$HOME/.config/git/config`, keep a hook in a visible `githooks/` directory, and stage regular non-dot files by name instead of `git add -A`.
+The age gate replays the script with a private `HOME`; a replay that fails skips the tree check, so `test_age_replay_catches_a_change_in_every_case` proves the replay for each case.
+
 ## Intake minimums
 
 skillz intake needs at least 4 scored families, train 4 cases from 2 families, 1 validation family (the smallest), and a holdout of at least 6 cases (`_intake.py:24-31`).

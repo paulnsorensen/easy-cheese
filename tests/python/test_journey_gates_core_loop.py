@@ -225,3 +225,32 @@ def test_no_trace_fails_every_gate(tmp_path: Path) -> None:
         ws = tmp_path / skill
         (ws / "output").mkdir(parents=True)
         assert run_program(contract_argv(skill), ws) == {"score": 0, "fails": ["no-trace"]}
+
+
+def _restored_tree(script: str, root: Path) -> dict[str, str]:
+    """Run a restore script with a private HOME and return its visible regular files."""
+    ws = root / "restore"
+    _put(ws, "restore-repo.sh", script)
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(root / "home"), "GIT_CONFIG_NOSYSTEM": "1"}
+    done = subprocess.run(["bash", "restore-repo.sh"], cwd=ws, env=env, capture_output=True, text=True, check=False)
+    assert done.returncode == 0, done.stderr
+    return {
+        p.relative_to(ws).as_posix(): p.read_text(encoding="utf-8")
+        for p in sorted(ws.rglob("*"))
+        if p.is_file() and not _hidden(p.relative_to(ws).as_posix())
+    }
+
+
+@pytest.mark.parametrize("case_id", sorted(load_cases("age")))
+def test_age_replay_catches_a_change_in_every_case(tmp_path: Path, case_id: str) -> None:
+    """The tree replay fails open when a restore script breaks, so prove it works for each case."""
+    tree = _restored_tree(load_cases("age")[case_id]["restore-repo.sh"], tmp_path / "build")
+    source = next(rel for rel in tree if rel.endswith(".py") and rel.startswith("src/"))
+    trace = [{"type": "system", "subtype": "init", "cwd": "/work"},
+             {"type": "assistant", "message": {"content": [{"type": "text", "text": "Review done."}]}}]
+    clean = {"name": "clean", "case": case_id, "output": tree, "trace": trace}
+    changed = {**clean, "output": {**tree, source: tree[source] + "# changed\n"}}
+    argv = contract_argv("age")
+    assert run_program(argv, materialize(tmp_path / "a", "age", clean, trace)) == {"score": 1, "fails": []}
+    got = run_program(argv, materialize(tmp_path / "b", "age", changed, trace))
+    assert got == {"score": 0, "fails": ["production-changed"]}

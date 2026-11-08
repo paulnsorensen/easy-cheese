@@ -66,12 +66,14 @@ def replayed_baseline(ws: Workspace) -> Optional[dict[str, bytes]]:
             target = Path(scratch, rel)
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(path, target)
-        env = dict(
-            os.environ,
-            HOME=scratch,
-            GIT_CONFIG_NOSYSTEM="1",
-            GIT_CONFIG_GLOBAL=os.devnull,
-        )
+        # The restore script keeps its Git identity in $HOME/.config/git/config, because the
+        # sandbox keeps .git/config read-only. A private HOME isolates it from the host.
+        env = {
+            key: value
+            for key, value in os.environ.items()
+            if key not in ("GIT_CONFIG_GLOBAL", "XDG_CONFIG_HOME")
+        }
+        env.update(HOME=scratch, GIT_CONFIG_NOSYSTEM="1")
         proc = subprocess.run(
             ["bash", RESTORE],
             cwd=scratch,
