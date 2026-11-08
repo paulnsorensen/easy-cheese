@@ -29,4 +29,4 @@ The contract leaves `surface` unset. The skill writes only through its archive (
 - Judge JSON parse errors: they need a judge reply to parse.
 - The `/plate` evidence stop and propagation from `/plate --hard`: they need the plate pipeline and its final evidence.
 - Argument validation: a journey cannot assert the rejection of malformed arguments.
-- Ledger contents: the snapshot hides `.cheese/`, so the gate and the judge see only the trace and replies.
+- Ledger contents: the snapshot hides `.cheese/`, and the judge sees only the user and agent text, not tool calls. Criteria grade what the agent reports it recorded; the gate checks the `append-attempt` calls.

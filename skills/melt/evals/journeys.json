@@ -42,7 +42,7 @@
         {"id": "both-main", "text": "THE final `src/pricing.py` SHALL keep the 8.5 percent `TAX_RATE` and the `currency` parameter from main.", "must": true, "from": "must:1"},
         {"id": "both-feature", "text": "THE final `src/pricing.py` SHALL keep `BULK_DISCOUNT` and the `bulk` parameter from the feature branch.", "must": true, "from": "must:2"},
         {"id": "diag", "text": "WHEN the merge has stopped, THE agent SHALL inspect the conflict state with `conflict-summary` or `operation` before it edits any file.", "from": "must:0"},
-        {"id": "staged", "text": "WHEN `src/pricing.py` has no markers, THE agent SHALL stage it with `git add` or `batch-resolve --apply` before it continues.", "from": "must:3"},
+        {"id": "staged", "text": "WHEN `src/pricing.py` has no markers, THE agent SHALL report that it staged the file before it continued the operation.", "from": "must:3"},
         {"id": "cont", "text": "THE agent SHALL finish the merge through `operation --continue`, without a raw Git continuation, and report completion only when it returns `complete`.", "from": "must:4"}
       ]
     },
@@ -87,7 +87,7 @@
         {"id": "both-main", "text": "THE final `src/pricing.py` SHALL keep the 8.5 percent `TAX_RATE` and the `currency` parameter from main.", "must": true, "from": "must:1"},
         {"id": "both-feature", "text": "THE final `src/pricing.py` SHALL keep `BULK_DISCOUNT` and the `bulk` parameter from the feature branch.", "must": true, "from": "must:2"},
         {"id": "diag-no-file", "text": "WHEN the user names no file, THE agent SHALL find the conflicted path with `conflict-summary` or `operation` before it edits any file.", "from": "must:0"},
-        {"id": "staged", "text": "WHEN the resolved file has no markers, THE agent SHALL stage it with `git add` or `batch-resolve --apply` before it continues.", "from": "must:3"},
+        {"id": "staged", "text": "WHEN the resolved file has no markers, THE agent SHALL report that it staged the file before it continued the operation.", "from": "must:3"},
         {"id": "cont", "text": "THE agent SHALL finish the merge through `operation --continue`, without a raw Git continuation, and report completion only when it returns `complete`.", "from": "must:4"}
       ]
     },
@@ -224,7 +224,7 @@
         {"id": "both-main", "text": "THE final `build_subject` SHALL keep the `prefix` parameter from main.", "must": true, "from": "must:1"},
         {"id": "both-hotfix", "text": "THE final `build_subject` SHALL put a `#` before the order id and strip whitespace from the id, as the hotfix does.", "must": true, "from": "must:2"},
         {"id": "diag-pick", "text": "WHEN a cherry-pick has stopped, THE agent SHALL identify the operation as a cherry-pick rather than a merge or rebase.", "from": "must:0"},
-        {"id": "staged", "text": "WHEN `src/mailer.py` has no markers, THE agent SHALL stage it with `git add` or `batch-resolve --apply` before it continues.", "from": "must:3"},
+        {"id": "staged", "text": "WHEN `src/mailer.py` has no markers, THE agent SHALL report that it staged the file before it continued the operation.", "from": "must:3"},
         {"id": "cont", "text": "THE agent SHALL complete the cherry-pick through `operation --continue`, without a raw Git continuation or `git cherry-pick --abort`.", "from": "must:4"}
       ]
     },
@@ -271,7 +271,7 @@
         {"id": "both-main", "text": "THE final `line_total` SHALL keep the `discount` parameter and the `(1 - discount)` factor from main.", "must": true, "from": "must:1"},
         {"id": "both-hotfix", "text": "THE final `line_total` SHALL keep the `ValueError` guard for a negative quantity from the hotfix.", "must": true, "from": "must:2"},
         {"id": "diag-pick", "text": "WHEN a cherry-pick has stopped, THE agent SHALL identify the operation as a cherry-pick rather than a merge or rebase.", "from": "must:0"},
-        {"id": "staged", "text": "WHEN `src/cart.py` has no markers, THE agent SHALL stage it with `git add` or `batch-resolve --apply` before it continues.", "from": "must:3"},
+        {"id": "staged", "text": "WHEN `src/cart.py` has no markers, THE agent SHALL report that it staged the file before it continued the operation.", "from": "must:3"},
         {"id": "cont", "text": "THE agent SHALL complete the cherry-pick through `operation --continue`, without a raw Git continuation.", "from": "must:4"},
         {"id": "doc-untouched", "text": "THE agent SHALL leave `docs/conflicts.md` unchanged.", "from": "must_not:4"}
       ]

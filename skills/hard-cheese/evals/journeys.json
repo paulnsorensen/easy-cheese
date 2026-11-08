@@ -56,7 +56,7 @@
         },
         {
           "id": "HC-RECORD-USER",
-          "text": "WHEN the user gives an explanation THE agent SHALL record it through an `append-attempt` call and name the artifact path under `.cheese/hard-cheese/`.",
+          "text": "WHEN the user gives an explanation THE agent SHALL state that it recorded the explanation and name the artifact path under `.cheese/hard-cheese/`.",
           "from": "must:3"
         },
         {
@@ -191,7 +191,7 @@
         },
         {
           "id": "HC-LOGGED",
-          "text": "WHEN the user passes `--no-judge` THE agent SHALL record the explanation with `append-attempt --status LOGGED` and no judge claim.",
+          "text": "WHEN the user passes `--no-judge` THE agent SHALL report the attempt as `LOGGED` with no judge claim.",
           "must": true,
           "from": "must:1"
         },
@@ -261,7 +261,7 @@
       "criteria": [
         {
           "id": "HC-RECORD-USER",
-          "text": "WHEN the user gives an explanation THE agent SHALL record the user's own words through `append-attempt --status LOGGED`, not a summary the agent wrote.",
+          "text": "WHEN the user gives an explanation THE agent SHALL state that it recorded the user's own words, not a summary it wrote, as a `LOGGED` attempt.",
           "must": true,
           "from": "must:0"
         },
@@ -336,7 +336,7 @@
       "criteria": [
         {
           "id": "HC-LOGGED",
-          "text": "WHEN the user passes `--no-judge` THE agent SHALL record the explanation with `append-attempt --status LOGGED` and no score.",
+          "text": "WHEN the user passes `--no-judge` THE agent SHALL report the attempt as `LOGGED` with no score.",
           "must": true,
           "from": "must:0"
         },
@@ -408,7 +408,7 @@
         },
         {
           "id": "HC-LOGGED",
-          "text": "WHEN no judge sub-agent can run THE agent SHALL log the explanation with `append-attempt --status LOGGED` and say it was logged without a grade.",
+          "text": "WHEN no judge sub-agent can run THE agent SHALL say that it logged the explanation as `LOGGED` without a grade.",
           "from": "must:1"
         },
         {
@@ -566,7 +566,7 @@
         },
         {
           "id": "HC-EMPTY-NO-WRITE",
-          "text": "WHEN the diff is empty THE agent SHALL NOT call `append-attempt` or claim it wrote an audit artifact.",
+          "text": "WHEN the diff is empty THE agent SHALL NOT claim that it recorded an attempt or wrote an audit artifact.",
           "from": "must:2"
         },
         {
@@ -686,7 +686,7 @@
         },
         {
           "id": "HC-RECORD-USER",
-          "text": "WHEN the user gives the fresh explanation THE agent SHALL record it as a new `append-attempt` call for the slug `refill-fix`.",
+          "text": "WHEN the user gives the fresh explanation THE agent SHALL report a new attempt for the slug `refill-fix`.",
           "from": "must:2"
         },
         {
@@ -756,7 +756,7 @@
         },
         {
           "id": "HC-RECORD-USER",
-          "text": "WHEN the user later explains the change THE agent SHALL record the user's words, not text the agent wrote, through `append-attempt`.",
+          "text": "WHEN the user later explains the change THE agent SHALL state that it recorded the user's words, not text the agent wrote.",
           "must": true,
           "from": "must:2"
         },
@@ -821,7 +821,7 @@
         },
         {
           "id": "HC-LOGGED",
-          "text": "WHEN the user then supplies an explanation THE agent SHALL record it with `append-attempt --status LOGGED`.",
+          "text": "WHEN the user then supplies an explanation THE agent SHALL report that it recorded the explanation as `LOGGED`.",
           "from": "must:2"
         },
         {

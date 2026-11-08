@@ -23,7 +23,7 @@ The criteria in each case cover what the gate cannot judge: both sides kept, hon
 |---|---|---|
 | `MELT-1` | Diagnoses the operation and the conflicted paths before it edits anything. | `melt-merge-1`, `melt-merge-2`, `melt-rebase-1`, `melt-pick-1`, `melt-pick-2`, `melt-structured-1`, `melt-structured-2`, `melt-safety-1`, `melt-safety-3` |
 | `MELT-2` | Resolves each conflict so both sides' content survives. | `melt-merge-1`, `melt-merge-2`, `melt-rebase-1`, `melt-rebase-2`, `melt-pick-1`, `melt-pick-2`, `melt-structured-2`, `melt-safety-1`, `melt-safety-2`, `melt-safety-3`, `melt-handoff-1`, `melt-handoff-2` |
-| `MELT-3` | Leaves no conflict markers, and stages each resolved path (graded from the trace, not from `.git`). | all 13 cases |
+| `MELT-3` | Leaves no conflict markers, and reports that it staged each resolved path. | all 13 cases |
 | `MELT-4` | Continues through `operation --continue` and reports completion only when it returns `complete`. | `melt-merge-1`, `melt-merge-2`, `melt-rebase-1`, `melt-rebase-2`, `melt-pick-1`, `melt-pick-2`, `melt-structured-1`, `melt-structured-2`, `melt-safety-2`, `melt-handoff-1`, `melt-handoff-2` |
 | `MELT-5` | Repeats the cascade when a rebase stops again, and adapts to the user's correction. | `melt-rebase-1`, `melt-rebase-2` |
 | `MELT-6` | Merges the manifest, resolves the lockfile with `lockfile-resolve`, and says when regeneration fails. | `melt-structured-1` |
@@ -42,5 +42,5 @@ The `must: true` criteria for dropped content name the exact tokens that must su
 
 - The squash-residue repair stage needs `origin/main` and a squash-merged PR, so no sandbox journey covers it.
 - Mergiraf and kdiff3 availability varies by host, so no journey asserts which tool resolved a hunk.
-- The grader cannot see `.git` state, so "staged" claims come from the trace (`git add`, `batch-resolve --apply`).
+- The judge sees only the user and agent text, not tool calls or `.git` state. Criteria grade the agent's staging report, and the gate checks commands.
 - Real `npm` lockfile regeneration depends on the host and the network, so the lockfile case accepts an honest failure report.

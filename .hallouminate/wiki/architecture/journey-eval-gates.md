@@ -61,6 +61,9 @@ A restored Press finding report carries `digest: sha256:<hex> (<test path>)`, th
 - Melt cases build the conflict with `restore-repo.sh` under `GIT_CONFIG_GLOBAL=/dev/null`; the gate fails `not-restored` when no step runs it.
 - Hard-cheese cases expect `--no-judge` (LOGGED) when no judge sub-agent can run; an `ERROR` attempt without a judge run is a dealbreaker.
 
+
+- The journey judge receives only the user and agent text of each turn, never tool calls or their arguments (skillz `evaluation/_evaluator.py` `_judge_data`; skillz issue #649 tracks showing commands). A criterion such as "the agent SHALL run `append-attempt`" cannot be graded and scores low. Grade the agent's report in criteria and check commands in the gate.
+
 ## Intake minimums
 
 skillz intake needs at least 4 scored families, train 4 cases from 2 families, 1 validation family (the smallest), and a holdout of at least 6 cases (`_intake.py:24-31`).

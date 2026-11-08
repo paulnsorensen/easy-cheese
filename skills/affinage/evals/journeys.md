@@ -38,3 +38,4 @@ Case-specific checks (handoff status, report path, grades) live in `expected.cri
 - Reply-gate answers that approve posting: the brief never approves, so the post path only gets rejection tests in the gate unit tests.
 - Report file contents under `.cheese/affinage/`: the snapshot hides dot paths, so criteria grade only that the handoff names the path.
 - Approved reply posting and thread resolution through `gh`: the journeys never approve them.
+- Commands the agent ran: the judge sees only the user and agent text, not tool calls, so criteria grade what the agent says and the gate checks commands.
