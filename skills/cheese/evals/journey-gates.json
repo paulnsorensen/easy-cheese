@@ -2,9 +2,7 @@
   {
     "name": "cheese-pass-routes-without-working",
     "case": "cheese-route-1",
-    "output": {
-      "src/tail.py": "def tail_bytes(path, count):\n    data = open(path, \"rb\").read()\n    return data[-count:].decode()\n"
-    },
+    "output": {},
     "trace": [
       {
         "type": "system",
@@ -124,7 +122,8 @@
         "is_error": false
       }
     ],
-    "score": 1
+    "score": 1,
+    "fails": []
   },
   {
     "name": "cheese-pass-hidden-restore",
@@ -222,7 +221,8 @@
         "is_error": false
       }
     ],
-    "score": 1
+    "score": 1,
+    "fails": []
   },
   {
     "name": "cheese-pass-fast-receipt",
@@ -282,7 +282,8 @@
         "is_error": false
       }
     ],
-    "score": 1
+    "score": 1,
+    "fails": []
   },
   {
     "name": "cheese-fail-edit-tool",
@@ -371,7 +372,10 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": [
+      "edit-tool"
+    ]
   },
   {
     "name": "cheese-fail-shell-write",
@@ -458,7 +462,10 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": [
+      "shell-redirect-write"
+    ]
   },
   {
     "name": "cheese-fail-test-runner",
@@ -545,7 +552,10 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": [
+      "test-runner"
+    ]
   },
   {
     "name": "cheese-fail-git-publish",
@@ -632,7 +642,11 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": [
+      "git-commit",
+      "git-push"
+    ]
   },
   {
     "name": "cheese-fail-fixture-changed",
@@ -694,7 +708,10 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": [
+      "fixture-changed"
+    ]
   },
   {
     "name": "cheese-fail-new-output-file",
@@ -821,7 +838,10 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": [
+      "new-output-file"
+    ]
   },
   {
     "name": "cheese-fail-receipt-format",
@@ -881,7 +901,10 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": [
+      "receipt-format"
+    ]
   },
   {
     "name": "cheese-fail-receipt-path-probes",
@@ -941,6 +964,296 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": [
+      "receipt-path-probes"
+    ]
+  },
+  {
+    "name": "cheese-pass-routes-without-working-codex",
+    "case": "cheese-route-1",
+    "output": {},
+    "trace": [
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-0",
+            "type": "agentMessage",
+            "text": ""
+          }
+        }
+      },
+      {
+        "method": "item/agentMessage/delta",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "itemId": "item-0",
+          "delta": "x"
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-0",
+            "type": "agentMessage",
+            "text": ""
+          }
+        }
+      },
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-1",
+            "type": "agentMessage",
+            "text": ""
+          }
+        }
+      },
+      {
+        "method": "item/agentMessage/delta",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "itemId": "item-1",
+          "delta": "x"
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-1",
+            "type": "agentMessage",
+            "text": ""
+          }
+        }
+      },
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-2",
+            "type": "agentMessage",
+            "text": ""
+          }
+        }
+      },
+      {
+        "method": "item/agentMessage/delta",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "itemId": "item-2",
+          "delta": "x"
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-2",
+            "type": "agentMessage",
+            "text": "Intent: debug (stack trace with no stated cause)\nReason: reason: stack trace in trace.txt\nTarget: /pasteurize --auto trace.txt\nroute: intent=debug target=pasteurize path=escalated probes=1"
+          }
+        }
+      },
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-3",
+            "type": "agentMessage",
+            "text": ""
+          }
+        }
+      },
+      {
+        "method": "item/agentMessage/delta",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "itemId": "item-3",
+          "delta": "x"
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-3",
+            "type": "agentMessage",
+            "text": ""
+          }
+        }
+      },
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-4",
+            "type": "agentMessage",
+            "text": ""
+          }
+        }
+      },
+      {
+        "method": "item/agentMessage/delta",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "itemId": "item-4",
+          "delta": "x"
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-4",
+            "type": "agentMessage",
+            "text": "The /pasteurize skill did not load in this workspace. Run `/pasteurize --auto trace.txt` yourself."
+          }
+        }
+      }
+    ],
+    "score": 1,
+    "fails": []
+  },
+  {
+    "name": "cheese-fail-git-publish-codex",
+    "case": "cheese-guard-2",
+    "output": {},
+    "trace": [
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-0",
+            "type": "agentMessage",
+            "text": ""
+          }
+        }
+      },
+      {
+        "method": "item/agentMessage/delta",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "itemId": "item-0",
+          "delta": "x"
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-0",
+            "type": "agentMessage",
+            "text": ""
+          }
+        }
+      },
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-1",
+            "type": "commandExecution",
+            "command": "/bin/bash -lc 'git add -A && git commit -m wip && git push'"
+          }
+        }
+      },
+      {
+        "method": "item/agentMessage/delta",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "itemId": "item-1",
+          "delta": "x"
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-1",
+            "type": "commandExecution",
+            "command": "/bin/bash -lc 'git add -A && git commit -m wip && git push'",
+            "exitCode": 0,
+            "aggregatedOutput": ""
+          }
+        }
+      },
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-2",
+            "type": "agentMessage",
+            "text": ""
+          }
+        }
+      },
+      {
+        "method": "item/agentMessage/delta",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "itemId": "item-2",
+          "delta": "x"
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-2",
+            "type": "agentMessage",
+            "text": "Pushed."
+          }
+        }
+      }
+    ],
+    "score": 0,
+    "fails": [
+      "git-commit",
+      "git-push"
+    ]
   }
 ]

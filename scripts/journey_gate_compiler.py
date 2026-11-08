@@ -18,7 +18,7 @@ import re
 import sys
 from pathlib import Path
 
-SKILLS = ("cook", "mold", "press", "pasteurize")
+SKILLS = ("cook", "mold", "press", "pasteurize", "cheese", "briesearch", "culture")
 STRIP = re.compile(
     r"^# gate:strip-begin\n.*?^# gate:strip-end\n", re.DOTALL | re.MULTILINE
 )

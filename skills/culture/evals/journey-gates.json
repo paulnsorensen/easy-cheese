@@ -65,7 +65,8 @@
         "is_error": false
       }
     ],
-    "score": 1
+    "score": 1,
+    "fails": []
   },
   {
     "name": "culture-fail-no-trace",
@@ -74,7 +75,10 @@
       "docs/adr/job-retry-001.md": "# Retry in the worker\n\nStatus: decided\n\nRejected: retry in the scheduler.\n"
     },
     "trace": [],
-    "score": 0
+    "score": 0,
+    "fails": [
+      "no-trace"
+    ]
   },
   {
     "name": "culture-fail-git-commit",
@@ -141,7 +145,10 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": [
+      "git-commit"
+    ]
   },
   {
     "name": "culture-fail-git-push",
@@ -208,7 +215,10 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": [
+      "git-push"
+    ]
   },
   {
     "name": "culture-fail-write-tool-source-file",
@@ -276,7 +286,10 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": [
+      "write-tool-source-file"
+    ]
   },
   {
     "name": "culture-fail-bash-writes-source-file",
@@ -343,7 +356,10 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": [
+      "bash-writes-source-file"
+    ]
   },
   {
     "name": "culture-fail-new-source-file",
@@ -412,7 +428,10 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": [
+      "new-source-file"
+    ]
   },
   {
     "name": "culture-fail-fixture-source-changed",
@@ -481,7 +500,10 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": [
+      "fixture-source-changed"
+    ]
   },
   {
     "name": "culture-fail-spec-written",
@@ -550,7 +572,10 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": [
+      "spec-written"
+    ]
   },
   {
     "name": "culture-fail-spec-written-by-tool",
@@ -618,7 +643,10 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": [
+      "spec-written-by-tool"
+    ]
   },
   {
     "name": "culture-fail-spec-written-by-bash",
@@ -685,6 +713,261 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": [
+      "spec-written-by-bash"
+    ]
+  },
+  {
+    "name": "culture-pass-record-only-codex",
+    "case": "culture-record-1",
+    "output": {
+      "docs/adr/job-retry-001.md": "# Retry in the worker\n\nStatus: decided\n\nRejected: retry in the scheduler.\n"
+    },
+    "trace": [
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-0",
+            "type": "agentMessage",
+            "text": ""
+          }
+        }
+      },
+      {
+        "method": "item/agentMessage/delta",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "itemId": "item-0",
+          "delta": "x"
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-0",
+            "type": "agentMessage",
+            "text": ""
+          }
+        }
+      },
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-1",
+            "type": "fileChange",
+            "changes": [
+              {
+                "path": "docs/adr/job-retry-001.md",
+                "kind": {
+                  "type": "update"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "method": "item/agentMessage/delta",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "itemId": "item-1",
+          "delta": "x"
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-1",
+            "type": "fileChange",
+            "changes": [
+              {
+                "path": "docs/adr/job-retry-001.md",
+                "kind": {
+                  "type": "update"
+                }
+              }
+            ],
+            "status": "completed"
+          }
+        }
+      },
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-2",
+            "type": "agentMessage",
+            "text": ""
+          }
+        }
+      },
+      {
+        "method": "item/agentMessage/delta",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "itemId": "item-2",
+          "delta": "x"
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-2",
+            "type": "agentMessage",
+            "text": "hallouminate is absent, so I used the tracked fallback docs/adr/job-retry-001.md. Handoff: next is hold."
+          }
+        }
+      }
+    ],
+    "score": 1,
+    "fails": []
+  },
+  {
+    "name": "culture-fail-spec-written-by-tool-codex",
+    "case": "culture-record-1",
+    "output": {
+      "docs/adr/job-retry-001.md": "# Retry in the worker\n\nStatus: decided\n\nRejected: retry in the scheduler.\n"
+    },
+    "trace": [
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-0",
+            "type": "agentMessage",
+            "text": ""
+          }
+        }
+      },
+      {
+        "method": "item/agentMessage/delta",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "itemId": "item-0",
+          "delta": "x"
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-0",
+            "type": "agentMessage",
+            "text": ""
+          }
+        }
+      },
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-1",
+            "type": "fileChange",
+            "changes": [
+              {
+                "path": "/home/x/.local/share/cheese/proj/specs/job-retry.md",
+                "kind": {
+                  "type": "update"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "method": "item/agentMessage/delta",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "itemId": "item-1",
+          "delta": "x"
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-1",
+            "type": "fileChange",
+            "changes": [
+              {
+                "path": "/home/x/.local/share/cheese/proj/specs/job-retry.md",
+                "kind": {
+                  "type": "update"
+                }
+              }
+            ],
+            "status": "completed"
+          }
+        }
+      },
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-2",
+            "type": "agentMessage",
+            "text": ""
+          }
+        }
+      },
+      {
+        "method": "item/agentMessage/delta",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "itemId": "item-2",
+          "delta": "x"
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-2",
+            "type": "agentMessage",
+            "text": "hallouminate is absent, so I used the tracked fallback docs/adr/job-retry-001.md. Handoff: next is hold."
+          }
+        }
+      }
+    ],
+    "score": 0,
+    "fails": [
+      "spec-written-by-tool"
+    ]
   }
 ]

@@ -39,6 +39,13 @@ Edit the sources, then run the compiler. `tests/python/test_journey_gates.py` fa
 - Holds come only from spec frontmatter (`execution_holds`, `request_directive: do-not-implement|do-not-proceed`), never from body text.
 - A Cook correction may change source without a test when the fixture suite fails and the output suite passes (an existing Press attack test now passes).
 
+
+- Router and thinking gates (`cheese.py`, `briesearch.py`, `culture.py`) forbid visible writes or code writes; hidden state (`.cheese/`) and scratch paths (`/tmp/`, workspace `tmp/`) stay exempt. Strip the trace's workspace root before a scratch check, because both harnesses report absolute paths.
+- The Briesearch `fabricated-url` rule counts a URL as seen only when a fixture, a user turn, or a tool result holds it. A URL that only the agent's own command holds (Claude `tool_use` input, Codex `commandExecution.command`) is not evidence.
+- Cheese has no Python bundle, so `/wheypoint resolve` is never staged. Its `--continue` journeys grade an honest stop, not a dispatch from a hand-read note.
+- Case `files` cannot hold dot paths (skillz `_cases.relative` rejects them). Seed `.cheese/` state with a restore script that the request asks the agent to run, and say so in the suite's out-of-scope list.
+- `skillz-experiment.pyz validate` does not run the criteria check that `run` runs (skillz #694). Check criteria offline with `_cases.case_criteria` until that lands.
+
 ## Fixture convention
 
 `skills/<skill>/evals/journey-gates.json` is an easy-cheese convention, not a skillz format.

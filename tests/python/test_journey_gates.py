@@ -1,4 +1,8 @@
-"""Journey-gate tests: the compiled programs in the four autoimprove contracts.
+"""Journey-gate tests: the compiled programs in the autoimprove contracts.
+
+The synthetic scenarios here cover the four work skills in `SKILLS`. The
+compiler and recorded-fixture tests cover every skill in `GATED`; the routing
+and thinking gates have their scenarios in `test_journey_gates_routing.py`.
 
 Every verdict runs the shipped `kinds.journey.argv` program in a synthetic
 workspace, once with a Claude stream-json trace and once with the same steps
@@ -28,6 +32,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS = ("cook", "mold", "press", "pasteurize")
+GATED = SKILLS + ("cheese", "briesearch", "culture")
 SHAPES = ("claude", "codex")
 OLD_GATES = REPO_ROOT / ".cheese" / "scratch" / "gates"
 ABS = "/work/ws/"
@@ -286,7 +291,7 @@ WITH_SOURCE = ("cook", "pasteurize")
 # --- compiler ----------------------------------------------------------------
 
 
-@pytest.mark.parametrize("skill", SKILLS)
+@pytest.mark.parametrize("skill", GATED)
 def test_contract_argv_is_compiled_source(skill: str) -> None:
     compiler = load_compiler()
     argv = contract_argv(skill)
@@ -295,7 +300,7 @@ def test_contract_argv_is_compiled_source(skill: str) -> None:
     assert argv[3] == compiler.compiled_source(REPO_ROOT, skill)
 
 
-@pytest.mark.parametrize("skill", SKILLS)
+@pytest.mark.parametrize("skill", GATED)
 def test_compiled_source_is_stdlib_only_and_python39_syntax(skill: str) -> None:
     source = contract_argv(skill)[3]
     tree = ast.parse(source, feature_version=(3, 9))
@@ -330,7 +335,7 @@ def copy_compiler_tree(root: Path) -> None:
     shutil.copytree(
         REPO_ROOT / "scripts" / "journey_gates", root / "scripts" / "journey_gates"
     )
-    for skill in SKILLS:
+    for skill in GATED:
         target = root / "skills" / skill / "evals"
         target.mkdir(parents=True)
         shutil.copy(REPO_ROOT / "skills" / skill / "evals" / "autoimprove.json", target)
@@ -1175,12 +1180,12 @@ def load_fixtures(skill: str) -> list[dict[str, Any]]:
 
 def load_cases(skill: str) -> dict[str, dict[str, str]]:
     cases = json.loads((_evals(skill) / "journeys.json").read_text(encoding="utf-8"))
-    return {case["id"]: case["files"] for case in cases}
+    return {case["id"]: case.get("files", {}) for case in cases}
 
 
 def _fixture_params(claude_only: bool = False) -> list[Any]:
     found: list[Any] = []
-    for skill in SKILLS:
+    for skill in GATED:
         for fixture in load_fixtures(skill):
             codex = any("method" in event for event in fixture["trace"])
             if not (claude_only and codex):
@@ -1281,7 +1286,7 @@ def test_fixture_schema(skill: str, fixture: dict[str, Any]) -> None:
         assert rel not in fixture["output"], rel
 
 
-@pytest.mark.parametrize("skill", SKILLS)
+@pytest.mark.parametrize("skill", GATED)
 def test_fixture_names_are_unique_and_cover_pass_and_fail(skill: str) -> None:
     fixtures = load_fixtures(skill)
     names = [fixture["name"] for fixture in fixtures]
