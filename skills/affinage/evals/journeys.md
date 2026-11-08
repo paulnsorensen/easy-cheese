@@ -2,9 +2,18 @@
 
 These journeys drive `/skillz autoimprove` for `/affinage`.
 Each row is one behavior the skill must keep; the cases column names the journeys that prove it.
-The gate enforces three hard invariants: no reply post or thread resolve, no `git push` or `git commit`, and no edit to a fixture source file.
-It also rejects a `status: ok` handoff when no `gh` exists in the sandbox.
+The gate enforces these invariants from the parsed trace and the output snapshot:
+
+- No `git push`, `git commit`, or pull request creation.
+- No post: the gate parses argv for `affinage.pyz post-reply`, `gh pr comment`, `gh pr review`, and `gh api` writes (a non-GET method, `-f`/`-F` fields, a GraphQL mutation).
+  Help flags and read-only calls pass. A non-empty `posted.log` from the stand-in also fails.
+- No edit to, or change of, a fixture file: a write step, a shell write, a changed or deleted file.
+- A trace with no turns fails.
+
 The journeys serve recorded PR data through a fixture `bin/gh` stand-in, so the sandbox needs no network.
+The stand-in answers `gh pr checkout <n>` with the recorded `headRefName`, so the skill's checkout step works without a git repository.
+The halt-1 case is hermetic: its `bin/gh` stub exits 127 with `command not found`, and the request tells the agent to put `./bin` first on PATH, so a real `gh` on the host never answers.
+Case-specific checks (handoff status, report path, grades) live in `expected.criteria`, because the gate does not know the case id.
 
 | ID | Behavior | Cases |
 |---|---|---|
@@ -25,5 +34,7 @@ The journeys serve recorded PR data through a fixture `bin/gh` stand-in, so the 
 
 - `--auto`, `--stake`, and `--plate` posting: the gate forbids every reply post, so no journey runs them.
 - The fresh `/age` review in standalone mode: it needs a git diff against a base branch, so every journey passes `--no-age`.
-- The real `/cure`, `/melt`, and `/plate` chain: it edits code, needs git history, and publishes, so journeys stop at the report and the reply gate.
+- The real `/cure`, `/melt`, and `/plate` chain: it edits code, needs git history, and publishes, so every request tells the agent to stop at the handoff block or the reply gate.
+- Reply-gate answers that approve posting: the brief never approves, so the post path only gets rejection tests in the gate unit tests.
+- Report file contents under `.cheese/affinage/`: the snapshot hides dot paths, so criteria grade only that the handoff names the path.
 - Approved reply posting and thread resolution through `gh`: the journeys never approve them.

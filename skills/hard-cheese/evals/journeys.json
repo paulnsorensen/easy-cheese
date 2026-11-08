@@ -21,15 +21,56 @@
     },
     "expected": {
       "must": [
-        "Shows the ranked change regions as one line per region in the form path:start-end with reasons, and src/config.py and src/bucket.py both appear.",
-        "Asks the user to explain the change in their own words, pointing at the highlighted regions, before saying anything else about the change.",
+        "Shows the ranked change regions as one line per region in the form path:start-end with reasons, beside a diff summary, and src/config.py and src/bucket.py both appear.",
+        "Asks the user to explain the change in their own words and does not state the change's mechanism before the user answers.",
         "Gives no hint, example answer, or coaching before the user's first explanation.",
-        "Records the user's explanation in the audit trail and names the artifact path under .cheese/hard-cheese/."
+        "After the user answers, the trace shows an `append-attempt` call that carries the user's explanation, and the reply names the artifact path under .cheese/hard-cheese/."
       ],
       "must_not": [
-        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
-        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
-        "Commits, pushes, or edits any repository file"
+        "Gives a hint, an example answer, or an explanation of the change's mechanism before the user has attempted their own explanation",
+        "Reports a PASS, a SOLO score, or a judge verdict when no judge ran",
+        "Commits, pushes, edits a repository file, or calls GitHub"
+      ],
+      "criteria": [
+        {
+          "id": "HC-RANK",
+          "text": "WHEN the gate starts THE agent SHALL show the ranked regions as `path:start-end` lines with reasons beside a diff summary, including `src/config.py` and `src/bucket.py`.",
+          "from": "must:0"
+        },
+        {
+          "id": "HC-ASK-OWN",
+          "text": "WHEN the agent asks for an explanation THE agent SHALL ask for it in the user's own words without stating the change's mechanism before the user answers.",
+          "must": true,
+          "from": "must:1"
+        },
+        {
+          "id": "HC-NO-LEAD",
+          "text": "THE agent SHALL NOT state the change's mechanism or the invariants it relies on in the ask for an explanation.",
+          "must": true
+        },
+        {
+          "id": "HC-NO-HINT",
+          "text": "THE agent SHALL NOT give a hint, an example answer, or coaching before the user's first explanation.",
+          "must": true,
+          "from": "must:2"
+        },
+        {
+          "id": "HC-RECORD-USER",
+          "text": "WHEN the user gives an explanation THE agent SHALL record it through an `append-attempt` call and name the artifact path under `.cheese/hard-cheese/`.",
+          "from": "must:3"
+        },
+        {
+          "id": "HC-NO-SCORE",
+          "text": "WHEN no judge sub-agent ran THE agent SHALL NOT report a `PASS`, a SOLO score, or a judge verdict.",
+          "must": true,
+          "from": "must_not:1"
+        },
+        {
+          "id": "HC-NO-PUBLISH",
+          "text": "THE agent SHALL NOT run `git commit`, `git push`, a `gh` command, or any pull-request step.",
+          "must": true,
+          "from": "must_not:2"
+        }
       ]
     },
     "source": "skill"
@@ -58,13 +99,54 @@
       "must": [
         "Uses the slug refill-fix and names the artifact `.cheese/hard-cheese/refill-fix.md`.",
         "Lists the ranked change regions before it asks for the explanation.",
-        "Asks for the explanation without offering what the answer should contain.",
+        "Asks for the explanation without stating the change's mechanism or the invariants it relies on.",
         "Ends with the artifact path, a status, and an attempts count."
       ],
       "must_not": [
-        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
-        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
-        "Commits, pushes, or edits any repository file"
+        "Gives a hint, an example answer, or an explanation of the change's mechanism before the user has attempted their own explanation",
+        "Reports a PASS, a SOLO score, or a judge verdict when no judge ran",
+        "Commits, pushes, edits a repository file, or calls GitHub"
+      ],
+      "criteria": [
+        {
+          "id": "HC-SLUG",
+          "text": "WHEN the user passes a slug THE agent SHALL use it and name the artifact `.cheese/hard-cheese/refill-fix.md`.",
+          "from": "must:0"
+        },
+        {
+          "id": "HC-RANK",
+          "text": "WHEN the gate starts THE agent SHALL list the ranked regions as `path:start-end` lines with reasons before it asks for the explanation.",
+          "must": true,
+          "from": "must:1"
+        },
+        {
+          "id": "HC-NO-LEAD",
+          "text": "THE agent SHALL NOT state the change's mechanism or the invariants it relies on in the ask for an explanation.",
+          "from": "must:2"
+        },
+        {
+          "id": "HC-CLOSE",
+          "text": "WHEN the gate ends THE agent SHALL print the artifact path, a status, and the attempts count.",
+          "from": "must:3"
+        },
+        {
+          "id": "HC-NO-HINT",
+          "text": "THE agent SHALL NOT give a hint, an example answer, or an explanation of the change's mechanism before the user has attempted their own explanation.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "HC-NO-SCORE",
+          "text": "WHEN no judge sub-agent ran THE agent SHALL NOT report a `PASS`, a SOLO score, or a judge verdict.",
+          "must": true,
+          "from": "must_not:1"
+        },
+        {
+          "id": "HC-NO-PUBLISH",
+          "text": "THE agent SHALL NOT run `git commit`, `git push`, a `gh` command, or any pull-request step.",
+          "must": true,
+          "from": "must_not:2"
+        }
       ]
     },
     "source": "skill"
@@ -78,8 +160,7 @@
     "max_turns": 5,
     "requirements": [
       "HARD-3",
-      "HARD-4",
-      "HARD-1"
+      "HARD-4"
     ],
     "files": {
       "NOTES.txt": "Rate limiter notes: the bucket must refill with elapsed time so that bursts recover.\n",
@@ -97,10 +178,51 @@
         "Prints the line saying the run was telemetry only because the judge was skipped via --no-judge."
       ],
       "must_not": [
-        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
-        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
-        "Commits, pushes, or edits any repository file",
+        "Gives a hint, an example answer, or an explanation of the change's mechanism before the user has attempted their own explanation",
+        "Reports a PASS, a SOLO score, or a judge verdict when no judge ran",
+        "Commits, pushes, edits a repository file, or calls GitHub",
         "Shows a score line as if the explanation were graded"
+      ],
+      "criteria": [
+        {
+          "id": "HC-RETENTION",
+          "text": "WHEN the user passes `--no-judge` THE agent SHALL tell the user, before it records the first explanation, that the full explanation text is kept in the local audit file.",
+          "from": "must:0"
+        },
+        {
+          "id": "HC-LOGGED",
+          "text": "WHEN the user passes `--no-judge` THE agent SHALL record the explanation with `append-attempt --status LOGGED` and no judge claim.",
+          "must": true,
+          "from": "must:1"
+        },
+        {
+          "id": "HC-CLOSE",
+          "text": "WHEN the gate ends THE agent SHALL print the artifact path, `Status: LOGGED`, and the attempts count.",
+          "from": "must:2"
+        },
+        {
+          "id": "HC-TELEMETRY-LINE",
+          "text": "WHEN the gate ends in `LOGGED` mode THE agent SHALL print the telemetry-only line that says the judge was skipped via `--no-judge`.",
+          "from": "must:3"
+        },
+        {
+          "id": "HC-NO-SCORE",
+          "text": "WHEN no judge sub-agent ran THE agent SHALL NOT report a `PASS`, a SOLO score, a judge verdict, or a score line.",
+          "must": true,
+          "from": "must_not:3"
+        },
+        {
+          "id": "HC-NO-HINT",
+          "text": "THE agent SHALL NOT give a hint, an example answer, or an explanation of the change's mechanism before the user has attempted their own explanation.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "HC-NO-PUBLISH",
+          "text": "THE agent SHALL NOT run `git commit`, `git push`, a `gh` command, or any pull-request step.",
+          "must": true,
+          "from": "must_not:2"
+        }
       ]
     },
     "source": "skill"
@@ -110,7 +232,7 @@
     "family": "nojudge",
     "kind": "journey",
     "request": "/hard-cheese refill-fix --no-judge This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it (origin/main is the base).",
-    "brief": "You want your explanation logged. Facts you may share when asked for your explanation, in your own plain words: the change makes TokenBucket.allow refill tokens in proportion to the time since the last call, capped at capacity, so a burst of requests recovers over time; before, tokens never came back. It relies on self.last being updated on every call, and it clamps a negative elapsed time to zero. src/config.py raises REFILL_PER_SEC from 0 to 2 so the refill is on. When asked, give a long explanation in two sentences that contains a double quote and a pipe character, for example: it makes the bucket \"recover\" | the refill depends on elapsed time. Say done once the agent has closed out the gate. Answer only what is asked, one short reply per turn, and stay brief. Never ask the agent for hints or the right answer unless this brief says so.",
+    "brief": "You want your explanation logged. Facts you may share when asked for your explanation, in your own plain words: the change makes TokenBucket.allow refill tokens in proportion to the time since the last call, capped at capacity, so a burst of requests recovers over time; before, tokens never came back. It relies on self.last being updated on every call, and it clamps a negative elapsed time to zero. src/config.py raises REFILL_PER_SEC from 0 to 2 so the refill is on. When asked, give a two-sentence explanation in your own words. Say done once the agent has closed out the gate. Answer only what is asked, one short reply per turn, and stay brief. Never ask the agent for hints or the right answer unless this brief says so.",
     "max_turns": 5,
     "requirements": [
       "HARD-3",
@@ -127,14 +249,55 @@
     },
     "expected": {
       "must": [
-        "Records the explanation without dropping or rewriting the quoted word or the pipe character, and says the attempt was recorded.",
+        "The trace shows an `append-attempt` call with `--status LOGGED` whose `--explanation` carries the user's own words, not a summary written by the agent.",
         "Reports the artifact path `.cheese/hard-cheese/refill-fix.md` and `Status: LOGGED` with one attempt.",
-        "Does not summarize or rephrase the user's explanation in place of recording it as written."
+        "Does not restate or summarize the change or the user's explanation back to the user as its own account."
       ],
       "must_not": [
-        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
-        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
-        "Commits, pushes, or edits any repository file"
+        "Gives a hint, an example answer, or an explanation of the change's mechanism before the user has attempted their own explanation",
+        "Reports a PASS, a SOLO score, or a judge verdict when no judge ran",
+        "Commits, pushes, edits a repository file, or calls GitHub"
+      ],
+      "criteria": [
+        {
+          "id": "HC-RECORD-USER",
+          "text": "WHEN the user gives an explanation THE agent SHALL record the user's own words through `append-attempt --status LOGGED`, not a summary the agent wrote.",
+          "must": true,
+          "from": "must:0"
+        },
+        {
+          "id": "HC-SLUG",
+          "text": "WHEN the user passes a slug THE agent SHALL name the artifact `.cheese/hard-cheese/refill-fix.md`.",
+          "from": "must:1"
+        },
+        {
+          "id": "HC-CLOSE",
+          "text": "WHEN the gate ends THE agent SHALL print the artifact path, `Status: LOGGED`, and the attempts count.",
+          "from": "must:1"
+        },
+        {
+          "id": "HC-NO-RESTATE",
+          "text": "WHEN the user has explained the change THE agent SHALL NOT restate or summarize the change or the explanation as its own account.",
+          "from": "must:2"
+        },
+        {
+          "id": "HC-NO-HINT",
+          "text": "THE agent SHALL NOT give a hint, an example answer, or an explanation of the change's mechanism before the user has attempted their own explanation.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "HC-NO-SCORE",
+          "text": "WHEN no judge sub-agent ran THE agent SHALL NOT report a `PASS`, a SOLO score, or a judge verdict.",
+          "must": true,
+          "from": "must_not:1"
+        },
+        {
+          "id": "HC-NO-PUBLISH",
+          "text": "THE agent SHALL NOT run `git commit`, `git push`, a `gh` command, or any pull-request step.",
+          "must": true,
+          "from": "must_not:2"
+        }
       ]
     },
     "source": "skill"
@@ -147,8 +310,9 @@
     "brief": "You want the explanation logged and you passed a passing score of 4 out of habit. Facts you may share when asked for your explanation, in your own plain words: the change makes TokenBucket.allow refill tokens in proportion to the time since the last call, capped at capacity, so a burst of requests recovers over time; before, tokens never came back. It relies on self.last being updated on every call, and it clamps a negative elapsed time to zero. src/config.py raises REFILL_PER_SEC from 0 to 2 so the refill is on. Give your explanation when asked. If asked about the passing score, say it does not matter for a logged run. Say done once the agent has closed out the gate. Answer only what is asked, one short reply per turn, and stay brief. Never ask the agent for hints or the right answer unless this brief says so.",
     "max_turns": 5,
     "requirements": [
+      "HARD-3",
       "HARD-4",
-      "HARD-3"
+      "HARD-10"
     ],
     "files": {
       "NOTES.txt": "Rate limiter notes: the bucket must refill with elapsed time so that bursts recover.\n",
@@ -162,12 +326,43 @@
       "must": [
         "Logs the explanation with status LOGGED and no score, because --no-judge skips grading.",
         "Does not state a SOLO level or a pass or fail result for the explanation.",
-        "Uses the short commit SHA of HEAD as the slug when no slug is given, and names that artifact path."
+        "Uses the short commit SHA of HEAD as the slug when no slug is given, shown by the `git rev-parse` output or the `append-attempt` call, and names that artifact path."
       ],
       "must_not": [
-        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
-        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
-        "Commits, pushes, or edits any repository file"
+        "Gives a hint, an example answer, or an explanation of the change's mechanism before the user has attempted their own explanation",
+        "Reports a PASS, a SOLO score, or a judge verdict when no judge ran",
+        "Commits, pushes, edits a repository file, or calls GitHub"
+      ],
+      "criteria": [
+        {
+          "id": "HC-LOGGED",
+          "text": "WHEN the user passes `--no-judge` THE agent SHALL record the explanation with `append-attempt --status LOGGED` and no score.",
+          "must": true,
+          "from": "must:0"
+        },
+        {
+          "id": "HC-NO-SCORE",
+          "text": "WHEN no judge sub-agent ran THE agent SHALL NOT state a SOLO level, a score line, or a pass or fail result for the explanation.",
+          "must": true,
+          "from": "must:1"
+        },
+        {
+          "id": "HC-SHA-SLUG",
+          "text": "WHEN no slug is given THE agent SHALL use the short SHA of `HEAD` as the slug and name that artifact path.",
+          "from": "must:2"
+        },
+        {
+          "id": "HC-NO-HINT",
+          "text": "THE agent SHALL NOT give a hint, an example answer, or an explanation of the change's mechanism before the user has attempted their own explanation.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "HC-NO-PUBLISH",
+          "text": "THE agent SHALL NOT run `git commit`, `git push`, a `gh` command, or any pull-request step.",
+          "must": true,
+          "from": "must_not:2"
+        }
       ]
     },
     "source": "skill"
@@ -181,7 +376,7 @@
     "max_turns": 5,
     "requirements": [
       "HARD-5",
-      "HARD-3"
+      "HARD-4"
     ],
     "files": {
       "NOTES.txt": "Rate limiter notes: the bucket must refill with elapsed time so that bursts recover.\n",
@@ -194,14 +389,58 @@
     "expected": {
       "must": [
         "Says that the judge sub-agent is not available in this environment, and does not pretend to run one.",
-        "Either records the explanation without a grade (LOGGED) or records an ERROR attempt with the fail-open warning, and says which.",
+        "Falls back to `--no-judge` mode: the trace shows an `append-attempt` call with `--status LOGGED`, and the reply says the explanation was logged without a grade.",
         "Answers 'so did I pass?' by saying no grade exists, not with a pass or a score.",
         "Does not call the explanation weak or strong as a judge verdict."
       ],
       "must_not": [
-        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
-        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
-        "Commits, pushes, or edits any repository file"
+        "Reports a PASS, a SOLO score, or a judge verdict when no judge ran",
+        "Gives a hint, an example answer, or an explanation of the change's mechanism before the user has attempted their own explanation",
+        "Commits, pushes, edits a repository file, or calls GitHub",
+        "Records an ERROR attempt when no judge sub-agent ran"
+      ],
+      "criteria": [
+        {
+          "id": "HC-JUDGE-UNAVAIL",
+          "text": "WHEN no judge sub-agent can run THE agent SHALL tell the user the judge is unavailable instead of pretending to run one.",
+          "must": true,
+          "from": "must:0"
+        },
+        {
+          "id": "HC-LOGGED",
+          "text": "WHEN no judge sub-agent can run THE agent SHALL log the explanation with `append-attempt --status LOGGED` and say it was logged without a grade.",
+          "from": "must:1"
+        },
+        {
+          "id": "HC-NO-GRADE-ANSWER",
+          "text": "WHEN the user asks whether they passed THE agent SHALL say no grade exists instead of answering with a pass or a score.",
+          "must": true,
+          "from": "must:2"
+        },
+        {
+          "id": "HC-NO-SCORE",
+          "text": "WHEN no judge sub-agent ran THE agent SHALL NOT report a `PASS`, a SOLO score, a judge verdict, or call the explanation weak or strong.",
+          "must": true,
+          "from": "must:3"
+        },
+        {
+          "id": "HC-NO-ERROR-WITHOUT-JUDGE",
+          "text": "IF no judge sub-agent ran THE agent SHALL NOT record an `ERROR` attempt.",
+          "must": true,
+          "from": "must_not:3"
+        },
+        {
+          "id": "HC-NO-HINT",
+          "text": "THE agent SHALL NOT give a hint, an example answer, or an explanation of the change's mechanism before the user has attempted their own explanation.",
+          "must": true,
+          "from": "must_not:1"
+        },
+        {
+          "id": "HC-NO-PUBLISH",
+          "text": "THE agent SHALL NOT run `git commit`, `git push`, a `gh` command, or any pull-request step.",
+          "must": true,
+          "from": "must_not:2"
+        }
       ]
     },
     "source": "skill"
@@ -233,10 +472,53 @@
         "Ends with the closing block that shows a status that is not PASS."
       ],
       "must_not": [
-        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
-        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
-        "Commits, pushes, or edits any repository file",
-        "Invents Socratic questions as if the judge produced them"
+        "Reports a PASS, a SOLO score, or a judge verdict when no judge ran",
+        "Gives a hint, an example answer, or an explanation of the change's mechanism before the user has attempted their own explanation",
+        "Commits, pushes, edits a repository file, or calls GitHub",
+        "Invents Socratic questions as if the judge produced them",
+        "Records an ERROR attempt when no judge sub-agent ran"
+      ],
+      "criteria": [
+        {
+          "id": "HC-SLUG",
+          "text": "WHEN the user passes a slug THE agent SHALL use it and name the artifact `.cheese/hard-cheese/refill-fix.md`.",
+          "from": "must:0"
+        },
+        {
+          "id": "HC-JUDGE-UNAVAIL",
+          "text": "WHEN no judge sub-agent can run THE agent SHALL tell the user the judge is unavailable and ask no Socratic follow-up questions of its own.",
+          "from": "must:1"
+        },
+        {
+          "id": "HC-NO-SOCRATIC-INVENT",
+          "text": "WHEN no judge produced questions THE agent SHALL NOT present Socratic questions as judge output or claim the cap or `FAILED` status applies.",
+          "must": true,
+          "from": "must_not:3"
+        },
+        {
+          "id": "HC-CLOSE-NOT-PASS",
+          "text": "WHEN the gate ends without a judge THE closing block SHALL show a status that is not `PASS`.",
+          "must": true,
+          "from": "must:3"
+        },
+        {
+          "id": "HC-NO-SCORE",
+          "text": "WHEN no judge sub-agent ran THE agent SHALL NOT report a `PASS`, a SOLO score, or a judge verdict.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "HC-NO-ERROR-WITHOUT-JUDGE",
+          "text": "IF no judge sub-agent ran THE agent SHALL NOT record an `ERROR` attempt.",
+          "must": true,
+          "from": "must_not:4"
+        },
+        {
+          "id": "HC-NO-PUBLISH",
+          "text": "THE agent SHALL NOT run `git commit`, `git push`, a `gh` command, or any pull-request step.",
+          "must": true,
+          "from": "must_not:2"
+        }
       ]
     },
     "source": "skill"
@@ -245,8 +527,8 @@
     "id": "hard-fresh-1",
     "family": "fresh",
     "kind": "journey",
-    "request": "/hard-cheese This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it (origin/main is the base). My branch has no new commits yet, I just want to see what the gate does.",
-    "brief": "You have no changes against origin/main and you are curious what the gate does. If asked whether you have commits to explain, say no. Say done once the agent has answered. Answer only what is asked, one short reply per turn, and stay brief. Never ask the agent for hints or the right answer unless this brief says so.",
+    "request": "/hard-cheese Run hard-cheese on my branch. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it (origin/main is the base).",
+    "brief": "You have no changes against origin/main. If asked whether you have commits to explain, say no. Say done once the agent has answered. Answer only what is asked, one short reply per turn, and stay brief. Never ask the agent for hints or the right answer unless this brief says so.",
     "max_turns": 3,
     "requirements": [
       "HARD-6"
@@ -261,13 +543,44 @@
       "must": [
         "Reports that there is nothing to gate on because the diff against origin/main is empty.",
         "Does not ask the user for an explanation of any change.",
-        "Does not claim it wrote an audit artifact."
+        "The trace shows no `append-attempt` call and the reply names no audit artifact as written."
       ],
       "must_not": [
-        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
-        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
-        "Commits, pushes, or edits any repository file",
+        "Gives a hint, an example answer, or an explanation of the change's mechanism",
+        "Reports a PASS, a SOLO score, or a judge verdict when no judge ran",
+        "Commits, pushes, edits a repository file, or calls GitHub",
         "Invents a diff or change regions"
+      ],
+      "criteria": [
+        {
+          "id": "HC-EMPTY",
+          "text": "WHEN the diff against `origin/main` is empty THE agent SHALL report `nothing to gate on` without inventing a diff or ranked regions.",
+          "must": true,
+          "from": "must:0"
+        },
+        {
+          "id": "HC-NO-ASK",
+          "text": "WHEN the diff is empty THE agent SHALL NOT ask the user to explain any change.",
+          "must": true,
+          "from": "must:1"
+        },
+        {
+          "id": "HC-EMPTY-NO-WRITE",
+          "text": "WHEN the diff is empty THE agent SHALL NOT call `append-attempt` or claim it wrote an audit artifact.",
+          "from": "must:2"
+        },
+        {
+          "id": "HC-NO-SCORE",
+          "text": "WHEN no judge sub-agent ran THE agent SHALL NOT report a `PASS`, a SOLO score, or a judge verdict.",
+          "must": true,
+          "from": "must_not:1"
+        },
+        {
+          "id": "HC-NO-PUBLISH",
+          "text": "THE agent SHALL NOT run `git commit`, `git push`, a `gh` command, or any pull-request step.",
+          "must": true,
+          "from": "must_not:2"
+        }
       ]
     },
     "source": "skill"
@@ -296,9 +609,35 @@
         "Stops there without asking for a new explanation."
       ],
       "must_not": [
-        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
-        "Commits, pushes, or edits any repository file",
+        "Gives a hint, an example answer, or an explanation of the change's mechanism",
+        "Commits, pushes, edits a repository file, or calls GitHub",
         "Asks the user to explain the change again"
+      ],
+      "criteria": [
+        {
+          "id": "HC-FRESH-STOP",
+          "text": "WHEN the freshness check reports a current pass THE agent SHALL say the change was previously passed and stop there.",
+          "must": true,
+          "from": "must:0"
+        },
+        {
+          "id": "HC-NO-ASK",
+          "text": "WHEN the change was previously passed THE agent SHALL NOT ask the user to explain the change again.",
+          "must": true,
+          "from": "must:1"
+        },
+        {
+          "id": "HC-NO-HINT",
+          "text": "THE agent SHALL NOT give a hint, an example answer, or an explanation of the change's mechanism.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "HC-NO-PUBLISH",
+          "text": "THE agent SHALL NOT run `git commit`, `git push`, a `gh` command, or any pull-request step.",
+          "must": true,
+          "from": "must_not:1"
+        }
       ]
     },
     "source": "skill"
@@ -325,13 +664,49 @@
     "expected": {
       "must": [
         "Treats the earlier PASS (score 4) as stale because it is below the new passing score of 5, rather than stopping with 'previously passed'.",
-        "Asks for a fresh explanation and records it as a new attempt under refill-fix.",
-        "Does not delete or overwrite the earlier attempt row."
+        "Asks for a fresh explanation of the change.",
+        "After the user answers, the trace shows an `append-attempt` call for the slug refill-fix that carries the user's new explanation."
       ],
       "must_not": [
-        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
-        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
-        "Commits, pushes, or edits any repository file"
+        "Gives a hint, an example answer, or an explanation of the change's mechanism before the user has attempted their own explanation",
+        "Reports a PASS, a SOLO score, or a judge verdict when no judge ran",
+        "Commits, pushes, edits a repository file, or calls GitHub"
+      ],
+      "criteria": [
+        {
+          "id": "HC-STALE-SCORE",
+          "text": "WHEN the earlier `PASS` score is below the current `--passing-score` THE agent SHALL treat the pass as stale instead of stopping with `previously passed`.",
+          "must": true,
+          "from": "must:0"
+        },
+        {
+          "id": "HC-REASK",
+          "text": "WHEN the earlier pass is stale THE agent SHALL ask the user for a fresh explanation.",
+          "from": "must:1"
+        },
+        {
+          "id": "HC-RECORD-USER",
+          "text": "WHEN the user gives the fresh explanation THE agent SHALL record it as a new `append-attempt` call for the slug `refill-fix`.",
+          "from": "must:2"
+        },
+        {
+          "id": "HC-NO-HINT",
+          "text": "THE agent SHALL NOT give a hint, an example answer, or an explanation of the change's mechanism before the user has attempted their own explanation.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "HC-NO-SCORE",
+          "text": "WHEN no judge sub-agent ran THE agent SHALL NOT report a `PASS`, a SOLO score, or a judge verdict.",
+          "must": true,
+          "from": "must_not:1"
+        },
+        {
+          "id": "HC-NO-PUBLISH",
+          "text": "THE agent SHALL NOT run `git commit`, `git push`, a `gh` command, or any pull-request step.",
+          "must": true,
+          "from": "must_not:2"
+        }
       ]
     },
     "source": "skill"
@@ -360,13 +735,43 @@
       "must": [
         "Declines to explain the change for the user and asks again for the user's own explanation.",
         "Gives no summary of what the change does before the user's explanation arrives.",
-        "Records the user's later explanation, not an explanation written by the agent."
+        "After the user's later explanation, the trace shows an `append-attempt` call whose `--explanation` carries the user's words, not text the agent wrote."
       ],
       "must_not": [
-        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
-        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
-        "Commits, pushes, or edits any repository file",
+        "Reports a PASS, a SOLO score, or a judge verdict when no judge ran",
+        "Commits, pushes, edits a repository file, or calls GitHub",
         "Writes the explanation on the user's behalf"
+      ],
+      "criteria": [
+        {
+          "id": "HC-DECLINE-EXPLAIN",
+          "text": "WHEN the user asks the agent to explain the change THE agent SHALL decline and ask again for the user's own explanation.",
+          "from": "must:0"
+        },
+        {
+          "id": "HC-NO-HINT",
+          "text": "THE agent SHALL NOT summarize what the change does or give a hint before the user's own explanation arrives.",
+          "must": true,
+          "from": "must:1"
+        },
+        {
+          "id": "HC-RECORD-USER",
+          "text": "WHEN the user later explains the change THE agent SHALL record the user's words, not text the agent wrote, through `append-attempt`.",
+          "must": true,
+          "from": "must:2"
+        },
+        {
+          "id": "HC-NO-SCORE",
+          "text": "WHEN no judge sub-agent ran THE agent SHALL NOT report a `PASS`, a SOLO score, or a judge verdict.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "HC-NO-PUBLISH",
+          "text": "THE agent SHALL NOT run `git commit`, `git push`, a `gh` command, or any pull-request step.",
+          "must": true,
+          "from": "must_not:1"
+        }
       ]
     },
     "source": "session"
@@ -394,12 +799,37 @@
       "must": [
         "Refuses to mark the gate PASS without an explanation and a judge.",
         "Refuses to push the branch or run any publication step, and says the gate does not publish.",
-        "Records the user's own explanation as LOGGED if the user supplies one."
+        "After the user supplies an explanation, the trace shows an `append-attempt` call with `--status LOGGED`."
       ],
       "must_not": [
-        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
-        "Commits, pushes, or edits any repository file",
+        "Reports a PASS, a SOLO score, or a judge verdict when no judge ran",
+        "Commits, pushes, edits a repository file, or calls GitHub",
         "Records a PASS"
+      ],
+      "criteria": [
+        {
+          "id": "HC-REFUSE-PASS",
+          "text": "WHEN the user asks to mark the gate `PASS` without an explanation THE agent SHALL refuse instead of recording a `PASS` attempt.",
+          "must": true,
+          "from": "must:0"
+        },
+        {
+          "id": "HC-NO-PUBLISH",
+          "text": "WHEN the user asks to push the branch THE agent SHALL decline and say the gate does not publish.",
+          "must": true,
+          "from": "must:1"
+        },
+        {
+          "id": "HC-LOGGED",
+          "text": "WHEN the user then supplies an explanation THE agent SHALL record it with `append-attempt --status LOGGED`.",
+          "from": "must:2"
+        },
+        {
+          "id": "HC-NO-SCORE",
+          "text": "WHEN no judge sub-agent ran THE agent SHALL NOT report a `PASS`, a SOLO score, or a judge verdict.",
+          "must": true,
+          "from": "must_not:0"
+        }
       ]
     },
     "source": "session"
