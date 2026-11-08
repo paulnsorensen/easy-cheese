@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from typing import cast, get_args
 from urllib.parse import unquote, urlparse
 
 import attrs
@@ -64,8 +64,11 @@ from easy_cheese.shared.fanout.remediation_store import (
     run_lock_path,
     scope_state_path,
 )
-from easy_cheese.shared.fanout.press_types import (
-    PressGateResult,
+from easy_cheese.shared.fanout.acceptance_types import (
+    AcceptanceCheckResult,
+    PressOutcome,
+    PressRequest,
+    PressRoundResult,
     normalize_gate_failures,
 )
 from easy_cheese.shared.fanout.run_fan import (
@@ -218,11 +221,24 @@ def _apply_all(
 AgeScript = Callable[[RemediationScopeKey, int], ReviewResult]
 
 
-PressScript = Callable[[RemediationScopeKey, int], PressGateResult]
+AcceptanceScript = Callable[[RemediationScopeKey, int], AcceptanceCheckResult]
 
 
-def _press(_scope: RemediationScopeKey, _round: int) -> PressGateResult:
-    return PressGateResult(True, "baseline-1", evidence=(_evidence(),))
+_NO_EXEMPT: frozenset[str] = frozenset()
+
+def _acceptance(_scope: RemediationScopeKey, _round: int) -> AcceptanceCheckResult:
+    return AcceptanceCheckResult(True, "baseline-1", evidence=(_evidence(),))
+
+_GREEN = PressRoundResult(PressOutcome.GREEN)
+
+
+def _green_press(_curd: SemanticCurd, _request: PressRequest) -> PressRoundResult:
+    return _GREEN
+
+
+def _passed_correction(curd: SemanticCurd, _press: PressRoundResult) -> CurdResult:
+    return _passed_cook(curd)
+
 
 
 def _context(
@@ -231,7 +247,10 @@ def _context(
     *,
     cure: Callable[[RemediationScopeKey, tuple[str, ...], int], RemediationCureObservation] = _apply_all,
     cook: Callable[[SemanticCurd], CurdResult] = _passed_cook,
-    press: PressScript | None = _press,
+    acceptance: AcceptanceScript | None = _acceptance,
+    press: Callable[[SemanticCurd, PressRequest], PressRoundResult] | None = _green_press,
+    cook_correction: Callable[[SemanticCurd, PressRoundResult], CurdResult] | None = _passed_correction,
+    press_exempt: frozenset[str] = _NO_EXEMPT,
 ) -> FanContext:
     def age_adapter(event: RemediationEventContext) -> ReviewDispatchOutcome:
         return ReviewDispatchOutcome(
@@ -250,7 +269,10 @@ def _context(
         cook=cook,
         age=age_adapter,
         cure=cure_adapter,
+        acceptance_check=acceptance,
         press=press,
+        cook_correction=cook_correction,
+        press_exempt=press_exempt,
     )
 
 
@@ -426,7 +448,7 @@ class TestIncomplete:
             plan,
             _context(tmp_path, lambda scope, r: _clean_review(), cook=failing_cook),
         )
-        assert outcome.next_step != "press"
+        assert outcome.next_step == "mold"
         # b depends on a, which failed: b is blocked without dispatch (AC-8).
         dispositions = {r.source_curd_ref.curd_id: r.disposition for r in outcome.results}
         assert dispositions["a"] is CurdDisposition.FAILED
@@ -473,7 +495,6 @@ class TestIncomplete:
         assert all(dispositions[curd_id] is CurdDisposition.BLOCKED for curd_id in "bcdefg")
         assert cook_calls == ["root"]
         assert outcome.next_step == "mold"
-        assert outcome.next_step != "press"
 
     def test_independent_branch_runs_after_failed_root(self, tmp_path: Path) -> None:
         plan = _plan(_curd("root"), _curd("independent"))
@@ -851,49 +872,93 @@ class TestCallbackFailures:
         assert outcome.next_step == "mold"
 
 
-class TestPostmergePress:
-    def test_press_precedes_postmerge_age_and_skips_curds(self, tmp_path: Path) -> None:
-        plan = _plan(_curd("a"))
+class TestPostmergeAcceptanceCheck:
+    def test_fan_run_dispatches_no_global_press(self, tmp_path: Path) -> None:
+        # AC-7: Press runs per curd right after its Cook, before that curd's Age.
+        # The merged tip sees only the integrated acceptance check, then the global Age.
+        plan = _plan(_curd("a"), _curd("b"))
         events: list[str] = []
 
-        def press(scope: RemediationScopeKey, _round: int) -> PressGateResult:
-            events.append(f"press:{scope.scope_id}")
-            return PressGateResult(True, "baseline-1", evidence=(_evidence(),))
+        def cook(curd: SemanticCurd) -> CurdResult:
+            events.append(f"cook:{curd.curd_id}")
+            return _passed_cook(curd)
+
+        def press(curd: SemanticCurd, request: PressRequest) -> PressRoundResult:
+            events.append(f"press:{curd.curd_id}:{request.round_number}")
+            return _GREEN
+
+        def acceptance(scope: RemediationScopeKey, _round: int) -> AcceptanceCheckResult:
+            events.append(f"acceptance:{scope.scope_id}")
+            return AcceptanceCheckResult(True, "baseline-1", evidence=(_evidence(),))
 
         def age(scope: RemediationScopeKey, _round: int) -> ReviewResult:
             events.append(f"age:{scope.scope_id}")
             return _clean_review()
 
-        outcome = run_fan(plan, _context(tmp_path, age, press=press))
-        assert outcome.next_step == "done"
-        assert "press:a" not in events
-        assert events.index("press:postmerge") < events.index("age:postmerge")
+        outcome = run_fan(
+            plan, _context(tmp_path, age, cook=cook, acceptance=acceptance, press=press)
+        )
 
-    def test_absent_press_blocks_postmerge(self, tmp_path: Path) -> None:
+        assert outcome.next_step == "done"
+        assert [e for e in events if e.startswith("press")] == ["press:a:1", "press:b:1"]
+        assert events.index("cook:a") < events.index("press:a:1") < events.index("age:a")
+        assert events.index("cook:b") < events.index("press:b:1") < events.index("age:b")
+        assert [event for event in events if event.startswith("acceptance")] == [
+            "acceptance:postmerge"
+        ]
+        assert events.index("press:b:1") < events.index("acceptance:postmerge")
+        assert events.index("age:a") < events.index("acceptance:postmerge")
+        assert events.index("acceptance:postmerge") < events.index("age:postmerge")
+
+    def test_fan_surface_has_press_loop_but_no_press_next_step(self) -> None:
+        # AC-7: Press is a per-curd loop; the merged tip never routes to `press`.
+        assert hasattr(run_fan_module, "PressDispatcher")
+        assert not hasattr(run_fan_module, "PressGateResult")
+        assert "press" in FanContext.__annotations__
+        assert get_args(run_fan_module.NextStep) == ("done", "mold")
+
+    def test_acceptance_check_precedes_postmerge_age_and_skips_curds(self, tmp_path: Path) -> None:
+        plan = _plan(_curd("a"))
+        events: list[str] = []
+
+        def acceptance(scope: RemediationScopeKey, _round: int) -> AcceptanceCheckResult:
+            events.append(f"acceptance:{scope.scope_id}")
+            return AcceptanceCheckResult(True, "baseline-1", evidence=(_evidence(),))
+
+        def age(scope: RemediationScopeKey, _round: int) -> ReviewResult:
+            events.append(f"age:{scope.scope_id}")
+            return _clean_review()
+
+        outcome = run_fan(plan, _context(tmp_path, age, acceptance=acceptance))
+        assert outcome.next_step == "done"
+        assert "acceptance:a" not in events
+        assert events.index("acceptance:postmerge") < events.index("age:postmerge")
+
+    def test_absent_acceptance_check_blocks_postmerge(self, tmp_path: Path) -> None:
         plan = _plan(_curd("a"))
         outcome = run_fan(
             plan,
-            _context(tmp_path, lambda _scope, _round: _clean_review(), press=None),
+            _context(tmp_path, lambda _scope, _round: _clean_review(), acceptance=None),
         )
         assert outcome.next_step == "mold"
         assert outcome.postmerge_state is not None
         assert outcome.postmerge_state.disposition is RemediationDisposition.BLOCKED
         assert len(outcome.stop_evidence_refs) == 1
-        assert outcome.stop_evidence_refs[0].role == "press-stop"
+        assert outcome.stop_evidence_refs[0].role == "acceptance-stop"
 
 
     def test_postmerge_cure_receipt_keeps_both_gate_runs(self, tmp_path: Path) -> None:
         plan = _plan(_curd("a"))
 
-        def press(_scope: RemediationScopeKey, gate_round: int) -> PressGateResult:
-            return PressGateResult(True, "baseline-1", evidence=(attrs.evolve(_evidence(), evidence_id=f"gate-{gate_round}"),))
+        def acceptance(_scope: RemediationScopeKey, gate_round: int) -> AcceptanceCheckResult:
+            return AcceptanceCheckResult(True, "baseline-1", evidence=(attrs.evolve(_evidence(), evidence_id=f"gate-{gate_round}"),))
 
         def age(scope: RemediationScopeKey, review_round: int) -> ReviewResult:
             if scope.scope_id == "postmerge" and review_round == 1:
                 return _findings_review("merge defect")
             return _clean_review()
 
-        outcome = run_fan(plan, _context(tmp_path, age, press=press))
+        outcome = run_fan(plan, _context(tmp_path, age, acceptance=acceptance))
         assert outcome.postmerge_state is not None
         gate_ids = {
             item.evidence_id
@@ -1011,17 +1076,17 @@ def _postmerge_findings_once(scope: RemediationScopeKey, review_round: int) -> R
     return _clean_review()
 
 
-class TestPressGateHardening:
-    def test_press_callback_failure_keeps_cure_observation(self, tmp_path: Path) -> None:
-        # F5: a Press fault blocks the scope and keeps the Cure observation.
+class TestAcceptanceGateHardening:
+    def test_acceptance_callback_failure_keeps_cure_observation(self, tmp_path: Path) -> None:
+        # F5: an acceptance-check fault blocks the scope and keeps the Cure observation.
         plan = _plan(_curd("a"))
 
-        def press(_scope: RemediationScopeKey, gate_round: int) -> PressGateResult:
+        def acceptance(_scope: RemediationScopeKey, gate_round: int) -> AcceptanceCheckResult:
             if gate_round > 1:
                 raise RuntimeError("gate runner crashed")
-            return PressGateResult(True, "baseline-1", evidence=(_evidence(),))
+            return AcceptanceCheckResult(True, "baseline-1", evidence=(_evidence(),))
 
-        outcome = run_fan(plan, _context(tmp_path, _postmerge_findings_once, press=press))
+        outcome = run_fan(plan, _context(tmp_path, _postmerge_findings_once, acceptance=acceptance))
         assert outcome.postmerge_state is not None
         receipt = outcome.postmerge_state.receipts[-1]
         assert outcome.postmerge_state.disposition is RemediationDisposition.BLOCKED
@@ -1029,27 +1094,27 @@ class TestPressGateHardening:
         assert receipt.touched_paths == ("src/x.py",)
         cures = _artifact_payloads(tmp_path, "cure-result")
         failures = [item["new_gate_failures"] for item in cures.values()]
-        assert failures == [["press-callback-failed:RuntimeError"]]
+        assert failures == [["acceptance-callback-failed:RuntimeError"]]
         faults = _artifact_payloads(tmp_path, "callback-fault")
-        assert [item["source"] for item in faults.values()] == ["press-callback"]
+        assert [item["source"] for item in faults.values()] == ["acceptance-callback"]
 
-    def test_free_text_press_failure_blocks_postmerge(self, tmp_path: Path) -> None:
+    def test_free_text_acceptance_failure_blocks_postmerge(self, tmp_path: Path) -> None:
         # F19: free-text gate names block the scope instead of stalling it.
         plan = _plan(_curd("a"))
 
-        def press(_scope: RemediationScopeKey, gate_round: int) -> PressGateResult:
+        def acceptance(_scope: RemediationScopeKey, gate_round: int) -> AcceptanceCheckResult:
             if gate_round == 1:
-                return PressGateResult(True, "baseline-1", evidence=(_evidence(),))
-            return PressGateResult(
+                return AcceptanceCheckResult(True, "baseline-1", evidence=(_evidence(),))
+            return AcceptanceCheckResult(
                 False, "baseline-1", new_failures=("pytest: 3 failed", "pytest: 3 failed")
             )
 
-        outcome = run_fan(plan, _context(tmp_path, _postmerge_findings_once, press=press))
+        outcome = run_fan(plan, _context(tmp_path, _postmerge_findings_once, acceptance=acceptance))
         assert outcome.postmerge_state is not None
         assert outcome.postmerge_state.disposition is RemediationDisposition.BLOCKED
         cures = _artifact_payloads(tmp_path, "cure-result")
         failures = [item["new_gate_failures"] for item in cures.values()]
-        assert failures == [["pytest:-3-failed", "press-gate-failed"]]
+        assert failures == [["pytest:-3-failed", "acceptance-check-failed"]]
 
     def test_normalize_gate_failures_slugs_and_deduplicates(self) -> None:
         names = ("pytest: 3 failed", "  !!", "ok-gate", "pytest: 3 failed", "x" * 200)
@@ -1124,7 +1189,11 @@ class TestRecording:
             recorded.append(result.source_curd_ref.curd_id)
 
         context = attrs.evolve(
-            _context(tmp_path, lambda _scope, _round: _clean_review()),
+            _context(
+                tmp_path,
+                lambda _scope, _round: _clean_review(),
+                press_exempt=frozenset({"a", "b"}),
+            ),
             result_sink=record_result,
             checkpoint_sink=lambda: checkpoints.append(1),
         )
@@ -1136,7 +1205,11 @@ class TestRecording:
         plan = _plan(_curd("a"), _curd("b", ("a",)))
         checkpoints: list[int] = []
         context = attrs.evolve(
-            _context(tmp_path, lambda _scope, _round: _clean_review()),
+            _context(
+                tmp_path,
+                lambda _scope, _round: _clean_review(),
+                press_exempt=frozenset({"a", "b"}),
+            ),
             checkpoint_sink=lambda: checkpoints.append(1),
         )
         _ = run_fan(plan, context)
@@ -1149,7 +1222,7 @@ class TestRecording:
         def age(_scope: RemediationScopeKey, review_round: int) -> ReviewResult:
             return _findings_review("defect") if review_round == 1 else _clean_review()
 
-        _ = run_fan(plan, _context(tmp_path, age, press=None))
+        _ = run_fan(plan, _context(tmp_path, age, acceptance=None))
         suffix = "a" * 12
         assert sorted(_artifact_payloads(tmp_path, "review")) == sorted(
             f"{path_component(name)}.json"
@@ -1211,3 +1284,327 @@ class TestRunLock:
         outcome = run_fan(plan, _context(tmp_path, lambda _s, _r: _clean_review()))
         assert outcome.next_step == "done"
         assert lock.exists()
+
+
+def _finding_round(attack_id: str, summary: str = "attack lands") -> PressRoundResult:
+    return PressRoundResult(PressOutcome.FINDING, attack_id=attack_id, summary=summary)
+
+
+def _press_rounds(tmp_path: Path) -> list[dict[str, object]]:
+    root = tmp_path / "remediation" / path_component("run-1") / path_component("press-round")
+    return [json.loads(path.read_text()) for path in sorted(root.glob("*.json"))]
+
+
+class TestPressLoop:
+    def _run(
+        self,
+        tmp_path: Path,
+        script: list[PressRoundResult],
+        requests: list[PressRequest],
+        corrections: list[str] | None = None,
+        *,
+        plan: CurdPlan | None = None,
+        press_exempt: frozenset[str] = _NO_EXEMPT,
+    ) -> FanExecutionOutcome:
+        queue = list(script)
+
+        def press(_curd: SemanticCurd, request: PressRequest) -> PressRoundResult:
+            requests.append(request)
+            return queue.pop(0)
+
+        def correction(curd: SemanticCurd, round_result: PressRoundResult) -> CurdResult:
+            if corrections is not None:
+                corrections.append(f"{curd.curd_id}:{round_result.attack_id}")
+            return _passed_cook(curd)
+
+        return run_fan(
+            plan or _plan(_curd("a")),
+            _context(
+                tmp_path,
+                lambda scope, r: _clean_review(),
+                press=press,
+                cook_correction=correction,
+                press_exempt=press_exempt,
+            ),
+        )
+
+    def test_finding_triggers_correction_and_replays_same_attack(self, tmp_path: Path) -> None:
+        requests: list[PressRequest] = []
+        corrections: list[str] = []
+        outcome = self._run(
+            tmp_path, [_finding_round("atk-1"), _GREEN], requests, corrections
+        )
+        assert outcome.next_step == "done"
+        assert corrections == ["a:atk-1"]
+        assert requests == [
+            PressRequest(round_number=1, attack_id=None),
+            PressRequest(round_number=2, attack_id="atk-1"),
+        ]
+        rounds = _press_rounds(tmp_path)
+        assert [(r["round_number"], r["outcome"]) for r in rounds] == [
+            (1, "finding"),
+            (2, "green"),
+        ]
+
+    def test_third_finding_on_same_attack_halts_at_correction_cap(self, tmp_path: Path) -> None:
+        requests: list[PressRequest] = []
+        corrections: list[str] = []
+        outcome = self._run(
+            tmp_path, [_finding_round("atk-1")] * 3, requests, corrections
+        )
+        assert outcome.next_step == "mold"
+        assert len(corrections) == 2
+        assert len(requests) == 3
+        (result,) = outcome.results
+        assert result.disposition is CurdDisposition.BLOCKED
+        assert result.unresolved_work == ("halt: correction-cap",)
+        assert _press_rounds(tmp_path)[-1]["halt"] == "correction-cap"
+
+    def test_new_attack_resets_the_correction_count(self, tmp_path: Path) -> None:
+        requests: list[PressRequest] = []
+        script = [
+            _finding_round("atk-1"),
+            _finding_round("atk-1"),
+            _finding_round("atk-2"),
+            _finding_round("atk-2"),
+            _GREEN,
+        ]
+        outcome = self._run(tmp_path, script, requests)
+        assert outcome.next_step == "done"
+        assert [r.attack_id for r in requests] == [
+            None, "atk-1", "atk-1", "atk-2", "atk-2",
+        ]
+
+    def test_second_coverage_gap_halts_to_mold(self, tmp_path: Path) -> None:
+        requests: list[PressRequest] = []
+        gap = PressRoundResult(PressOutcome.COVERAGE_GAP, summary="no tests")
+        outcome = self._run(tmp_path, [gap, gap], requests)
+        assert outcome.next_step == "mold"
+        (result,) = outcome.results
+        assert result.unresolved_work == ("halt: coverage-gap",)
+        assert len(requests) == 2
+
+    @pytest.mark.parametrize(
+        ("outcome_kind", "halt"),
+        [
+            (PressOutcome.INVALID_EVIDENCE, "invalid-evidence"),
+            (PressOutcome.PRODUCTION_CHANGED, "production-changed"),
+        ],
+    )
+    def test_integrity_outcomes_halt_immediately(
+        self, tmp_path: Path, outcome_kind: PressOutcome, halt: str
+    ) -> None:
+        requests: list[PressRequest] = []
+        outcome = self._run(tmp_path, [PressRoundResult(outcome_kind)], requests)
+        assert outcome.next_step == "mold"
+        assert outcome.results[0].unresolved_work == (f"halt: {halt}",)
+        assert len(requests) == 1
+
+    def test_halted_curd_never_reaches_age(self, tmp_path: Path) -> None:
+        aged: list[str] = []
+
+        def age(scope: RemediationScopeKey, _round: int) -> ReviewResult:
+            aged.append(scope.scope_id)
+            return _clean_review()
+
+        gap = PressRoundResult(PressOutcome.COVERAGE_GAP)
+        queue = [gap, gap]
+        context = _context(
+            tmp_path, age, press=lambda _c, _r: queue.pop(0)
+        )
+        outcome = run_fan(_plan(_curd("a")), context)
+        assert outcome.next_step == "mold"
+        assert "a" not in aged
+
+    def test_press_exempt_curd_skips_press(self, tmp_path: Path) -> None:
+        requests: list[PressRequest] = []
+        outcome = self._run(
+            tmp_path, [], requests, press_exempt=frozenset({"a"})
+        )
+        assert outcome.next_step == "done"
+        assert requests == []
+
+    def test_missing_press_dispatcher_fails_before_any_cook_dispatch(self, tmp_path: Path) -> None:
+        cooked: list[str] = []
+
+        def cook(curd: SemanticCurd) -> CurdResult:
+            cooked.append(curd.curd_id)
+            return _passed_cook(curd)
+
+        context = _context(tmp_path, lambda scope, r: _clean_review(), press=None, cook=cook)
+        with pytest.raises(RuntimeError, match="requires a Press dispatcher"):
+            _ = run_fan(_plan(_curd("a")), context)
+        assert cooked == []
+
+    @pytest.mark.parametrize("role", ["press-result", "press-stop"])
+    def test_legacy_press_role_artifacts_are_rejected_before_dispatch(
+        self, tmp_path: Path, role: str
+    ) -> None:
+        legacy = tmp_path / "remediation" / path_component("run-1") / path_component(role)
+        legacy.mkdir(parents=True)
+        _ = (legacy / "old.json").write_text("{}")
+        cooked: list[str] = []
+
+        def cook(curd: SemanticCurd) -> CurdResult:
+            cooked.append(curd.curd_id)
+            return _passed_cook(curd)
+
+        context = _context(tmp_path, lambda scope, r: _clean_review(), cook=cook)
+        with pytest.raises(ValueError, match="start a fresh run"):
+            _ = run_fan(_plan(_curd("a")), context)
+        assert cooked == []
+
+    def test_alternating_two_attacks_halt_at_the_per_attack_cap(self, tmp_path: Path) -> None:
+        requests: list[PressRequest] = []
+        script = [_finding_round(a) for a in ("atk-1", "atk-2", "atk-1", "atk-2", "atk-1")]
+        outcome = self._run(tmp_path, script, requests)
+        assert outcome.next_step == "mold"
+        assert len(requests) == 5
+        assert outcome.results[0].unresolved_work == ("halt: correction-cap",)
+
+    def test_many_distinct_attacks_halt_at_the_press_round_limit(self, tmp_path: Path) -> None:
+        requests: list[PressRequest] = []
+        script = [_finding_round(a) for a in ("a1", "a2", "a3", "a4", "a5", "a6", "a7")]
+        outcome = self._run(tmp_path, script, requests)
+        assert outcome.next_step == "mold"
+        assert len(requests) == run_fan_module.MAX_PRESS_ROUNDS
+        assert outcome.results[0].unresolved_work == ("halt: press-round-limit",)
+        last = max(_press_rounds(tmp_path), key=lambda r: cast(int, r["round_number"]))
+        assert last["halt"] == "press-round-limit"
+
+    def test_press_callback_exception_blocks_only_that_curd(self, tmp_path: Path) -> None:
+        def press(curd: SemanticCurd, _request: PressRequest) -> PressRoundResult:
+            if curd.curd_id == "a":
+                raise OSError("press worker died")
+            return _GREEN
+
+        context = _context(tmp_path, lambda scope, r: _clean_review(), press=press)
+        outcome = run_fan(_plan(_curd("a"), _curd("b")), context)
+        by_id = {r.source_curd_ref.curd_id: r for r in outcome.results}
+        assert by_id["a"].disposition is CurdDisposition.BLOCKED
+        assert by_id["b"].disposition is CurdDisposition.PASSED
+        assert outcome.next_step == "mold"
+        assert any(ref.role == "callback-fault" for ref in outcome.stop_evidence_refs)
+
+    def test_cook_correction_exception_blocks_only_that_curd(self, tmp_path: Path) -> None:
+        def correction(_curd: SemanticCurd, _press: PressRoundResult) -> CurdResult:
+            raise OSError("corrector died")
+
+        queue = [_finding_round("atk-1")]
+        context = _context(
+            tmp_path,
+            lambda scope, r: _clean_review(),
+            press=lambda _c, _r: queue.pop(0),
+            cook_correction=correction,
+        )
+        outcome = run_fan(_plan(_curd("a")), context)
+        assert outcome.results[0].disposition is CurdDisposition.BLOCKED
+        assert any(ref.role == "callback-fault" for ref in outcome.stop_evidence_refs)
+
+    def test_exempt_curd_persists_an_exempt_press_round_record(self, tmp_path: Path) -> None:
+        outcome = self._run(tmp_path, [], [], press_exempt=frozenset({"a"}))
+        assert outcome.next_step == "done"
+        (record,) = _press_rounds(tmp_path)
+        assert (record["curd_id"], record["outcome"], record["halt"]) == ("a", "exempt", None)
+        assert not any(ref.role == "press-round" for ref in outcome.stop_evidence_refs)
+
+    def test_resume_of_passed_curd_without_green_press_runs_press_before_age(
+        self, tmp_path: Path
+    ) -> None:
+        order: list[str] = []
+        cooked: list[str] = []
+        plan = _plan(_curd("a"))
+
+        def press(_curd: SemanticCurd, request: PressRequest) -> PressRoundResult:
+            order.append(f"press-{request.round_number}")
+            return _GREEN
+
+        def age(_scope: RemediationScopeKey, _round: int) -> ReviewResult:
+            order.append("age")
+            return _clean_review()
+
+        def cook(curd: SemanticCurd) -> CurdResult:
+            cooked.append(curd.curd_id)
+            return _passed_cook(curd)
+
+        context = _context(tmp_path, age, press=press, cook=cook)
+        outcome = run_fan(plan, context, results={"a": _passed_cook(plan.curds[0])})
+        assert cooked == []
+        assert order[0] == "press-1"
+        assert order.index("age") > 0
+        assert outcome.next_step == "done"
+
+    def test_resume_with_green_press_round_goes_straight_to_age(self, tmp_path: Path) -> None:
+        plan = _plan(_curd("a"))
+        first = _context(tmp_path, lambda scope, r: _clean_review())
+        _ = run_fan(plan, first)
+        requests: list[PressRequest] = []
+
+        def press(_curd: SemanticCurd, request: PressRequest) -> PressRoundResult:
+            requests.append(request)
+            return _GREEN
+
+        resumed = _context(tmp_path, lambda scope, r: _clean_review(), press=press)
+        outcome = run_fan(plan, resumed, results={"a": _passed_cook(plan.curds[0])})
+        assert requests == []
+        assert outcome.next_step == "done"
+
+    def test_resume_replays_persisted_rounds_to_restore_the_correction_count(
+        self, tmp_path: Path
+    ) -> None:
+        plan = _plan(_curd("a"))
+        queue = [_finding_round("atk-1"), _finding_round("atk-1")]
+        crash_context = _context(
+            tmp_path,
+            lambda scope, r: _clean_review(),
+            press=lambda _c, _r: queue.pop(0),
+            cook_correction=lambda _c, _p: (_ for _ in ()).throw(KeyError("crash")),
+        )
+        with pytest.raises(KeyError):
+            _ = run_fan(plan, crash_context)
+        requests: list[PressRequest] = []
+
+        def press(_curd: SemanticCurd, request: PressRequest) -> PressRoundResult:
+            requests.append(request)
+            return _finding_round("atk-1")
+
+        resumed = _context(tmp_path, lambda scope, r: _clean_review(), press=press)
+        outcome = run_fan(plan, resumed, results={"a": _passed_cook(plan.curds[0])})
+        assert requests == [
+            PressRequest(round_number=2, attack_id="atk-1"),
+            PressRequest(round_number=3, attack_id="atk-1"),
+        ]
+        assert outcome.results[0].unresolved_work == ("halt: correction-cap",)
+
+    def test_resume_treats_a_persisted_halt_on_a_non_green_record_as_terminal(
+        self, tmp_path: Path
+    ) -> None:
+        plan = _plan(_curd("a"))
+        halted = self._run(
+            tmp_path, [PressRoundResult(PressOutcome.INVALID_EVIDENCE)], []
+        )
+        assert halted.results[0].unresolved_work == ("halt: invalid-evidence",)
+        requests: list[PressRequest] = []
+
+        def press(_curd: SemanticCurd, request: PressRequest) -> PressRoundResult:
+            requests.append(request)
+            return _GREEN
+
+        resumed = _context(tmp_path, lambda scope, r: _clean_review(), press=press)
+        outcome = run_fan(plan, resumed, results={"a": _passed_cook(plan.curds[0])})
+        assert requests == []
+        assert outcome.results[0].disposition is CurdDisposition.BLOCKED
+        assert outcome.results[0].unresolved_work == ("halt: invalid-evidence",)
+
+    def test_fresh_cook_after_a_blocked_curd_discards_stale_press_rounds(
+        self, tmp_path: Path
+    ) -> None:
+        blocked = self._run(tmp_path, [_finding_round("atk-1")] * 3, [])
+        assert blocked.results[0].unresolved_work == ("halt: correction-cap",)
+        assert len(_press_rounds(tmp_path)) == 3
+        requests: list[PressRequest] = []
+        _ = self._run(tmp_path, [_GREEN], requests)
+        assert requests == [PressRequest(round_number=1, attack_id=None)]
+        assert [(r["round_number"], r["outcome"]) for r in _press_rounds(tmp_path)] == [
+            (1, "green")
+        ]

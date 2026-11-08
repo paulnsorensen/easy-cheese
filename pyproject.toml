@@ -88,6 +88,14 @@ extraPaths = ["tests/wheypoint/python", ".", "src", "scripts", ".github/scripts"
 root = "tests"
 extraPaths = [".", "src", "scripts", ".github/scripts", "src/easy_cheese_schemas"]
 
+# Each archive test extracts a skill archive (15-25 MB) into its tmp_path as
+# SHIV_ROOT, so one run of tests/python/test_archive_contents.py writes about
+# 2 GB. With the default policy ("all"), pytest keeps the last three runs, and
+# /tmp on a tmpfs host fills its per-user quota. Keep the temp dirs of failed
+# tests only.
+[tool.pytest.ini_options]
+tmp_path_retention_policy = "failed"
+
 [tool.vulture]
 min_confidence = 60
 paths = [

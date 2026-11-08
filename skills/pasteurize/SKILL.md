@@ -147,13 +147,9 @@ Do not accept an unrelated failure as a reproduction.
 Classify the symptom before you form hypotheses.
 
 - Continue at the current model tier for a clean stack trace and a reliable loop.
-- Upgrade the model tier for races, cross-module failures, performance regressions, or Heisenbugs.
+- Upgrade to the `powerful` tier for races, cross-module failures, performance regressions, or Heisenbugs.
 
-Use the harness command for the model upgrade.
-For Claude, use `/model opus`.
-Then use `/effort`.
-Use the named equivalent for Codex or OMP.
-Use a generic model upgrade on other hosts.
+The per-harness upgrade commands live in `../cheese/references/routing-policy.md` § Roles x tiers.
 
 ## Phase 3: Form hypotheses
 
@@ -259,7 +255,7 @@ Record necessary architectural work in the slug.
 Make this recommendation after you apply the fix.
 
 Hand the completed slug to `/cook <slug> --auto`.
-Cook checks the existing diff and runs the `press -> age -> cure` chain.
+Cook checks the diff and runs `cook (⇄ press) -> age -> cure`.
 Pasteurize does not commit changes or open pull requests.
 
 ## Fan-out sizing
@@ -369,7 +365,7 @@ Set `next: done` when an external cause needs no repository change.
 
 ## Handoff
 
-**Pipeline:** cheese -> **pasteurize** -> cook --auto -> press -> age -> cure -> plate
+**Pipeline:** cheese -> **pasteurize** -> cook --auto (⇄ press) -> age -> cure -> plate
 
 After you write the report and slug, present these options through [`handoff-gate.md`](../cheese/references/handoff-gate.md):
 

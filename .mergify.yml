@@ -1,0 +1,19 @@
+# Mergify merge queue. Queue a pull request with the comment `@mergifyio queue`.
+#
+# The queue is serial and checks in place: Mergify merges main into the pull
+# request, waits for the required checks of the main-protection ruleset on the
+# pull request itself, then squash-merges it. One pull request is in flight at a
+# time, so main receives only a tree that CI tested against the current main.
+# In-place checks need batch_size 1, max_parallel_checks 1, serial mode, no
+# retries, and no separate merge_conditions.
+# See https://docs.mergify.com/merge-queue/batches#in-place-checks-no-batch-prs
+queue_rules:
+  - name: default
+    merge_method: squash
+    update_method: merge
+    batch_size: 1
+    max_checks_retries: 0
+
+merge_queue:
+  mode: serial
+  max_parallel_checks: 1
