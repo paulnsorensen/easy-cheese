@@ -42,10 +42,10 @@ def stripped(path: Path) -> str:
     return STRIP.sub("", text)
 
 
-def gated_skills(root: Path) -> tuple[str, ...]:
-    """Each gate module except `common.py` names one skill with a journey contract."""
+def skills(root: Path) -> list[str]:
+    """Every skill with a gate source: `scripts/journey_gates/*.py` minus common."""
     gates = root / "scripts" / "journey_gates"
-    return tuple(sorted(p.stem for p in gates.glob("*.py") if p.stem != "common"))
+    return sorted(p.stem for p in gates.glob("*.py") if p.stem != "common")
 
 
 def compiled_source(root: Path, skill: str) -> str:
@@ -79,7 +79,7 @@ def main(argv: list[str]) -> int:
     )
     args = parser.parse_args(argv)
     drifted: list[str] = []
-    for skill in gated_skills(args.root):
+    for skill in skills(args.root):
         path = contract_path(args.root, skill)
         try:
             wanted = rendered_contract(args.root, skill)
