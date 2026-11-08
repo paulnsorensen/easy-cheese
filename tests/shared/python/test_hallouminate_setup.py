@@ -427,8 +427,8 @@ class TestConfigPathResolution:
 
 
 class TestCliDispatch:
-    """The `main()` argv-normalizing CLI -- the entry point install.sh invokes
-    as `... global --apply`. Guards the production dispatch path."""
+    """The `main()` argv-normalizing CLI -- the entry point the easy-cheese-setup
+    skill invokes as `... global --apply`. Guards the production dispatch path."""
 
     def test_global_apply_writes_marked_block(
         self,

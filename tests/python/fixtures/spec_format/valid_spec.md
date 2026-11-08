@@ -42,6 +42,18 @@ Hand-roll a validator that consumes the generated document rules.
 - AC-1: WHEN the validator runs on a valid tracer spec THE SYSTEM SHALL exit 0.
 - AC-2: WHEN the validator runs on a valid contract-matrix spec THE SYSTEM SHALL exit 0.
 
+## Acceptance demonstration
+
+| Field | Value |
+| --- | --- |
+| User task | Validate a Mold spec before it is saved |
+| Input | A strict spec file with a tracer row and a contract-matrix row |
+| Entrypoint | `validate-spec --strict <spec>` |
+| Expected result | Exit 0 with a valid payload |
+| Real boundaries | The real CLI process and the real spec file |
+| False success | The CLI exits 0 on a spec with no demonstration; the missing-section test rejects it |
+| Evidence | CLI exit code and JSON payload |
+
 ## Test Contracts
 
 | Acceptance ID | Interface referent | Outermost stable seam | Expected failure | Mode | Interface version | Matrix rows |

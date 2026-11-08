@@ -443,8 +443,8 @@ def test_render_handoff_slug_rejects_a_newline_in_each_field(field: str) -> None
 @pytest.mark.parametrize(
     ("status", "action", "next_phase"),
     [
-        ("ok", "spawn", "press"),
-        (f"ok-with-concerns: {REASON}", "spawn", "press"),
+        ("ok", "spawn", "age"),
+        (f"ok-with-concerns: {REASON}", "spawn", "age"),
         (f"needs-context: {REASON}", "needs_context", "cook"),
         (f"gated: {REASON}", "gated", None),
         (f"halt: {REASON}", "halt", None),
@@ -496,7 +496,7 @@ def test_needs_context_re_dispatches_the_same_phase_with_its_reason() -> None:
     verdict = phase_decision.decide(1, f"needs-context: {REASON}")
 
     assert verdict["exit_message"] == (
-        f"press (phase 1) needs more context: {REASON}; re-dispatch the same "
+        f"age (phase 1) needs more context: {REASON}; re-dispatch the same "
         "phase with it"
     )
 

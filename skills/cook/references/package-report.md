@@ -35,14 +35,28 @@ This file defines only how the report shows that policy.
 ### Baseline (if any recorded)
 - <suite>/<test_id>: <signature> — identical to baseline, outside the cooked contract, not fixed (see [`quality-gates.md`](quality-gates.md))
 
+### Acceptance evidence (behavior work)
+- Smallest complete path: <the path run first>
+- Detection proof: <the check failed on the original bug, or rejected an absent or incorrect result>
+- Revision: <commit or tree>
+- Environment: <runtime, services, live or offline>
+- Command: <exact command>
+- Observed result: <what the check showed>
+- Status: verified | unverified: <reduced claim>
+
+### Press loop (behavior work)
+- Rounds: <count>
+- Round <n>: green | finding | coverage_gap | invalid_evidence | production_changed
+- Press report: `.cheese/press/<slug>.md`
+
 ### Self-eval
 - [x] Tests cover the changed behavior.
+- [x] Acceptance evidence names the detection proof and its verified or unverified status.
 - [x] Cook made tests pass without speculative behavior.
 - [x] Taste-test passed.
 - [x] Quality gates pass, or all remaining red is recorded baseline failure (see Baseline section).
 
 ### Next step
-- /press <slug>   — harden tests and check coverage
 - /age <slug>     — review the diff
 - /cure <slug>    — apply selected age findings (after /age)
 ```

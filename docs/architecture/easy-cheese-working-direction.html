@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Easy-cheese working direction</title>
+<style>
+:root{color-scheme:light;--bg:var(--background,#f7f5ed);--surface:var(--card,#fffef9);--ink:var(--foreground,#1e302c);--quiet:var(--muted-foreground,#56655c);--line:var(--border,#d1d9cd);--green:var(--accent-foreground,#276348);--greenbg:var(--accent-surface,#e3efe5);--gold:var(--warning,#8a5d17);--goldbg:var(--warning-surface,#f8ebce)}
+*{box-sizing:border-box}body{margin:0;background:transparent;color:var(--ink);font:16px/1.55 var(--font-sans,system-ui),sans-serif}main{width:100%;margin:0;padding:0}h1{font-size:clamp(28px,4vw,42px);line-height:1.15;letter-spacing:-.03em;margin:10px 0 14px}h2{font-size:23px;margin:0 0 12px}h3{font-size:18px;margin:0 0 8px}p{margin:8px 0}.eyebrow{color:var(--green);font-size:12px;letter-spacing:.12em;text-transform:uppercase;font-weight:750}.lead{font-size:20px;max-width:760px}.muted,small{color:var(--quiet)}.tag{display:inline-block;border:1px solid var(--line);border-radius:100px;padding:3px 10px;font-size:12px;margin-right:5px}.gold{background:var(--goldbg);color:var(--gold);border-color:transparent}.section{margin-top:32px}.stream{background:var(--ink);color:var(--bg);border-radius:var(--radius,14px);padding:17px 22px;font-weight:650}.loops{display:grid;grid-template-columns:1fr 40px 1fr;align-items:stretch;margin-top:14px}.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius,14px);padding:22px}.card ul{padding-left:20px;margin:12px 0 0}.arrow{display:grid;place-items:center;font-size:28px;color:var(--green)}.record{margin-top:14px;padding:18px 22px;border-radius:var(--radius,14px);background:var(--greenbg);border:1px solid var(--line)}.record strong{color:var(--green)}.base{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.base span{border:1px dashed var(--line);border-radius:8px;padding:8px 12px;font-size:14px}.three{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.three .card{padding:18px}.step{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--quiet)}.history{display:grid;grid-template-columns:1fr 28px 1fr 28px 1fr;align-items:center}.history .card{padding:17px}.history .arrow{font-size:22px}details{border-top:1px solid var(--line);padding:14px 0}summary{font-weight:650;cursor:pointer}details p{max-width:850px}.callout{border-left:4px solid var(--gold);padding:16px 18px;background:var(--goldbg);border-radius:var(--radius,10px)}.sources{font-size:13px;border-top:1px solid var(--line);padding-top:14px;margin-top:26px}a{color:var(--green);text-underline-offset:3px}code{font-size:.86em;overflow-wrap:anywhere}
+@media(max-width:650px){.loops,.three,.history{grid-template-columns:1fr}.arrow{min-height:35px;transform:rotate(90deg)}.lead{font-size:18px}}
+</style></head><body><main>
+<div class="eyebrow">Working direction · 18 October 2026 · rulings added 22 October 2026</div>
+<h1>Preserve the journeys.<br>Simplify the machinery.</h1>
+<p class="lead">The smallest useful cheese is a continuous work stream with evidence-backed discovery and delivery loops.</p>
+<p><span class="tag gold">Proposal, not approved architecture</span><span class="tag">Manifesto and analysis linked below</span></p>
+
+<section class="section" aria-label="Proposed conceptual model">
+<div class="stream">One user conversation → the next useful, authorized move</div>
+<div class="loops">
+<div class="card"><div class="eyebrow">Discovery loop</div><h2>Learn and shape</h2><p>Ground → expose unknowns → discuss or experiment → refine.</p><p class="muted">Culture · Mold · Pasteurize · Prototype</p><ul><li>Think without committing to build.</li><li>Make a small spec or a full specification.</li><li>Continue discovery while ready work proceeds.</li></ul></div>
+<div class="arrow" aria-label="Feedback in both directions">⇄</div>
+<div class="card"><div class="eyebrow">Delivery loop</div><h2>Build and demonstrate</h2><p>Implement → observe behavior → review → repair → integrate.</p><p class="muted">Cook · Press · Age · Cure · Hard-cheese · Plate</p><ul><li>Select checks that fit the risk.</li><li>Use parallel workers where independence helps.</li><li>Explain the whole change, not just each diff.</li></ul></div>
+</div>
+<div class="record"><strong>Connected context throughout</strong><p>Wheypoints connect decisions, questions, evidence, specifications, plans, and results. The wiki keeps reusable knowledge.</p><small>One connected record of the work does not mean one schema, database, or executable.</small></div>
+<div class="base"><span>CLI: stable mechanics</span><span>Skills: judgment and policy</span><span>Adapters: available tools</span><span>UI and Milknado: optional</span></div>
+</section>
+
+<section class="section"><h2>What the recovered history actually says</h2>
+<div class="history">
+<div class="card"><div class="step">September → October</div><h3>Rebuild investigation</h3><p>Continuous work stream and grader design remain open.</p></div>
+<div class="arrow" aria-label="Recorded fork">→</div>
+<div class="card"><div class="step">Recorded child</div><h3>Contract simplification</h3><p>Narrow cuts are selected and reflected in current code.</p></div>
+<div class="arrow" aria-label="Recorded fork">→</div>
+<div class="card"><div class="step">Recorded child</div><h3>Wheypoint simplification</h3><p>The schema-5 cuts landed in #776; further cuts wait on issue #843.</p></div>
+</div>
+<p class="muted"><strong>Related, not graph-linked:</strong> the Milknado seam keeps separate stores; Milknado is an optional plugin coupled by artifact pointers.</p>
+<p class="muted"><strong>Newer evaluation work:</strong> the October 18 inspection found journey-coverage PRs open; recorded coverage is not live reliability evidence.</p>
+</section>
+
+<section class="section"><h2>Three boundaries to keep clear</h2><div class="three">
+<div class="card"><h3>Evidence ≠ assertion</h3><p>A schema-valid result or self-review is not proof that behavior works.</p></div>
+<div class="card"><h3>Memory ≠ authority</h3><p>A linked old proposal is not an approved current requirement.</p></div>
+<div class="card"><h3>More process ≠ quality</h3><p>Another reviewer, document, or gate must add useful assurance.</p></div>
+</div></section>
+
+<section class="section"><h2>Open the right questions</h2>
+<details><summary>When is a piece ready to build?</summary><p>Which unknowns block implementation, which can remain open, and what must be stable before another worker starts?</p></details>
+<details><summary>What must the human understand and approve?</summary><p>Ruled: Hard-cheese stays the quiz at publication. A separate review artifact carries understanding through the work; a follow-up mold designs it.</p></details>
+<details><summary>What happens when parallel work becomes stale?</summary><p>Ruled: the in-flight piece finishes and a follow-up is queued. A change in direction cancels the piece and resends it.</p></details>
+<details><summary>What result earns a rewrite?</summary><p>Ruled: make the ruled changes first and measure after; correct course if a change proves wrong. Journeys and the grader follow the tilth benchmark work.</p></details>
+</section>
+
+<div class="section callout"><strong>Next step</strong><p>Run the size-heuristics mold and the review-artifact mold. The manifesto's rulings section lists every decision.</p></div>
+<div class="sources"><strong>Basis:</strong> recovered Wheypoint records; October 3 workflow-stream notes; current checkout <code>1371af89</code>; owner's current brief. Read the <a href="../../.hallouminate/wiki/easy-cheese-manifesto.md">working manifesto</a> and <a href="../../.hallouminate/wiki/ideas/minimal-easy-cheese.md">minimal-core discussion, evidence limits, and next steps</a>.<br>External context: <a href="https://www.anthropic.com/engineering/multi-agent-research-system">parallel-work limits</a>, <a href="https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents">outcome-based evaluation</a>. These sources inform the proposal; they do not validate this design.<br>Static discussion artifact. Open this file locally; no server or external script is required.</div>
+</main></body></html>
