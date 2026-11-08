@@ -33,7 +33,7 @@ The journey gate fails a run when any of these happens.
 | `test-runner` | The run starts a test suite (`pytest`, `python -m unittest`, `just check`, `npm test`, `cargo test`, and similar). |
 | `git-commit`, `git-push`, `open-pr` | The run commits, pushes, or opens a PR. |
 | `receipt-format` | A `route:` line does not match `route: intent=<intent> target=<skill> path=<fast\|escalated> probes=<n>`. |
-| `receipt-path-probes` | A receipt pairs `path=fast` with a nonzero probe count, or `path=escalated` with zero. |
+| `receipt-path-probes` | A receipt pairs `path=fast` with a nonzero probe count. `path=escalated probes=0` passes, because an input off the fast path stays escalated. |
 | `no-trace` | The trace has no agent turn. |
 
 ## Out of scope offline

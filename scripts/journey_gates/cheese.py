@@ -127,7 +127,9 @@ for rel in workspace.fixtures:
     if workspace.deleted(rel):
         failures.add("fixture-changed")
 
-# 3. Every receipt line is well formed, and `fast` pairs with zero probes.
+# 3. Every receipt line is well formed, and `path=fast` spends zero probes.
+#    `path=escalated probes=0` is legal: every input off the fast path stays
+#    escalated (skills/cheese/references/routing-receipt.md, The fast path).
 for kind, value in workspace.steps:
     if kind != "text":
         continue
@@ -138,7 +140,7 @@ for kind, value in workspace.steps:
         match = RECEIPT.match(line)
         if not match:
             failures.add("receipt-format")
-        elif (match.group(3) == "fast") != (match.group(4) == "0"):
+        elif match.group(3) == "fast" and match.group(4) != "0":
             failures.add("receipt-path-probes")
 
 emit(failures)

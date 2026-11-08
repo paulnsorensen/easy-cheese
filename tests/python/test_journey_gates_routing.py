@@ -129,7 +129,7 @@ def test_cheese_publication_fails(tmp_path: Path, command: str, fails: set[str])
         ("route: intent=cook target=cook path=fast probes=0 took=2s", {"receipt-format"}),
         ("route: cook", {"receipt-format"}),
         ("route: intent=cook target=cook path=fast probes=2", {"receipt-path-probes"}),
-        ("route: intent=cook target=cook path=escalated probes=0", {"receipt-path-probes"}),
+        ("route: intent=cook target=cook path=escalated probes=0", set()),
     ],
 )
 def test_cheese_receipt_rules(tmp_path: Path, line: str, fails: set[str]) -> None:
