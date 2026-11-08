@@ -29,7 +29,7 @@ Arguments:
 | **standalone** | The user runs `/hard-cheese <slug>` before a pull request. | Outside the pipeline. No upstream skill is required. |
 | **propagated** | `/plate --hard` runs `/hard-cheese <slug>` after the final writes and before publication. | At the verified-artifacts to share-for-review boundary. |
 
-`--hard` passes through `/cheese → /mold → /cook → /press → /age → /cure → /plate`. Only `/plate` runs `/hard-cheese`.
+`--hard` passes through `/cheese → /mold → /cook (⇄ /press) → /age → /cure → /plate`. Only `/plate` runs `/hard-cheese`.
 
 See [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md) for portability requirements. It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions.
 Use the bundle or repository helper first. Use `${CLAUDE_SKILL_DIR}` only as an optional host fallback.

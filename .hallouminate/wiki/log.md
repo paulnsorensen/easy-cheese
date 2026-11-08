@@ -107,3 +107,23 @@
 
 - 2026-10-15 · 5d06dbb1e665716c · merged · adr/culture-wheypoint-collaboration-001.md · Replace explicit altitude selection with user-approved conversational navigation. Frozen identity and natural-language probes return the page at rank 1.
 
+
+
+- 2026-10-18 · 9014418ab9a8e937 · merged · ideas/minimal-easy-cheese.md · Prepare the manifesto discussion for review: separate assistant proposals, state evidence limits, and add measurable next steps. Publication does not approve a rewrite.
+- 2026-10-22 · tenet-reconciliation-rulings · curated · easy-cheese-manifesto.md, ideas/minimal-easy-cheese.md, adr/codex-omp-portability-002.md, adr/deterministic-fanout-sizing-005.md, adr/workflow-contract-milknado-seam-007.md, adr/workflow-contract-milknado-seam-008.md, adr/hard-cheese-retained-002.md, adr/workflow-contract-milknado-seam-006.md · Fold the owner's fork and tension rulings into the canonical manifesto; record forks A, B, C, I, and J as ADRs; mark seam-006 superseded in part; replace measure-first next steps with the ruled change-first order.
+
+- 2026-10-19 · 410a1f3752f7508b · new-page · research/c4-model-evaluation.md · C4 is a good default for static structure; Context + Container suffice for most teams; alternatives table; easy-cheese draws C4 in Mermaid flowchart (diagrams.md, diagram-templates.md).
+- 2026-10-19 · 410a1f3752f7508b · new-page · research/c4-models-as-code-tools.md · LikeC4 best-supported OSS alternative; Structurizr now Apache-2.0 with one committer; every tool has a CLI; local render test ranks C4-PlantUML first, Mermaid C4 last.
+- 2026-10-19 · 410a1f3752f7508b · new-page · sources/c4-model-site.md, sources/mermaid-c4-diagrams.md, sources/structurizr-export.md, sources/likec4-cli.md · source pages with retrieval spine for the two research pages; all 13 frozen probes passed.
+
+
+- 2026-10-19 · affinage:pr-838 · curated · research/c4-model-evaluation.md, research/c4-models-as-code-tools.md, sources/*.md · review fixes: linked the workingsoftware.dev source, dropped checkout-local evidence paths, gave source pages topic H1s and the sources index lane prose, split long and passive sentences.
+
+
+
+- 2026-11-01 · d80e803c48823793 · merged · adr/mold-review-canvas-008.md · recorded persistent settled/draft EARS requirements, independent fork batches, agent-only prerequisite settlement, and separate phone scroll panes; all frozen retrieval probes rank the ADR first.
+- 2026-11-01 · affinage:pr-848 · merged · adr/mold-review-canvas-008.md · phone panes keep usable minimum heights and the page scrolls (screens showed 0-1 px panes at 375x667 under a long goal); drafts list before settled requirements.
+
+- 2026-11-01 · affinage:pr-848 · curated · adr/mold-review-canvas-010.md, adr/mold-review-canvas-008.md, adr/index.md · review fixes: moved the requirements, fork-settlement, and phone-pane decisions into amending ADR 010; made `settled_fork_ids` cumulative; named waiting and dependency-error states in the canvas contract.
+- 2026-11-02 · affinage:pr-848 · curated · adr/mold-review-canvas-010.md · the phone shapes minimum now applies to the shape content below the tabs (it measured 106 px at 375x667 and 124 px at 844x390); recomputed test citations.
+- 2026-11-02 · cook:issue-849 · curated · adr/mold-review-canvas-010.md · `review publish` returns non-blocking `warnings` for malformed, missing, open-and-settled, and cyclic fork dependencies and for dropped requirement IDs; it warns and does not reject, so ADR 008 stays true and the browser defence stays testable.

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import subprocess
 import sys
 from collections.abc import Mapping
 from pathlib import Path
@@ -646,6 +647,60 @@ def test_spec_without_test_contracts_section_has_no_contract_problem(
 
 
 
+_BINDING_RECORD = {
+    "noun": "advisor",
+    "verdict": "bound",
+    "referent": "advise()",
+    "citation": "a.js:1",
+    "note": "x",
+}
+
+
+@pytest.mark.parametrize(
+    ("declaration", "expected"),
+    [
+        ('entity_referent_bindings:\n  - {noun: "advisor"}\n', ({"noun": "advisor"},)),
+        (
+            "entity_referent_bindings:\n"
+            + '  - {noun: "advisor", verdict: bound, referent: "advise()", '
+            + 'citation: "a.js:1", note: "x"}\n',
+            (_BINDING_RECORD,),
+        ),
+        (
+            'entity_referent_bindings: [{noun: "advisor", verdict: "bound", '
+            + 'referent: "advise()", citation: ["a.js:1"], note: "x"}]\n',
+            ({**_BINDING_RECORD, "citation": ["a.js:1"]},),
+        ),
+        ("entity_referent_bindings: []   # note\n", ()),
+        (
+            'entity_referent_bindings: [{noun: "advisor", note: "a \\" # b"}]   # c\n',
+            ({"noun": "advisor", "note": 'a " # b'},),
+        ),
+        ("entity_referent_bindings:\n  - {noun: 'it''s'}\n", ({"noun": "it's"},)),
+    ],
+    ids=[
+        "block-noun-only",
+        "block-full-record",
+        "flow-nested-citation",
+        "comment",
+        "escaped-quotes-with-hash",
+        "doubled-single-quote",
+    ],
+)
+def test_documented_binding_records_pass_the_spec_document_gate(
+    taste: _MoldTasteTestModule, declaration: str, expected: tuple[object, ...]
+) -> None:
+    """Issue #778: `taste-test --precheck` reads documented binding records
+    and a commented empty list as a list of mappings."""
+    spec = contract_spec().replace(
+        "source: mold-handshake\n", "source: mold-handshake\n" + declaration, 1
+    )
+    assert not any("spec-document" in gap for gap in taste.lexical_precheck(spec, []))
+    document, _, _ = cast(tuple[object, str, object], taste.typed_mold_document(spec))
+    frontmatter = cast(object, getattr(document, "frontmatter"))
+    assert getattr(frontmatter, "entity_referent_bindings") == expected
+
+
 def test_lexical_precheck_passes_on_reflected_draft(
     taste: _MoldTasteTestModule,
 ) -> None:
@@ -777,6 +832,58 @@ def test_goal_coverage_passes_when_every_clause_has_a_disposition(
     )
     assert result.passed, result.acceptance_gaps
 
+
+def test_acceptance_demonstration_heading_never_overwrites_the_acceptance_body(
+    taste: _MoldTasteTestModule,
+) -> None:
+    demonstration = (
+        "## Acceptance demonstration\n\n"
+        "| Field | Value |\n| --- | --- |\n| User task | tagless row |\n\n"
+    )
+    ac_two = "- AC-2: WHEN x THE SYSTEM SHALL z (F-2, G-2, G-4)"
+    after = COVERAGE_DRAFT.replace(ac_two, ac_two + "\n\n" + demonstration, 1)
+    before = COVERAGE_DRAFT.replace(
+        "## Acceptance\n", demonstration + "## Acceptance\n", 1
+    )
+    assert after != COVERAGE_DRAFT and before != COVERAGE_DRAFT
+    for draft in (after, before):
+        assert taste.lexical_precheck(draft, COVERAGE_LEDGER) == ()
+        assert taste.goal_coverage(draft, COVERAGE_LEDGER)["G-4"] == "covered"
+
+
+def test_precheck_cli_keeps_the_acceptance_body_beside_the_demonstration(
+    tmp_path: Path,
+) -> None:
+    demonstration = (
+        "## Acceptance demonstration\n\n"
+        "| Field | Value |\n| --- | --- |\n| User task | tagless row |\n\n"
+    )
+    ac_two = "- AC-2: WHEN x THE SYSTEM SHALL z (F-2, G-2, G-4)"
+    draft = tmp_path / "draft.md"
+    ledger = tmp_path / "ledger.json"
+    _ = ledger.write_text(json.dumps(COVERAGE_LEDGER), encoding="utf-8")
+    mold = Path(__file__).resolve().parents[2] / "skills" / "mold" / "scripts" / "mold.pyz"
+    for text in (
+        COVERAGE_DRAFT.replace(ac_two, ac_two + "\n\n" + demonstration, 1),
+        COVERAGE_DRAFT.replace("## Acceptance\n", demonstration + "## Acceptance\n", 1),
+    ):
+        _ = draft.write_text(text, encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(mold),
+                "taste-test",
+                "--precheck",
+                "--draft",
+                str(draft),
+                "--ledger",
+                str(ledger),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert json.loads(result.stdout) == {"gaps": []}
 
 def test_goal_coverage_names_each_uncovered_clause(
     taste: _MoldTasteTestModule,

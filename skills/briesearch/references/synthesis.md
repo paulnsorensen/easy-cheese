@@ -59,6 +59,7 @@ Skip link verification only for inline `file:line` references and URLs that the 
 | 2 independent sources agree per claim | `speculating` |
 | Sources disagree | `don't know` — and surface the disagreement |
 | Single source per claim | cap at `speculating` unless authoritative for that claim |
+| Claim about our deployed integration with no local check run | cap at `speculating` |
 
 **Independent means a separate origin, not a separate URL or provider.** Combine pages that have the same root domain or upstream source. Determine criticality from the claim and capability. Documentation is critical for a version-specific API claim. Current web evidence is critical for a freshness claim. Scholarly evidence is critical for a claim that rests on a paper or citation. Local code is critical for current repository behavior. Repository knowledge is critical for prior decisions and rationale. Git hosting evidence usually supports other evidence. It becomes critical when the question asks about hosted state or precedent. A missing named provider does not reduce confidence when an equivalent source supplies the required evidence.
 
@@ -69,6 +70,10 @@ An absence claim is easy to infer from silence. It is also difficult to disprove
 - **Do not mark an unsupported absence as `certain`.** Cite a source that states the absence. Otherwise, list each candidate mechanism and cite evidence that excludes it.
 - **Downgrade an incomplete search.** Report `not found in <sources checked>` at `speculating`. Name the searched sources. Do not report `does not exist`.
 - **A recorded fact has priority over an inferred absence.** If evidence records the item, correct the absence claim.
+
+## Documentation is not proof of our integration
+
+Documentation shows what a source says. It does not show that our deployed integration works. Cap a claim about our integration at `speculating` until a local check runs. The report names that check in `### Uncertainty and local checks`. A local check is evidence that the next phase collects by execution. It is not a design recommendation. Do not promote it to a design knob.
 
 ## Synthesis-fidelity self-check
 
@@ -95,6 +100,13 @@ Short form (always returned to the caller):
 ### Open questions
 <one bullet per alternative or unresolved choice raised by the evidence — phrased as a question for the user. Tag each `speculating`. If the user did not type the distinguishing noun (e.g. "convex", "α", "BM42") in their prompt, the alternative belongs here, not in Finding.>
 
+### Uncertainty and local checks
+<one row per material finding that has open uncertainty. Write `none` when no material uncertainty remains.>
+
+| Decision affected | Evidence | Remaining uncertainty in our environment | Smallest local check |
+|---|---|---|---|
+| <decision the finding changes> | <supporting evidence, cited> | <what documentation cannot show about our deployed integration> | <smallest command or test that resolves it> |
+
 ### Confidence
 <`certain` | `speculating` | `don't know`> — <one-line justification, including any caveat>
 
@@ -109,8 +121,22 @@ Short form (always returned to the caller):
 [^source-2]: <absolute URL or `.cheese/...` path> (fetched <YYYY-MM-DD>).
 ```
 
+### Library docs brief
+
+A run that uses the library docs brief method in `routing.md` adds one `### Library brief` section between `### Finding` and `### Evidence`:
+
+```markdown
+### Library brief
+- **Target and freshness:** <library id, docs version found, release marker and its date>
+- **What it offers:** <documented APIs, commands, modules, configuration knobs, or extension points for the use case>
+- **Documented practice:** <what the official docs recommend for the use case, with citations>
+- **Planning constraints:** <documented limits, required integration steps, deprecations, and version risks>
+```
+
+Report documented practice as evidence, not as a design choice. Each decision that the plan must make goes to `### Open questions`. Cite the docs index id and each extracted official URL in `## References`.
+
 Long form (when the question warranted a deep look):
 
 - Resolve each path with `python3 skills/briesearch/scripts/briesearch.pyz research-layout <slug>`. Use a slug with four to six kebab-case words. The command prints `corpus_root`, `dir`, `report`, `raw_dir`, `manifest`, and `artifact`. Write the complete report to `report`. Write raw bodies under `raw_dir`. Give `report` to a caller that records a link in another durable document. Keep `artifact` only as the corpus-relative storage identity. Do not construct these paths manually.
-- Include the complete claim table and the verification log. Cite each raw body with a path relative to `raw_dir`, such as `raw/01-example.md#Lstart-end`. Never put URL user information, query values, or a fragment in a persisted citation.
+- Include the complete claim table, the `### Uncertainty and local checks` section, and the verification log. `ground-check` rejects a local-check row with an empty cell. Cite each raw body with a path relative to `raw_dir`, such as `raw/01-example.md#Lstart-end`. Never put URL user information, query values, or a fragment in a persisted citation.
 - Return one summary paragraph, the report path, and the confidence line in chat. Do not paste the complete report in chat.

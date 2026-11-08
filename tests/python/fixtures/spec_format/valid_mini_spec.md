@@ -16,6 +16,10 @@ Clarify existing documentation without changing runtime behavior.
 
 - AC-1: WHEN the documentation build runs THE SYSTEM SHALL complete successfully.
 
+## Acceptance demonstration
+
+n/a: documentation-only change with no runtime behavior to demonstrate.
+
 ## Non-goals
 
 - Runtime behavior changes.

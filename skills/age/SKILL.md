@@ -98,7 +98,7 @@ This workflow omits the git-history/precedent dimension.
    Read `references/fan-out.md` for the context checklist and deterministic planning contract.
    Collect instruction sources, build context, and run `scripts/age.pyz age-route` through its bundle path.
    Use the assignments, effort, dispatch batches, and capability restrictions.
-   Assemble shared evidence and the plan before the lock; do not launch a separate classifier agent.
+   Read [scope interrogation](references/scope-interrogation.md) before collecting evidence. Ask the user only when missing intent changes a recommendation.
    The lock covers the packet, because the packet is review evidence.
    Then run `python3 skills/age/scripts/age.pyz review-lock --slug <slug>` to lock the production tree.
    Use the resolved slug from `## Inputs`.
@@ -185,13 +185,13 @@ Check supplied dispatch observations with `scripts/age.pyz review-plan-check` be
 
 Print `Age report: .cheese/age/<slug>.md`.
 When `press: skipped` is set, print the following warning:
-`Warning: no /press report for <slug> — hardening was skipped. Run /press <slug> first, or continue with /cure.`
+`Warning: no .cheese/press/<slug>.md. Re-run /cook or /press <slug>, or continue with /cure.`
 When the user passes `--html`, print the HTML path that `html-report` returns.
 The render command appears under `--html` in `## Inputs`.
 
 ## Handoff
 
-**Pipeline:** culture → mold → cook → press → **[age]** → cure → plate
+**Pipeline:** culture → mold → cook (⇄ press) → **[age]** → cure → plate
 
 **Compute the recommended set.** Use the `all-medium, cheap` composite.
 Include the medium floor (blocker+high+medium).
