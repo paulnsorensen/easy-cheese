@@ -27,8 +27,9 @@ The gate enforces the rules listed under Gate rules below.
 - `hold-violated` fails a run that writes Python under a spec hold.
 - `test-removed`, `test-skipped`, `assertion-removed`, and `assertion-vacuous` fail a run that weakens an existing test.
 - `source-without-test` fails a run that changes non-test Python without a test-file change.
-- `tests-fail` runs unittest in a copy of `output/` when Python changed and `output/tests/` exists.
-- `unverified-ok` fails a `status: ok` claim after a Python write with no later shell step.
+- `tests-fail` runs unittest in a copy of `output/` when Python changed and `output/tests/` exists. All unittest runs share one 8 s deadline.
+- `hold-violated` counts only Python written inside the workspace root.
+- `unverified-ok` fails a `status: ok` claim after a Python write with no later test-runner step (a runner such as `pytest`, `python3 -m unittest`, `just`, or a script run; `ls` does not count).
 
 ## Out of scope offline
 

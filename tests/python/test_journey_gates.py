@@ -490,8 +490,10 @@ def test_benign_commands_pass(tmp_path: Path, skill: str, command: str) -> None:
 @pytest.mark.parametrize(
     "command", ["git commit -m x", "git -C . commit -am x", "env A=1 git commit"]
 )
-def test_git_commit_fails_mold_only(tmp_path: Path, skill: str, command: str) -> None:
-    wanted = {"git-commit"} if skill == "mold" else set()
+def test_git_commit_fails_where_forbidden(
+    tmp_path: Path, skill: str, command: str
+) -> None:
+    wanted = {"git-commit"} if skill in ("mold", "pasteurize") else set()
     check(tmp_path, skill, clean(skill).but(then=[("shell", command)]), wanted)
 
 
@@ -925,7 +927,6 @@ def test_press_production_write_fails(tmp_path: Path, name: str) -> None:
 @pytest.mark.parametrize(
     "step",
     [
-        ("write", "shop/other_pricing.py"),
         ("write", "tests/test_new.py"),
         ("shell", "echo x > notes.txt"),
     ],
@@ -1021,7 +1022,6 @@ def test_redirect_write_without_check_fails(tmp_path: Path, skill: str) -> None:
     [
         [("text", "Cannot proceed.\nstatus: blocked: no input")],
         [("write", TEST_PATH), ("text", "Cannot finish.\nstatus: blocked: red")],
-        [("shell", "ls"), ("text", "status: ok")],
         [
             ("write", TEST_PATH),
             ("shell", "python3 -m unittest"),
@@ -1032,7 +1032,6 @@ def test_redirect_write_without_check_fails(tmp_path: Path, skill: str) -> None:
     ids=[
         "blocked-no-write",
         "blocked-after-write",
-        "ok-without-write",
         "ok-with-later-docs-write",
     ],
 )
@@ -1040,6 +1039,12 @@ def test_claims_that_do_not_need_a_check_pass(
     tmp_path: Path, skill: str, steps: list[Step]
 ) -> None:
     scn = clean(skill).but(steps=steps)
+    check(tmp_path, skill, scn)
+
+
+@pytest.mark.parametrize("skill", WITH_SOURCE)
+def test_ok_without_a_python_write_needs_no_check(tmp_path: Path, skill: str) -> None:
+    scn = clean(skill).but(steps=[("shell", "ls"), ("text", "status: ok")])
     check(tmp_path, skill, scn)
 
 
@@ -1526,10 +1531,10 @@ def test_more_benign_commands_pass(tmp_path: Path, skill: str, command: str) -> 
 
 @pytest.mark.parametrize("skill", SKILLS)
 @pytest.mark.parametrize("command", COMMIT_MORE)
-def test_more_commit_variants_fail_mold_only(
+def test_more_commit_variants_fail_where_forbidden(
     tmp_path: Path, skill: str, command: str
 ) -> None:
-    wanted = {"git-commit"} if skill == "mold" else set()
+    wanted = {"git-commit"} if skill in ("mold", "pasteurize") else set()
     check(tmp_path, skill, clean(skill).but(then=[("shell", command)]), wanted)
 
 
@@ -1718,7 +1723,6 @@ def test_press_root_relative_production_writes_fail(tmp_path: Path, step: Step) 
     "step",
     [
         ("write", "/tmp/scratch/shop/pricing.py"),
-        ("write", ABS + "vendor/shop/pricing.py"),
         ("shell", "printf x > /tmp/scratch/shop/pricing.py"),
     ],
 )
@@ -1729,6 +1733,128 @@ def test_press_writes_outside_the_workspace_pass(tmp_path: Path, step: Step) -> 
 def test_press_unknown_root_keeps_the_suffix_match(tmp_path: Path) -> None:
     scn = clean("press").but(then=[NOROOT, ("write", "/other/shop/pricing.py")])
     check(tmp_path, "press", scn, {"production-write"})
+
+
+# --- review fixes: cure round 2 -----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "step",
+    [
+        ("write", "shop/newmod.py"),
+        ("write", "shop/other_pricing.py"),
+        ("write", ABS + "vendor/shop/pricing.py"),
+        ("shell", "printf x > shop/newmod.py"),
+    ],
+)
+def test_press_new_code_file_in_the_workspace_fails(tmp_path: Path, step: Step) -> None:
+    check(tmp_path, "press", clean("press").but(then=[step]), {"production-write"})
+
+
+@pytest.mark.parametrize(
+    "step",
+    [
+        ("write", "/tmp/scratch/helper.py"),
+        ("write", ".cheese/press/report.md"),
+        ("write", "tests/test_new.py"),
+    ],
+)
+def test_press_allowed_writes_pass(tmp_path: Path, step: Step) -> None:
+    check(tmp_path, "press", clean("press").but(then=[step]))
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["VALUE = 1 + 1\n", "def helper():\n    return 1\n"],
+)
+@pytest.mark.parametrize("skill", WITH_SOURCE)
+def test_init_with_logic_needs_a_test(tmp_path: Path, skill: str, text: str) -> None:
+    scn = Scn(FILES, {"shop/__init__.py": text}, (("write", "shop/__init__.py"), VERIFY, OK))
+    check(tmp_path, skill, scn, {"source-without-test"})
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '"""Shop."""\n',
+        "from shop.pricing import total\n",
+        '"""Shop."""\nimport os\nfrom shop import pricing\n',
+    ],
+)
+@pytest.mark.parametrize("skill", WITH_SOURCE)
+def test_trivial_init_needs_no_test(tmp_path: Path, skill: str, text: str) -> None:
+    scn = Scn(FILES, {"shop/__init__.py": text}, (("write", "shop/__init__.py"), VERIFY, OK))
+    check(tmp_path, skill, scn)
+
+
+@pytest.mark.parametrize("skill", TESTED)
+def test_json_quoted_status_ok_is_a_claim(tmp_path: Path, skill: str) -> None:
+    steps = [("write", TEST_PATH), ("text", '{"status": "ok"}')]
+    check(tmp_path, skill, clean(skill).but(steps=steps), {"unverified-ok"})
+
+
+@pytest.mark.parametrize("skill", TESTED)
+@pytest.mark.parametrize(
+    "command",
+    [
+        "pytest -q",
+        "python3 repro.py",
+        "uv run pytest tests",
+        "just test",
+        "tools/check.pyz run",
+        "python3 -m unittest",
+    ],
+)
+def test_a_test_runner_step_verifies_the_claim(
+    tmp_path: Path, skill: str, command: str
+) -> None:
+    steps = [("write", TEST_PATH), ("shell", command), OK]
+    check(tmp_path, skill, clean(skill).but(steps=steps))
+
+
+@pytest.mark.parametrize("skill", TESTED)
+@pytest.mark.parametrize("command", ["ls", "python3 -c 'print(1)'", "git status"])
+def test_a_non_runner_step_does_not_verify_the_claim(
+    tmp_path: Path, skill: str, command: str
+) -> None:
+    steps = [("write", TEST_PATH), ("shell", command), OK]
+    check(tmp_path, skill, clean(skill).but(steps=steps), {"unverified-ok"})
+
+
+def test_press_claim_without_any_run_fails(tmp_path: Path) -> None:
+    check(tmp_path, "press", clean("press").but(steps=[OK]), {"unverified-ok"})
+
+
+def test_cook_hold_ignores_python_written_outside_the_workspace(tmp_path: Path) -> None:
+    steps = (("write", "/tmp/scratch/x.py"), VERIFY, OK)
+    scn = Scn(FILES, steps=steps).but(files={HOLD_PATH: HOLDING["block-list"]})
+    check(tmp_path, "cook", scn)
+
+
+def test_cook_runs_share_one_deadline(tmp_path: Path) -> None:
+    slow = tests_text(
+        extra="\n    def test_slow(self):\n        import time\n\n        time.sleep(6)\n"
+    )
+    scn = Scn(
+        {**FILES, TEST_PATH: slow},
+        {SRC_PATH: PRICING_NEW},
+        (("write", SRC_PATH), VERIFY, OK),
+    )
+    started = time.monotonic()
+    verdict(tmp_path, "cook", scn, "claude")
+    assert time.monotonic() - started < 11
+
+
+def test_compiler_derives_skills_from_the_gate_sources() -> None:
+    gates = REPO_ROOT / "scripts" / "journey_gates"
+    expected = sorted(p.stem for p in gates.glob("*.py") if p.stem != "common")
+    assert load_compiler().skills(REPO_ROOT) == expected
+    assert set(expected) == set(SKILLS)
+
+
+@pytest.mark.parametrize("skill", SKILLS)
+def test_compiled_gate_fits_one_argv_string(skill: str) -> None:
+    assert len(contract_argv(skill)[3].encode("utf-8")) < 65536
 
 
 # --- review fixes: compiler input validation ---------------------------------------

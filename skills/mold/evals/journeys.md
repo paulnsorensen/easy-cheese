@@ -7,7 +7,7 @@ Each case also carries EARS `expected.criteria`. Only the dealbreakers are `must
 
 | ID | Behavior | Cases |
 |---|---|---|
-| `MOLD-1` | A small, clear ask gets a Quick tier with a one-line reason and no long interview. | `mold-mini-1`, `mold-mini-2`, `mold-mini-3`, `mold-boundary-2`, `mold-boundary-3` |
+| `MOLD-1` | A small, clear ask gets a tier announcement with a one-line reason and no long interview. The cases grade the announcement, not the Quick tier name. | `mold-mini-1`, `mold-mini-2`, `mold-mini-3`, `mold-boundary-2`, `mold-boundary-3` |
 | `MOLD-2` | The spec is saved at the resolver path and passes strict validation. | `mold-mini-1`, `mold-mini-2`, `mold-mini-3`, `mold-forks-1`, `mold-forks-2`, `mold-forks-3`, `mold-recover-1`, `mold-recover-2`, `mold-recover-3`, `mold-boundary-1`, `mold-boundary-2`, `mold-boundary-3`, `mold-leverage-1`, `mold-leverage-2`, `mold-leverage-3` |
 | `MOLD-3` | Every goal has an acceptance criterion, and non-goals are listed. | `mold-mini-1`, `mold-mini-2`, `mold-mini-3`, `mold-forks-1`, `mold-forks-2`, `mold-forks-3`, `mold-recover-2`, `mold-recover-3`, `mold-leverage-1`, `mold-leverage-2`, `mold-leverage-3` |
 | `MOLD-4` | Consequential forks are asked, one at a time, as lettered options with a fork card, never settled silently. | `mold-forks-1`, `mold-forks-2`, `mold-forks-3`, `mold-recover-1`, `mold-leverage-1`, `mold-leverage-2`, `mold-leverage-3` |
@@ -25,4 +25,5 @@ Each case also carries EARS `expected.criteria`. Only the dealbreakers are `must
 - Wiki grounding through hallouminate needs the MCP server, which the journey sandbox lacks. The journeys accept `hallouminate: absent`.
 - The fresh-context taste test and planner dispatch need sub-agents, which the journey tools lack.
 - The leverage trigger list lives in the cheese routing policy, which the sandbox does not stage. The leverage cases rely on the trigger categories that the Mold description and tier reference name.
+- Quick tier entry needs Cook's standalone fast-path check in `cook/SKILL.md`, which the sandbox does not stage. The cases grade a tier announcement, not the literal Quick tier.
 - The judge cannot see the `.cheese/` spec file. Spec-content criteria rest on what the agent reports in its replies.

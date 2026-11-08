@@ -1,4 +1,4 @@
-"""Pasteurize journey gate: a fix needs a test, leaves no debug tag, and never publishes."""
+"""Pasteurize journey gate: a fix needs a test, leaves no debug tag, and never commits or publishes."""
 
 # gate:strip-begin
 from __future__ import annotations
@@ -18,7 +18,7 @@ workspace = Workspace()
 failures: set[str] = set()
 if not workspace.has_turn:
     failures.add("no-trace")
-rule_publication(workspace, failures)
+rule_publication(workspace, failures, commit=True)
 rule_tests(workspace, failures)
 rule_source_without_test(workspace, failures)
 rule_unverified_ok(workspace, failures)

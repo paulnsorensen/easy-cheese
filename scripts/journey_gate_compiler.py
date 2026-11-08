@@ -18,7 +18,6 @@ import re
 import sys
 from pathlib import Path
 
-SKILLS = ("cook", "mold", "press", "pasteurize")
 STRIP = re.compile(
     r"^# gate:strip-begin\n.*?^# gate:strip-end\n", re.DOTALL | re.MULTILINE
 )
@@ -41,6 +40,12 @@ def stripped(path: Path) -> str:
             f"{path.name}: unpaired gate:strip markers ({begins} begin, {ends} end)"
         )
     return STRIP.sub("", text)
+
+
+def skills(root: Path) -> list[str]:
+    """Every skill with a gate source: `scripts/journey_gates/*.py` minus common."""
+    gates = root / "scripts" / "journey_gates"
+    return sorted(p.stem for p in gates.glob("*.py") if p.stem != "common")
 
 
 def compiled_source(root: Path, skill: str) -> str:
@@ -74,7 +79,7 @@ def main(argv: list[str]) -> int:
     )
     args = parser.parse_args(argv)
     drifted: list[str] = []
-    for skill in SKILLS:
+    for skill in skills(args.root):
         path = contract_path(args.root, skill)
         try:
             wanted = rendered_contract(args.root, skill)

@@ -14,7 +14,7 @@ Edit the sources, then run the compiler. `tests/python/test_journey_gates.py` fa
 ## Runtime limits that shape the code
 
 - skillz runs the whole gate in its task sandbox with `SANDBOX_SECONDS = 20` (skillz `packages/skillz/src/skillz_experiments/_runtime.py:18`). A timeout scores 0.
-- The Cook `tests-fail` rule runs `python3 -m unittest` with an 8 s limit and a process-group kill.
+- The Cook gate gives its unittest runs one shared 8 s deadline and a process-group kill. When no time remains, a run counts as unknown, not as a fail or a pass.
 - skillz scores 0 unless stdout is exactly one JSON object with a numeric `score` (skillz `_graders.py:188-205`). The gate prints one line `{"score": 0|1, "fails": [...]}` and captures every child's output.
 - The code is standard library only and must run on Python 3.9 or later. Hosts can have an old system `python3`.
 
@@ -37,7 +37,10 @@ Edit the sources, then run the compiler. `tests/python/test_journey_gates.py` fa
 - Where a change is forbidden (Press production files, Cook holds), compare raw text. Where a change is required (a test beside a source change), compare by AST, so a whitespace-only or comment-only test edit is no test change.
 - Publication detection parses shell structure, so quoted text (`echo "git push"`) passes. Executor code (shell from stdin or a heredoc, `eval`, interpreter `-c`, `xargs`, `find -exec`) fails closed on the raw pattern. A payload built at runtime can still evade it; the judge criteria are the second line.
 - Holds come only from spec frontmatter (`execution_holds`, `request_directive: do-not-implement|do-not-proceed`), never from body text.
-- A Cook correction may change source without a test when the fixture suite fails and the output suite passes (an existing Press attack test now passes).
+- A Cook correction may change source without a test when the fixture suite fails and the output suite passes (an existing Press attack test now passes). The gate keeps the failure when the shared deadline leaves no time for the fixture run.
+- `unverified-ok` needs a test-runner shell step after the last Python write. A step such as `ls` does not count. Press needs a runner step before any `ok` claim, also with no write.
+- `source-without-test` exempts an `__init__.py` only when its body is empty, a docstring, or imports. Executable logic in it needs a test.
+- Only write targets inside the workspace root count. A write to `/tmp` never trips a hold or a production rule.
 
 ## Fixture convention
 
@@ -45,6 +48,7 @@ Edit the sources, then run the compiler. `tests/python/test_journey_gates.py` fa
 A fixture names a `case`, an expected `score`, and the exact sorted `fails`.
 Its replayed output is the case `files`, overlaid by the fixture `output` map, minus `output_deleted`.
 Keep only changed files in `output`, so a case edit does not break the fixture.
+A restored Press finding report carries `digest: sha256:<hex> (<test path>)`, the SHA-256 of the seeded attack test file. Press stops when the digest is missing. Recompute it when you edit that test file.
 
 ## Intake minimums
 

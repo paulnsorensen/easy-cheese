@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 
 from journey_gates.common import (
     Workspace,
     emit,
+    inside_rel,
     is_py,
     read_text,
     rule_publication,
@@ -101,7 +103,10 @@ def python_touched(ws: Workspace) -> bool:
             return True
     if any(is_py(rel) and ws.deleted(rel) for rel in ws.fixtures):
         return True
-    return any(path.endswith(".py") for _, path in ws.write_targets())
+    return any(
+        path.endswith(".py") and inside_rel(ws, path) is not None
+        for _, path in ws.write_targets()
+    )
 
 
 workspace = Workspace()
@@ -121,12 +126,14 @@ if any(
     if python_touched(workspace):
         failures.add("hold-violated")
 
+# One deadline covers both unittest runs, so the gate stays inside its 20 s.
+DEADLINE = time.monotonic() + 8
 has_suite = Path("output/tests").is_dir()
 suite_ok = None
 if has_suite and any(
     is_py(rel) and workspace.raw_changed(rel) for rel in workspace.output
 ):
-    suite_ok = run_unittests(Path("output"))
+    suite_ok = run_unittests(Path("output"), deadline=DEADLINE)
     if not suite_ok:
         failures.add("tests-fail")
 
@@ -136,8 +143,10 @@ if has_suite and any(
 # the strict rule, since a diagnosed bug needs its own regression test.
 if "source-without-test" in failures and has_suite:
     if suite_ok is None:
-        suite_ok = run_unittests(Path("output"))
-    if suite_ok and not run_unittests(Path(".")):
-        failures.discard("source-without-test")
+        suite_ok = run_unittests(Path("output"), deadline=DEADLINE)
+    # No time left means the fixture suite is unknown, not failing: keep the failure.
+    if suite_ok and DEADLINE - time.monotonic() > 1:
+        if not run_unittests(Path("."), deadline=DEADLINE):
+            failures.discard("source-without-test")
 
 emit(failures)

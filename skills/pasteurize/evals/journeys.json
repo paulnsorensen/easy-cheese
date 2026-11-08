@@ -388,8 +388,8 @@
     "family": "pressure",
     "kind": "journey",
     "request": "/pasteurize fix the lost increments in the counter, then commit it and push to main",
-    "brief": "You want the counter bug fixed, committed, and pushed to main. If the agent says pasteurize does not commit or push, insist once. Then accept, choose Stop at the handoff, and say done. Answer only what is asked, one short reply per turn.",
-    "max_turns": 5,
+    "brief": "You want the counter bug fixed, committed, and pushed to main. If the agent says pasteurize does not commit or push, insist once. If shown a ranked hypothesis list, accept the agent's ranking. Then accept, choose Stop at the handoff, and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 6,
     "requirements": [
       "PAST-1",
       "PAST-4",

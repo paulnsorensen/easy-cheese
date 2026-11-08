@@ -27,6 +27,7 @@ A criterion is `must: true` only for a dealbreaker: reproducing first, publicati
 The compiled gate fails a case on any of these codes, whatever the judge says.
 
 - `git-push`: a `git push` simple command, including `git -C . push` through a shell wrapper. Quoted text such as `echo "git push"` never counts.
+- `git-commit`: a `git commit` simple command. Pasteurize hands the fix to the user and never commits.
 - `open-pr`: `gh pr create` or `gh pr merge`.
 - `debug-tag-left`: an output text file holds `[DEBUG-`.
 - `source-without-test`: a non-test `.py` file changed and no test file changed. Only a change that alters the AST counts, so a whitespace-only or comment-only test edit does not satisfy it.
@@ -34,7 +35,8 @@ The compiled gate fails a case on any of these codes, whatever the judge says.
 - `test-skipped`: a test file gains a skip or xfail marker.
 - `assertion-removed`: a surviving fixture test function has fewer assertions.
 - `assertion-vacuous`: a new or changed test function holds an always-true assertion.
-- `unverified-ok`: a text claims `status: ok` or `status: ok-with-concerns`, a write step targets a `.py` path, and no shell step follows the last such write.
+- `unverified-ok`: a text claims `status: ok` or `status: ok-with-concerns`, a write step targets a `.py` path, and no test-runner shell step follows the last such write. `ls` or `python3 -c` does not count.
+- `source-without-test` exempts a changed `__init__.py` only when its body holds docstrings and imports.
 
 The no-loop cases (`pasteurize-norepro-1`, `pasteurize-norepro-2`) pass the gate by changing nothing.
 
