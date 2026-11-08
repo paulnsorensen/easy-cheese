@@ -46,9 +46,28 @@ RAW_PUBLISH = re.compile(r"\bgit\b[^;&|\n]*?\bpush\b")
 RAW_COMMIT = re.compile(r"\bgit\b[^;&|\n]*?\bcommit\b")
 RAW_PR = re.compile(r"\bgh\b[^;&|\n]*?\bpr\s+(?:create|new|merge)\b")
 RAW_RUN = re.compile(
-    r"\b(?:pytest|unittest|tox|nox)\b|\b(?:just|make)\s|\buv\s+run\b|\bcoverage\s+run\b"
+    r"\b(?:pytest|unittest|tox|nox)\b|\b(?:just|make)\s[^;&|\n]*(?:test|check)"
+    r"|\buv\s+run\b[^;&|\n]*\b(?:pytest|unittest)\b|\bcoverage\s+run\b"
     r"|\.pyz\s+repro-rerun\b"
-    r"|\bpython[\d.]*\s+[^-\s]"
+    r"|\bpython[\d.]*\s+\S*(?:\btest_\w*|_test|\brepro\w*)\.py\b"
+)
+CODE_EXT = (
+    ".py",
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".go",
+    ".rs",
+    ".java",
+    ".rb",
+    ".c",
+    ".h",
+    ".cpp",
+    ".sh",
+    ".kt",
+    ".swift",
+    ".php",
 )
 RAW_WRITE = re.compile(r"(?:>>?|\btee\s+(?:-\S+\s+)*)\s*[\"']?([^\s\"'|;&<>]+)")
 
@@ -542,7 +561,8 @@ def _unwrap(
             return []
         elif INTERPRETER.match(name):
             code = _interpreter_code(argv)
-            if code is None and stdin and not _skip_options(argv[1:]):
+            rest = _skip_options(argv[1:])
+            if code is None and stdin and (not rest or rest == ["-"]):
                 code = stdin
             if code is not None:
                 _scan_code(code, out)
@@ -690,7 +710,21 @@ class Facts:
         self.tail_run = False
 
 
-RUNNERS = frozenset(["pytest", "py.test", "tox", "nox", "just", "make"])
+RUNNERS = frozenset(["pytest", "py.test", "tox", "nox"])
+TASK_RUNNERS = frozenset(["just", "make"])
+TEST_TARGET = re.compile(r"test|check")
+TEST_SCRIPT = re.compile(r"^(?:test_.*|.*_test|repro.*)\.py$")
+UV_RUN_ARGS = (
+    "--with",
+    "--python",
+    "-p",
+    "--group",
+    "--extra",
+    "--directory",
+    "--project",
+)
+INPLACE = re.compile(r"^[A-Za-z]*i")
+COPIERS = frozenset(["cp", "mv", "install"])
 TEST_MODULES = ("unittest", "pytest", "tox", "nox", "coverage")
 # Archive subcommands that run a check. Other archive calls (phase entry, handoff
 # writes, sweeps) verify nothing, so they never count as a test run.
@@ -714,8 +748,17 @@ def runs_tests(argv: list[str]) -> bool:
         return True
     if name == "coverage":
         return "run" in argv[1:2]
+    if name in TASK_RUNNERS:
+        return any(TEST_TARGET.search(w) for w in argv[1:] if not w.startswith("-"))
     if name == "uv":
-        return "run" in argv[1:3]
+        if argv[1:2] != ["run"]:
+            return False
+        rest = argv[2:]
+        while rest and rest[0].startswith("-") and len(rest[0]) > 1:
+            if rest[0] in ("-m", "--module"):
+                return runs_tests(["python", "-m", *rest[1:2]])
+            rest = rest[2:] if rest[0] in UV_RUN_ARGS else rest[1:]
+        return runs_tests(rest)
     if name == "uvx":
         return runs_tests(argv[1:])
     if not PYTHON.match(name):
@@ -733,8 +776,60 @@ def runs_tests(argv: list[str]) -> bool:
         elif word.endswith(".pyz"):
             return _archive_runs(argv[i + 1 :])
         else:
-            return True
+            return bool(TEST_SCRIPT.match(_basename(word)))
     return False
+
+
+def _inplace_targets(argv: list[str]) -> list[str]:
+    """Files a `sed -i` / `perl -i` command edits in place."""
+    args = argv[1:]
+    # sed -E is a plain flag; perl -E takes the program like -e.
+    script_opts = "efE" if _basename(argv[0]).startswith("perl") else "ef"
+    inplace = scripted = False
+    files: list[str] = []
+    i = 0
+    while i < len(args):
+        word = args[i]
+        if word == "--":
+            files.extend(args[i + 1 :])
+            break
+        if word.startswith("--"):
+            key = word.split("=")[0]
+            inplace = inplace or key == "--in-place"
+            if key in ("--expression", "--file"):
+                scripted = True
+                i += 1 if "=" in word else 2
+                continue
+        elif word.startswith("-") and len(word) > 1:
+            inplace = inplace or bool(INPLACE.match(word[1:]))
+            if word[-1] in script_opts:
+                scripted = True
+                i += 2
+                continue
+        else:
+            files.append(word)
+        i += 1
+    if not scripted:
+        files = files[1:]
+    return files if inplace else []
+
+
+def _copy_targets(argv: list[str]) -> list[str]:
+    """Destination paths of a `cp` / `mv` / `install` command."""
+    args = argv[1:]
+    sources = [w for w in args if not w.startswith("-")]
+    for i, word in enumerate(args):
+        if word == "-t" or word.startswith("--target-directory"):
+            value = word.partition("=")[2] or (args[i + 1] if i + 1 < len(args) else "")
+            return [
+                value.rstrip("/") + "/" + _basename(s) for s in sources if s != value
+            ]
+    if len(sources) < 2:
+        return []
+    target = sources[-1]
+    if target.endswith("/"):
+        return [target + _basename(s) for s in sources[:-1]]
+    return [target]
 
 
 def _keep_target(target: str) -> bool:
@@ -776,13 +871,10 @@ def _scan(
     last_write = -1
     ran_after = False
     for position, (argv, redirs) in enumerate(queue):
-        wrote = False
+        before = len(facts.writes)
         ran = runs_tests(argv)
         facts.runs_tests = facts.runs_tests or ran
-        for target in redirs:
-            if _keep_target(target):
-                facts.writes.append(target)
-                wrote = True
+        facts.writes.extend(t for t in redirs if _keep_target(t))
         if argv:
             name = _basename(argv[0])
             if name == "git":
@@ -794,15 +886,20 @@ def _scan(
             elif name == "gh" and _gh_publishes(argv):
                 facts.pr = True
             elif name == "tee":
-                named = [
+                facts.writes.extend(
                     w for w in argv[1:] if not w.startswith("-") and _keep_target(w)
-                ]
-                facts.writes.extend(named)
-                wrote = wrote or bool(named)
+                )
+            elif name in COPIERS:
+                facts.writes.extend(t for t in _copy_targets(argv) if _keep_target(t))
+            elif name in ("sed", "perl"):
+                facts.writes.extend(
+                    t for t in _inplace_targets(argv) if _keep_target(t)
+                )
         if position < len(parsed):
-            if wrote:
-                last_write, ran_after = position, False
-            elif argv and ran:
+            # Only a Python write needs a new run. A log redirect or `tee` does not.
+            if any(t.endswith(".py") for t in facts.writes[before:]):
+                last_write, ran_after = position, ran
+            elif ran:
                 ran_after = True
     facts.tail_run = last_write >= 0 and ran_after
 
@@ -1171,14 +1268,8 @@ def _value(node: ast.AST) -> tuple[bool, Any]:
         elif isinstance(node, ast.BinOp) and type(node.op) in BINOPS:
             left_ok, left = _value(node.left)
             right_ok, right = _value(node.right)
-            plain = not isinstance(node.op, ast.Add) or True
             numbers = _numeric(left) and _numeric(right)
-            if (
-                left_ok
-                and right_ok
-                and plain
-                and (numbers or isinstance(node.op, ast.Add))
-            ):
+            if left_ok and right_ok and (numbers or isinstance(node.op, ast.Add)):
                 return True, BINOPS[type(node.op)](left, right)
         elif isinstance(node, ast.Compare):
             left_ok, left = _value(node.left)

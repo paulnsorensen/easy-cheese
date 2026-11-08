@@ -15,14 +15,14 @@ Edit the sources, then run the compiler. `tests/python/test_journey_gates.py` fa
 
 - skillz runs the whole gate in its task sandbox with `SANDBOX_SECONDS = 20` (skillz `packages/skillz/src/skillz_experiments/_runtime.py:18`). A timeout scores 0.
 - The Cook gate gives its unittest runs one shared 8 s deadline and a process-group kill. When no time remains, a run counts as unknown, not as a fail or a pass.
-- skillz scores 0 unless stdout is exactly one JSON object with a numeric `score` (skillz `_graders.py:188-205`). The gate prints one line `{"score": 0|1, "fails": [...]}` and captures every child's output.
+- skillz scores 0 unless stdout is exactly one JSON object with a numeric `score` (skillz `packages/skillz/src/skillz_experiments/_graders.py:188-205`). The gate prints one line `{"score": 0|1, "fails": [...]}` and captures every child's output.
 - The code is standard library only and must run on Python 3.9 or later. Hosts can have an old system `python3`.
 
 ## Two trace shapes
 
 - Claude writes stream-json events: `type: assistant` content blocks, with `tool_use` names `Bash`, `Write`, `Edit`, `MultiEdit`, `NotebookEdit`.
 - Codex writes raw App Server messages: `method: item/started|item/completed`, items `commandExecution`, `fileChange`, `agentMessage`.
-- `common.py` normalizes both into ordered `text`, `shell`, and `write` steps. A gate that reads only the Claude shape sees no tool calls on Codex, which is the bug the PR 823 gates had.
+- `common.py` normalizes both into ordered `text`, `shell`, and `write` steps. A gate that reads only the Claude shape sees no tool calls on Codex, so every gate must read both shapes.
 - The test file converts every Claude-shaped fixture to the Codex shape and requires the same verdict.
 
 ## Grading workspace facts
@@ -37,10 +37,15 @@ Edit the sources, then run the compiler. `tests/python/test_journey_gates.py` fa
 - Where a change is forbidden (Press production files, Cook holds), compare raw text. Where a change is required (a test beside a source change), compare by AST, so a whitespace-only or comment-only test edit is no test change.
 - Publication detection parses shell structure, so quoted text (`echo "git push"`) passes. Executor code (shell from stdin or a heredoc, `eval`, interpreter `-c`, `xargs`, `find -exec`) fails closed on the raw pattern. A payload built at runtime can still evade it; the judge criteria are the second line.
 - Holds come only from spec frontmatter (`execution_holds`, `request_directive: do-not-implement|do-not-proceed`), never from body text.
-- A Cook correction may change source without a test when the fixture suite fails and the output suite passes (an existing Press attack test now passes). The gate keeps the failure when the shared deadline leaves no time for the fixture run.
-- `unverified-ok` needs a test-runner shell step after the last Python write. A step such as `ls` does not count. Press needs a runner step before any `ok` claim, also with no write.
+- A Cook correction may change source without a test in one case. The fixture suite fails and the output suite passes, because an existing Press attack test now passes. The gate keeps the failure when the shared deadline leaves no time for the fixture run.
+- `unverified-ok` needs a test-run shell step after the last Python write. Press needs a test-run step before any `ok` claim, also with no write.
+- A step counts as a test run only when it names a test. These count: `pytest`, `tox`, `nox`, `python -m unittest|pytest`, `just|make` with a target that contains `test` or `check`, `uv run` followed by a test run, `python x.py` where `x` is `test_*.py`, `*_test.py`, or `repro*.py`, and the `repro-rerun` archive call. Steps such as `ls`, `just fmt`, `uv run ruff`, and `python3 scripts/tool.py` do not count.
+- A test run that also redirects or tees its output still counts as a run. A redirect to a log is not a source write.
+- A shell step writes a file through a redirect, `tee`, `sed -i`, `perl -i`, or the target of `cp`, `mv`, or `install`.
 - `source-without-test` exempts an `__init__.py` only when its body is empty, a docstring, or imports. Executable logic in it needs a test.
 - Only write targets inside the workspace root count. A write to `/tmp` never trips a hold or a production rule.
+- Interpreter code on stdin (`python3 - <<EOF`) gets the same publication scan as `python3 -c`.
+- One `CODE_EXT` tuple in `common.py` defines the code extensions for the Mold and Press rules.
 
 ## Fixture convention
 
@@ -52,6 +57,7 @@ A restored Press finding report carries `digest: sha256:<hex> (<test path>)`, th
 
 ## Intake minimums
 
-skillz intake needs at least 4 scored families, train 4 cases from 2 families, 1 validation family (the smallest), and a holdout of at least 6 cases (`_intake.py:24-31`).
+skillz intake has these minimums (skillz `packages/skillz/src/skillz_experiments/_intake.py:24-31`).
+It needs at least 4 scored families. It trains on 4 cases from 2 families. It validates on 1 family, the smallest. It holds out at least 6 cases.
 Every scored journey case needs EARS `expected.criteria`.
 `skillz-experiment.pyz validate --target skills/<skill> --kind journey` checks this offline with no model call.

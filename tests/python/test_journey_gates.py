@@ -1772,7 +1772,9 @@ def test_press_allowed_writes_pass(tmp_path: Path, step: Step) -> None:
 )
 @pytest.mark.parametrize("skill", WITH_SOURCE)
 def test_init_with_logic_needs_a_test(tmp_path: Path, skill: str, text: str) -> None:
-    scn = Scn(FILES, {"shop/__init__.py": text}, (("write", "shop/__init__.py"), VERIFY, OK))
+    scn = Scn(
+        FILES, {"shop/__init__.py": text}, (("write", "shop/__init__.py"), VERIFY, OK)
+    )
     check(tmp_path, skill, scn, {"source-without-test"})
 
 
@@ -1786,7 +1788,9 @@ def test_init_with_logic_needs_a_test(tmp_path: Path, skill: str, text: str) -> 
 )
 @pytest.mark.parametrize("skill", WITH_SOURCE)
 def test_trivial_init_needs_no_test(tmp_path: Path, skill: str, text: str) -> None:
-    scn = Scn(FILES, {"shop/__init__.py": text}, (("write", "shop/__init__.py"), VERIFY, OK))
+    scn = Scn(
+        FILES, {"shop/__init__.py": text}, (("write", "shop/__init__.py"), VERIFY, OK)
+    )
     check(tmp_path, skill, scn)
 
 
@@ -2030,3 +2034,143 @@ def test_source_change_on_a_passing_suite_still_needs_a_test(tmp_path: Path) -> 
 def test_debug_tag_in_a_string_literal_still_fails(tmp_path: Path) -> None:
     out: dict[str, Optional[str]] = {SRC_PATH: PRICING_NEW + 'TAG = "[DEBUG-1]"\n'}
     check(tmp_path, "pasteurize", clean("pasteurize").but(out=out), {"debug-tag-left"})
+
+
+# --- review fixes: write and run detection -----------------------------------------
+
+
+@pytest.mark.parametrize("skill", TESTED)
+@pytest.mark.parametrize(
+    "command",
+    [
+        "python3 -m pytest -q > /tmp/log 2>&1",
+        "python3 -m unittest discover -s tests -t . 2>&1 | tee out.txt",
+        "pytest -q | tee out.txt",
+    ],
+)
+def test_a_test_run_that_also_redirects_still_verifies(
+    tmp_path: Path, skill: str, command: str
+) -> None:
+    steps = [("write", TEST_PATH), ("shell", command), OK]
+    check(tmp_path, skill, clean(skill).but(steps=steps))
+
+
+@pytest.mark.parametrize("skill", TESTED)
+@pytest.mark.parametrize(
+    "command",
+    [
+        "printf x > tests/test_pricing.py && python3 -m pytest -q > /tmp/log 2>&1",
+        "printf x > tests/test_pricing.py\npytest -q | tee out.txt",
+    ],
+)
+def test_write_then_logged_run_in_one_step_counts_as_verified(
+    tmp_path: Path, skill: str, command: str
+) -> None:
+    check(tmp_path, skill, clean(skill).but(steps=[("shell", command), OK]))
+
+
+@pytest.mark.parametrize("skill", TESTED)
+@pytest.mark.parametrize(
+    "command",
+    [
+        "sed -i 's/a/b/' tests/test_pricing.py",
+        "sed -i.bak -e 's/a/b/' tests/test_pricing.py",
+        "sed -n -i 's/a/b/p' tests/test_pricing.py",
+        "sed -E -i 's/a/b/' tests/test_pricing.py",
+        "perl -i -E 's/a/b/' tests/test_pricing.py",
+        "sed --in-place 's/a/b/' tests/test_pricing.py",
+        "perl -pi -e 's/a/b/' tests/test_pricing.py",
+        "cp /tmp/new.py tests/test_pricing.py",
+        "mv /tmp/new.py tests/test_pricing.py",
+        "cp -t tests /tmp/test_pricing.py",
+        "cp /tmp/test_pricing.py tests/",
+    ],
+)
+def test_in_place_edits_and_copies_are_writes(
+    tmp_path: Path, skill: str, command: str
+) -> None:
+    steps = [("shell", command), OK]
+    check(tmp_path, skill, clean(skill).but(steps=steps), {"unverified-ok"})
+
+
+@pytest.mark.parametrize("skill", TESTED)
+@pytest.mark.parametrize(
+    "command",
+    [
+        "sed -i 's/a/b/' NOTES.md",
+        "sed -n 's/a/b/p' tests/test_pricing.py",
+        "cp tests/test_pricing.py /tmp/backup.txt",
+        "mv /tmp/a.txt /tmp/b.txt",
+    ],
+)
+def test_reads_and_scratch_edits_are_not_writes(
+    tmp_path: Path, skill: str, command: str
+) -> None:
+    steps = [("write", TEST_PATH), VERIFY, ("shell", command), OK]
+    check(tmp_path, skill, clean(skill).but(steps=steps))
+
+
+@pytest.mark.parametrize("skill", SKILLS)
+def test_python_heredoc_on_stdin_is_scanned_for_publication(
+    tmp_path: Path, skill: str
+) -> None:
+    command = (
+        'python3 - <<\'EOF\'\nimport subprocess\nsubprocess.run(["git", "push"])\nEOF'
+    )
+    check(tmp_path, skill, clean(skill).but(then=[("shell", command)]), {"git-push"})
+
+
+@pytest.mark.parametrize("skill", SKILLS)
+def test_python_heredoc_without_publication_passes(tmp_path: Path, skill: str) -> None:
+    command = "python3 - <<'EOF'\nprint('hello')\nEOF"
+    check(tmp_path, skill, clean(skill).but(then=[("shell", command)]))
+
+
+@pytest.mark.parametrize("skill", TESTED)
+@pytest.mark.parametrize(
+    "command",
+    [
+        "just fmt",
+        "just lint",
+        "make build",
+        "uv run ruff check .",
+        "uv run python scripts/tool.py",
+        "python3 scripts/tool.py",
+    ],
+)
+def test_formatters_and_scripts_do_not_verify_the_claim(
+    tmp_path: Path, skill: str, command: str
+) -> None:
+    steps = [("write", TEST_PATH), ("shell", command), OK]
+    check(tmp_path, skill, clean(skill).but(steps=steps), {"unverified-ok"})
+
+
+@pytest.mark.parametrize("skill", TESTED)
+@pytest.mark.parametrize(
+    "command",
+    [
+        "just test",
+        "just check",
+        "make test-unit",
+        "uv run pytest -q",
+        "uv run --with rich pytest",
+        "uv run python -m unittest",
+        "uv run -m unittest",
+        "uv run -m pytest -q",
+        "python3 tests/test_pricing.py",
+        "python3 pricing_test.py",
+        "pytest",
+        "tox",
+    ],
+)
+def test_test_like_commands_verify_the_claim(
+    tmp_path: Path, skill: str, command: str
+) -> None:
+    steps = [("write", TEST_PATH), ("shell", command), OK]
+    check(tmp_path, skill, clean(skill).but(steps=steps))
+
+
+def test_press_treats_every_code_extension_as_production(tmp_path: Path) -> None:
+    out: dict[str, Optional[str]] = {"app/Extra.kt": "fun x() {}\n"}
+    scn = clean("press").but(out=out)
+    check(tmp_path, "press", scn, {"production-changed"})

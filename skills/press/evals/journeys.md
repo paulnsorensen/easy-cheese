@@ -4,7 +4,9 @@ These journeys drive `/skillz autoimprove` for `/press`.
 Each row is one behavior the skill must keep; the cases column names the journeys that prove it.
 Every case restores a current Cook report (`next: age` with a `### Press loop` section), so each run is a manual `/press <slug>` re-run.
 Every case also carries `expected.criteria`: one criterion per `must` and `must_not` item, plus the refutable Press rules.
-A criterion marked `must` is a dealbreaker: a production edit, a publication step, or a false GREEN.
+A criterion marked `must` is a dealbreaker: a production edit, a publication claim, or a false GREEN.
+The judge sees the reply text and the output files, so each criterion grades the reply or those files.
+Criteria that restate report sections or volunteer a statement that `SKILL.md` does not require stay non-must.
 
 | ID | Behavior | Cases |
 |---|---|---|
@@ -21,7 +23,7 @@ A criterion marked `must` is a dealbreaker: a production edit, a publication ste
 | `PRESS-11` | Treats a failure that matches the Cook baseline artifact as known debt, not as a finding. | `press-input-2` |
 | `PRESS-12` | Reports a `coverage_gap` (`ok-with-concerns: coverage-gap`, next cook) when no test covers the contract, and writes no first coverage. | `press-gap-1` |
 | `PRESS-13` | Halts with `halt: coverage-gap` and next done on a second `coverage_gap` in one Cook run, read from the prior round in `.cheese/press/<slug>.md`. | `press-gap-2` |
-| `PRESS-14` | Asks whether the original complaint can still occur while every test passes, selects one false-success attack, and proves it with one failing test (a finding when the acceptance check covers the criterion). | `press-gap-3` |
+| `PRESS-14` | Asks whether the original complaint can still occur while every test passes. Selects one false-success attack and proves it with one failing test. The result is a finding when the acceptance check covers the criterion. | `press-gap-3` |
 
 ## Gate summary
 
@@ -45,4 +47,5 @@ The journey gate (`journey-gates.json`, press rows) fails a run when any of thes
 - The Wheypoint-backed phase entry (`authoritative`, `gated`, `ambiguous`) needs a durable record that a journey cannot seed.
 - The output snapshot hides `.cheese/`, so a journey cannot read the Press report artifact.
 - The cases judge the stated status, the next value, and the report sections in the transcript.
+- The judge sees no tool calls, so a criterion cannot grade the order of actions or a read of `.cheese/`; the gate covers pushes, PRs, and production writes.
 - Cook runs the Press loop itself and never publishes `next: press`; every case here models a manual `/press <slug>` re-run on a restored Cook report.

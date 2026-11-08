@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from journey_gates.common import (
+    CODE_EXT,
     Workspace,
     emit,
     inside_rel,
@@ -16,8 +17,6 @@ from journey_gates.common import (
 
 # gate:strip-end
 
-CODE = (".py", ".js", ".ts", ".tsx", ".go", ".rs", ".sh", ".rb", ".java", ".c", ".cpp")
-
 workspace = Workspace()
 failures: set[str] = set()
 if not workspace.has_turn:
@@ -29,7 +28,7 @@ rule_unverified_ok(workspace, failures, require_run=True)
 for rel in workspace.output:
     if "__pycache__" in rel or is_test(rel) or not workspace.raw_changed(rel):
         continue
-    if rel in workspace.fixtures or rel.endswith(CODE):
+    if rel in workspace.fixtures or rel.endswith(CODE_EXT):
         failures.add("production-changed")
 for rel in workspace.fixtures:
     if workspace.deleted(rel) and not is_test(rel):
@@ -40,7 +39,7 @@ for rel in workspace.fixtures:
         failures.add("production-write")
 for _, target in workspace.write_targets():
     rel = inside_rel(workspace, target)
-    if rel is not None and rel.endswith(CODE) and not is_test(rel):
+    if rel is not None and rel.endswith(CODE_EXT) and not is_test(rel):
         failures.add("production-write")
 
 emit(failures)

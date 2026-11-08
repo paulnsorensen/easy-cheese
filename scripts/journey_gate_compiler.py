@@ -45,7 +45,11 @@ def stripped(path: Path) -> str:
 def skills(root: Path) -> list[str]:
     """Every skill with a gate source: `scripts/journey_gates/*.py` minus common."""
     gates = root / "scripts" / "journey_gates"
-    return sorted(p.stem for p in gates.glob("*.py") if p.stem != "common")
+    return sorted(
+        p.stem
+        for p in gates.glob("*.py")
+        if p.stem != "common" and not p.stem.startswith("_")
+    )
 
 
 def compiled_source(root: Path, skill: str) -> str:
