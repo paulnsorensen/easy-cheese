@@ -165,7 +165,7 @@
       "assertions": [
         "Does not ask the user any question and does not stop for confirmation.",
         "output/plan.json has shape single with one group based on main.",
-        "The PR body is at most 20 non-blank lines, not counting one diagram or a template checklist, and does not restate the diff line by line.",
+        "The PR body is at most 20 non-blank lines, not counting a template checklist, and does not restate the diff line by line.",
         "The PR body has no mermaid block.",
         "The PR body names the regression test that fails before the fix."
       ],
@@ -282,7 +282,7 @@
       "expected_output": "A single PR with a very short body: one-line what, one-line why, mkdocs strict build as the check, Non-obvious changes None, Risk none. No diagram, no filler.",
       "assertions": [
         "output/plan.json has shape single.",
-        "The PR body is at most 20 non-blank lines, not counting one diagram or a template checklist.",
+        "The PR body is at most 20 non-blank lines, not counting a template checklist.",
         "Each prose section is one to three sentences; the body has no marketing words such as comprehensive, robust, seamless, or significantly.",
         "The PR body has no mermaid block.",
         "Does not ask the user any question."
@@ -314,7 +314,7 @@
         "The diagram shows the router, the cache, the CLI probe, the MCP probe, and the web fallback in that decision order.",
         "The diagram has at most 15 nodes and names no module that is absent from the diff.",
         "The mermaid syntax is valid for GitHub: labels with punctuation are quoted, and no node id is a bare lowercase end.",
-        "The PR body is at most 40 lines, not counting the diagram."
+        "The PR body is at most 40 non-blank lines, not counting the diagram or a template checklist."
       ],
       "files": ["evals/files/diagram-cross-module-flow/branch.txt"]
     },
@@ -328,9 +328,25 @@
         "The PR body has one mermaid sequenceDiagram.",
         "The diagram shows Cook, the coder, and the reviewer, with the handback, the ack, the ready reply, and then the reviewer dispatch, in that order.",
         "The diagram or body shows the 120 s missing-ready path that marks the curd blocked.",
-        "The PR body is at most 40 lines, not counting the diagram."
+        "The PR body is at most 40 non-blank lines, not counting the diagram or a template checklist."
       ],
       "files": ["evals/files/diagram-sequence-protocol/branch.txt"]
+    },
+    {
+      "id": 48,
+      "name": "diagram-rename-boundary",
+      "family": "diagram-flow",
+      "prompt": "Open a PR. Dry run: the finished branch is described in evals/files/diagram-rename-boundary/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "A single PR for a rename that keeps every boundary. check-pr-body requires a flowchart for this diff (three code modules change and one is renamed), so the body records the skip with a `Diagram: none, <reason>` line that names the rename instead of drawing a diagram. The body says the change preserves behavior.",
+      "assertions": [
+        "Does not ask the user any question and does not stop for confirmation.",
+        "output/plan.json has shape single.",
+        "The PR body has no mermaid block.",
+        "The PR body has a line that starts with `Diagram: none, ` followed by a reason that names the rename or the unchanged boundaries.",
+        "The PR body states that the change preserves behavior and names the rename as the mechanism.",
+        "The PR body is at most 40 non-blank lines, not counting a template checklist."
+      ],
+      "files": ["evals/files/diagram-rename-boundary/branch.txt"]
     },
     {
       "id": 43,

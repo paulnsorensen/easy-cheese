@@ -49,7 +49,12 @@ def _headings(text: str) -> list[str]:
 
 
 def _draws(diagram: list[str], kind: str) -> bool:
-    return any(line.strip().startswith(kind) for line in diagram)
+    """Return whether the diagram's type header (its first content line) names `kind`."""
+    # Mermaid reads `graph` as an alias of `flowchart`.
+    kinds = (kind, "graph") if kind == "flowchart" else (kind,)
+    content = (line.strip() for line in diagram[1:])
+    header = next((line for line in content if line and not line.startswith("%%")), "")
+    return header.split(maxsplit=1)[0] in kinds if header else False
 
 
 def plated_shape(body: str) -> str | None:
@@ -114,16 +119,20 @@ def _read(path: str) -> str:
 
 
 def _diagram_need(base: str, shape: str | None) -> DiagramNeed:
-    if base.startswith("-"):
+    if not base or base.startswith("-"):
         raise fromargs.CliError(f"--diagram-base must name a ref, got {base!r}", exit_code=2)
     revisions = f"{base}...HEAD"
     result = run_git(["diff", "--name-status", "--find-renames", "-z", revisions])
     if result.returncode != 0:
         raise fromargs.CliError(f"git diff {revisions} failed: {result.stderr.strip()}", exit_code=2)
     try:
-        return decide(parse_name_status(result.stdout), shape=shape)
+        changes = parse_name_status(result.stdout)
     except ValueError as error:
         raise fromargs.CliError(f"git diff {revisions}: {error}", exit_code=2) from error
+    if not changes:
+        # A PR always changes something, so an empty diff means the base is wrong.
+        raise fromargs.CliError(f"git diff {revisions} lists no change; pass the PR base branch", exit_code=2)
+    return decide(changes, shape=shape)
 
 
 def check_cmd(

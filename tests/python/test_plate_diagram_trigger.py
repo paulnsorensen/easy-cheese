@@ -39,6 +39,7 @@ def _eval_changes(name: str) -> list[Change]:
     ("name", "shape", "kind"),
     [
         ("diagram-cross-module-flow", "single", FLOW_DIAGRAM),
+        ("diagram-rename-boundary", "single", FLOW_DIAGRAM),
         ("diagram-sequence-protocol", "single", None),
         ("single-small-fix", "single", None),
         ("body-concise-docs", "single", None),
@@ -62,11 +63,11 @@ def test_flowchart_when_three_modules_change_and_one_is_added_removed_or_renamed
 @pytest.mark.parametrize(
     ("lines", "shape", "reason"),
     [
-        ("", "single", "the diff is empty"),
+        ("", "single", "code modules: 0 changed"),
         ("M\tsrc/melt/status.py\nM\ttests/test_status.py\n", "single", "1 changed, 0 added"),
         ("A\tsrc/pkg/router.py\nA\tsrc/pkg/probe.py\n", "single", "2 changed, 2 added, removed, or renamed; a flow diagram needs 3 or more"),
         ("M\tsrc/a.py\nM\tsrc/b.ts\nM\tsrc/c.go\n", "single", "needs one added, removed, or renamed"),
-        ("M\tREADME.md\nA\tdocs/guide.md\nM\tskills/melt/SKILL.md\n", "single", "docs-only change"),
+        ("M\tREADME.md\nA\tdocs/guide.md\nM\tskills/melt/SKILL.md\n", "single", "code modules: 0 changed"),
         ("A\tsrc/a.py\nA\tsrc/b.py\nA\tsrc/c.py\n", "orthogonal_flat", "independent PR"),
         (
             "A\ttests/test_router.py\nA\tsrc/pkg/fixtures/data.py\nA\tvendor/lib.py\n"

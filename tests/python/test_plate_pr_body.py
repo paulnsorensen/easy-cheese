@@ -112,9 +112,13 @@ _FLOW = DiagramNeed("flowchart", "code modules: 3 changed, 3 added, removed, or 
     [
         ("", _FLOW, False),
         ("```mermaid\nsequenceDiagram\n  A->>B: ack\n```\n", _FLOW, False),
+        ("```mermaid\nsequenceDiagram\n  graphStore->>DB: q\n  flowchartRef->>DB: r\n```\n", _FLOW, False),
         (_DIAGRAM, _FLOW, True),
+        ("```mermaid\ngraph TD\n  A-->B\n```\n", _FLOW, True),
         ("Diagram: none, the three modules are one renamed package", _FLOW, True),
-        ("", DiagramNeed(None, "docs-only change"), True),
+        ("Diagram: none,", _FLOW, False),
+        ("See Diagram: none, renamed package", _FLOW, False),
+        ("", DiagramNeed(None, "code modules: 0 changed"), True),
     ],
 )
 def test_triggered_diagram_needs_the_named_kind_or_a_recorded_skip(
@@ -132,7 +136,7 @@ def _git(repo: Path, *args: str) -> None:
 
 @pytest.fixture
 def body_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Enter a repo whose `feature` branch adds three modules to `main`; return a body path outside it."""
+    """Enter a repo whose `feature` branch adds three modules after `main` moved on; return a body path outside it."""
     repo = tmp_path / "repo"
     repo.mkdir()
     _git(repo, "init", "--initial-branch=main", ".")
@@ -147,6 +151,12 @@ def body_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         _ = (repo / name).write_text(f"# {name}\n")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-m", "flow")
+    # A module that lands on main after the branch point stays out of the three-dot diff.
+    _git(repo, "switch", "main")
+    _ = (repo / "upstream.py").write_text("y = 2\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "upstream")
+    _git(repo, "switch", "feature")
     monkeypatch.chdir(repo)
     return tmp_path / "body.md"
 
@@ -173,7 +183,15 @@ def test_cli_diagram_base_prints_one_skip_line_when_no_diagram_is_required(
     assert capsys.readouterr().err == "diagram not required: independent PR (Plated as orthogonal_flat)\n"
 
 
-@pytest.mark.parametrize(("base", "message"), [("nope", "git diff nope...HEAD failed"), ("-x", "must name a ref")])
+@pytest.mark.parametrize(
+    ("base", "message"),
+    [
+        ("nope", "git diff nope...HEAD failed"),
+        ("-x", "must name a ref"),
+        ("", "must name a ref"),
+        ("feature", "git diff feature...HEAD lists no change"),
+    ],
+)
 def test_cli_diagram_base_rejects_an_unusable_ref(
     body_path: Path, capsys: pytest.CaptureFixture[str], base: str, message: str
 ) -> None:

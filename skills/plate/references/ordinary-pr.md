@@ -67,7 +67,8 @@ Publication-relevant GitHub operations remain here:
 - Add `--reviewer <login>` or `--assignee <login>` only from the supplied
   publication metadata.
 - Use `gh pr edit <number> --title <title> --body-file <path>` when verified
-  commits make existing metadata inaccurate. Run `check-pr-body` on that file first.
+  commits make existing metadata inaccurate. Run `check-pr-body` on that file first,
+  with the same flags as `## New PR` step 4, `--diagram-base <base>` included.
 - Use `gh pr ready <number>` only when asked to publish a draft.
 - Use `gh pr checks` to verify publication context. CI triage, review, comments,
   and merge stay outside `/plate`. Use the `gh` CLI directly for that work.
@@ -125,8 +126,10 @@ Add no diagram to a small fix, a docs-only pull request, or an independent PR.
 A stack layer keeps a `flowchart` of the stack order, with this PR marked.
 `check-pr-body --diagram-base <base>` applies the three-module flow item to the paths changed since `<base>`.
 It requires a `flowchart` when three or more code modules change and one is added, removed, or renamed.
-Tests, fixtures, and vendored code are not modules. When it requires none, it prints one line that says why.
-If the review does not need a required diagram, write `Diagram: none, <reason>` in the body instead.
+Tests, fixtures, vendored code, and built assets are not modules. When it requires none, it prints one line that says why.
+The required `flowchart` takes priority over the other checklist items. On a stack layer, the stack-order flowchart meets it.
+If the review does not need it, write `Diagram: none, <reason>` in the body instead.
+For example, a rename that keeps every boundary draws none and gives that reason.
 The other checklist items stay a judgment call.
 Derive the diagram from the diff. Show only the elements that the diff changes, plus their neighbors.
 Draw it by the notation and Mermaid rules in `diagrams.md`.
