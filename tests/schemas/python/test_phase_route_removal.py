@@ -26,7 +26,48 @@ def test_private_handoff_route_rejects_invalid_destination() -> None:
 
 
 def test_private_handoff_route_accepts_active_destination() -> None:
-    validate_route("cook", "press", "https://schemas.easy-cheese.dev/curd-result")
+    validate_route("press", "cook", "https://schemas.easy-cheese.dev/curd-result")
+
+
+def test_cook_never_routes_to_press() -> None:
+    # Press runs inside Cook's own loop, so Cook hands behavior work to Age.
+    validate_route("cook", "age", "https://schemas.easy-cheese.dev/curd-result")
+    validate_route("press", "age", "https://schemas.easy-cheese.dev/curd-result")
+    with pytest.raises(RouteError, match="cook -> press is not declared"):
+        validate_route("cook", "press", "https://schemas.easy-cheese.dev/curd-result")
+
+
+def test_writer_rejects_a_cook_handoff_to_press_but_accepts_press_to_cook(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "corpus"))
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "route-removal-tests")
+    _ = (tmp_path / "grounded.md").write_text("grounded context\n", encoding="utf-8")
+    target = write_artifact(
+        slug="press-finding",
+        status="ok-with-concerns: coverage-gap: no acceptance check",
+        phase="press",
+        next_skill="cook",
+        artifact="",
+        orientation="press found a coverage gap",
+        body=None,
+        root=tmp_path,
+        grounded=("grounded.md#1-1",),
+    )
+    assert target == tmp_path / ".cheese" / "press" / "press-finding.md"
+    with pytest.raises(fromargs.CliError, match="cook -> press is not declared"):
+        _ = write_artifact(
+            slug="cook-to-press",
+            status="ok",
+            phase="cook",
+            next_skill="press",
+            artifact="",
+            orientation="must not be written",
+            body=None,
+            root=tmp_path,
+            grounded=("grounded.md#1-1",),
+        )
+    assert not (tmp_path / ".cheese" / "cook").exists()
 
 
 def test_terminal_transition_rejects_payload_schema() -> None:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Deterministic fan-remediation router: one event in, one state out.
 
-`run_fan` owns the `Cook -> Age` and `Press -> Age` entry transitions and
+`run_fan` owns the `Cook -> Age` entry transition and
 publishes the initial `awaiting_review` state. After the first Age starts, this
 command is the sole authority for every later fan transition. It accepts exactly
 one event -- a Review or a Cure -- validates its inputs, computes the next state

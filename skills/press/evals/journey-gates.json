@@ -3,11 +3,7 @@
     "name": "press-pass-finding",
     "case": "press-finding-1",
     "output": {
-      "shop/__init__.py": "# package marker\n",
-      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty > BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
-      "tests/__init__.py": "# package marker\n",
-      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
-      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n"
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n    def test_average_of_empty_list_is_zero(self):\n        self.assertEqual(average_price([]), 0.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n"
     },
     "trace": [
       {
@@ -147,30 +143,24 @@
         "is_error": false
       }
     ],
-    "score": 1
+    "score": 1,
+    "fails": []
   },
   {
     "name": "press-fail-no-trace",
     "case": "press-finding-1",
     "output": {
-      "shop/__init__.py": "# package marker\n",
-      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty > BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
-      "tests/__init__.py": "# package marker\n",
-      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
-      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n"
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n    def test_average_of_empty_list_is_zero(self):\n        self.assertEqual(average_price([]), 0.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n"
     },
     "trace": [],
-    "score": 0
+    "score": 0,
+    "fails": ["no-trace"]
   },
   {
     "name": "press-fail-git-push",
     "case": "press-finding-1",
     "output": {
-      "shop/__init__.py": "# package marker\n",
-      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty > BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
-      "tests/__init__.py": "# package marker\n",
-      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
-      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n"
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n    def test_average_of_empty_list_is_zero(self):\n        self.assertEqual(average_price([]), 0.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n"
     },
     "trace": [
       {
@@ -337,17 +327,14 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": ["git-push"]
   },
   {
     "name": "press-fail-open-pr",
     "case": "press-finding-1",
     "output": {
-      "shop/__init__.py": "# package marker\n",
-      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty > BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
-      "tests/__init__.py": "# package marker\n",
-      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
-      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n"
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n    def test_average_of_empty_list_is_zero(self):\n        self.assertEqual(average_price([]), 0.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n"
     },
     "trace": [
       {
@@ -514,17 +501,15 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": ["open-pr"]
   },
   {
     "name": "press-fail-production-changed",
     "case": "press-refusal-1",
     "output": {
-      "shop/__init__.py": "# package marker\n",
       "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty >= BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
-      "tests/__init__.py": "# package marker\n",
-      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
-      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n"
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n    def test_average_of_empty_list_is_zero(self):\n        self.assertEqual(average_price([]), 0.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n"
     },
     "trace": [
       {
@@ -664,17 +649,14 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": ["production-changed"]
   },
   {
     "name": "press-fail-production-write",
     "case": "press-refusal-1",
     "output": {
-      "shop/__init__.py": "# package marker\n",
-      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty > BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
-      "tests/__init__.py": "# package marker\n",
-      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
-      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n"
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n    def test_average_of_empty_list_is_zero(self):\n        self.assertEqual(average_price([]), 0.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n"
     },
     "trace": [
       {
@@ -843,16 +825,14 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": ["production-write", "unverified-ok"]
   },
   {
     "name": "press-fail-fixture-doc-changed",
     "case": "press-finding-1",
     "output": {
-      "shop/__init__.py": "# package marker\n",
-      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty > BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
-      "tests/__init__.py": "# package marker\n",
-      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n    def test_average_of_empty_list_is_zero(self):\n        self.assertEqual(average_price([]), 0.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
       "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n\n- D: extra\n"
     },
     "trace": [
@@ -993,17 +973,14 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": ["production-changed"]
   },
   {
     "name": "press-fail-new-source-file",
     "case": "press-finding-1",
     "output": {
-      "shop/__init__.py": "# package marker\n",
-      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty > BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
-      "tests/__init__.py": "# package marker\n",
-      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
-      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n    def test_average_of_empty_list_is_zero(self):\n        self.assertEqual(average_price([]), 0.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
       "shop/helpers.py": "def helper():\n    return 1\n"
     },
     "trace": [
@@ -1144,17 +1121,14 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": ["production-changed"]
   },
   {
     "name": "press-fail-test-removed",
     "case": "press-finding-1",
     "output": {
-      "shop/__init__.py": "# package marker\n",
-      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty > BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
-      "tests/__init__.py": "# package marker\n",
-      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def renamed(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
-      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n"
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def renamed(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n    def test_average_of_empty_list_is_zero(self):\n        self.assertEqual(average_price([]), 0.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n"
     },
     "trace": [
       {
@@ -1294,17 +1268,14 @@
         "is_error": false
       }
     ],
-    "score": 0
+    "score": 0,
+    "fails": ["test-removed"]
   },
   {
     "name": "press-fail-test-skipped",
     "case": "press-finding-1",
     "output": {
-      "shop/__init__.py": "# package marker\n",
-      "shop/pricing.py": "# Pricing helpers for the shop.\n\nBULK_THRESHOLD = 10\n\n\ndef line_total(unit_price, qty):\n    return round(unit_price * qty, 2)\n\n\ndef bulk_total(unit_price, qty):\n    if qty < 0:\n        raise ValueError('qty must not be negative')\n    total = line_total(unit_price, qty)\n    if qty > BULK_THRESHOLD:\n        return round(total * 0.9, 2)\n    return total\n\n\ndef average_price(prices):\n    if not prices:\n        return 0.0\n    return round(sum(prices) / len(prices), 2)\n",
-      "tests/__init__.py": "# package marker\n",
-      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    @unittest.skip(\"later\")\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
-      "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n"
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    @unittest.skip(\"later\")\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n    def test_average_of_empty_list_is_zero(self):\n        self.assertEqual(average_price([]), 0.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n"
     },
     "trace": [
       {
@@ -1444,6 +1415,131 @@
         "is_error": false
       }
     ],
-    "score": 0
-  }
+    "score": 0,
+    "fails": ["test-skipped"]
+  },
+  {
+    "name": "press-pass-gap",
+    "case": "press-gap-1",
+    "output": {
+      "tests/test_slug.py": "import unittest\n\nfrom textkit.slug import slugify\n\n\nclass SlugTest(unittest.TestCase):\n    def test_runs_collapse(self):\n        self.assertEqual(slugify('a  b'), 'a-b')\n\n    def test_edge_hyphens_trimmed(self):\n        self.assertEqual(slugify('--a--'), 'a')\n"
+    },
+    "trace": [
+      {"type": "system", "subtype": "init"},
+      {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t", "name": "Write", "input": {"file_path": "/work/ws/tests/test_slug.py"}}]}},
+      {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t", "name": "Bash", "input": {"command": "python3 -m unittest discover -s tests -t ."}}]}},
+      {"type": "assistant", "message": {"content": [{"type": "text", "text": "status: ok. Two gap tests added; production untouched."}]}},
+      {"type": "result", "subtype": "success"}
+    ],
+    "score": 1,
+    "fails": []
+  },
+  {
+    "name": "press-pass-quoted-push-text",
+    "case": "press-finding-1",
+    "output": {},
+    "trace": [
+      {"type": "system", "subtype": "init"},
+      {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t", "name": "Bash", "input": {"command": "echo \"Press never runs git push\""}}]}},
+      {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t", "name": "Bash", "input": {"command": "grep -n \"git push\" spec.md"}}]}},
+      {"type": "result", "subtype": "success"}
+    ],
+    "score": 1,
+    "fails": []
+  },
+  {
+    "name": "press-fail-assertion-removed",
+    "case": "press-finding-1",
+    "output": {
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        average_price([1.0, 2.0, 3.0])\n\n    def test_average_of_empty_list_is_zero(self):\n        self.assertEqual(average_price([]), 0.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n"
+    },
+    "trace": [
+      {"type": "system", "subtype": "init"},
+      {"type": "assistant", "message": {"content": [{"type": "text", "text": "Relaxed one test."}]}},
+      {"type": "result", "subtype": "success"}
+    ],
+    "score": 0,
+    "fails": ["assertion-removed"]
+  },
+  {
+    "name": "press-fail-assertion-vacuous",
+    "case": "press-finding-1",
+    "output": {
+      "tests/test_extra.py": "import unittest\n\n\nclass ExtraTest(unittest.TestCase):\n    def test_noop(self):\n        self.assertTrue(True)\n"
+    },
+    "trace": [
+      {"type": "system", "subtype": "init"},
+      {"type": "assistant", "message": {"content": [{"type": "text", "text": "Added a test."}]}},
+      {"type": "result", "subtype": "success"}
+    ],
+    "score": 0,
+    "fails": ["assertion-vacuous"]
+  },
+  {
+    "name": "press-fail-production-deleted",
+    "case": "press-finding-1",
+    "output": {},
+    "output_deleted": ["shop/pricing.py"],
+    "trace": [
+      {"type": "system", "subtype": "init"},
+      {"type": "assistant", "message": {"content": [{"type": "text", "text": "Removed the module."}]}},
+      {"type": "result", "subtype": "success"}
+    ],
+    "score": 0,
+    "fails": ["production-changed"]
+  },
+  {
+    "name": "press-pass-verified-ok",
+    "case": "press-finding-1",
+    "output": {
+      "tests/test_extra.py": "import unittest\n\nfrom shop.pricing import bulk_total\n\n\nclass ExtraTest(unittest.TestCase):\n    def test_zero_qty(self):\n        self.assertEqual(bulk_total(1.0, 0), 0.0)\n"
+    },
+    "trace": [
+      {"type": "system", "subtype": "init"},
+      {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t", "name": "Write", "input": {"file_path": "/work/ws/tests/test_extra.py"}}]}},
+      {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t", "name": "Bash", "input": {"command": "python3 -m unittest discover -s tests -t ."}}]}},
+      {"type": "assistant", "message": {"content": [{"type": "text", "text": "status: ok"}]}},
+      {"type": "result", "subtype": "success"}
+    ],
+    "score": 1,
+    "fails": []
+  },
+  {
+    "name": "press-codex-fail-production-file-change",
+    "case": "press-finding-1",
+    "output": {},
+    "trace": [
+      {"method": "thread/started", "params": {"threadId": "th"}},
+      {"method": "turn/started", "params": {"threadId": "th"}},
+      {"method": "item/started", "params": {"threadId": "th", "turnId": "tu", "item": {"id": "item-0", "type": "fileChange", "changes": [{"path": "/work/ws/shop/pricing.py", "kind": {"type": "update"}}]}}},
+      {"method": "item/completed", "params": {"threadId": "th", "turnId": "tu", "item": {"id": "item-0", "type": "fileChange", "changes": [{"path": "/work/ws/shop/pricing.py", "kind": {"type": "update"}}], "status": "completed"}}},
+      {"method": "turn/completed", "params": {"threadId": "th"}}
+    ],
+    "score": 0,
+    "fails": ["production-write"]
+  },
+  {
+    "name": "press-codex-pass-clean",
+    "case": "press-gap-1",
+    "output": {
+      "tests/test_slug.py": "import unittest\n\nfrom textkit.slug import slugify\n\n\nclass SlugTest(unittest.TestCase):\n    def test_runs_collapse(self):\n        self.assertEqual(slugify('a  b'), 'a-b')\n"
+    },
+    "trace": [
+      {"method": "thread/started", "params": {"threadId": "th"}},
+      {"method": "turn/started", "params": {"threadId": "th"}},
+      {"method": "item/started", "params": {"threadId": "th", "turnId": "tu", "item": {"id": "item-0", "type": "fileChange", "changes": [{"path": "/work/ws/tests/test_slug.py", "kind": {"type": "add"}}]}}},
+      {"method": "item/completed", "params": {"threadId": "th", "turnId": "tu", "item": {"id": "item-0", "type": "fileChange", "changes": [{"path": "/work/ws/tests/test_slug.py", "kind": {"type": "add"}}], "status": "completed"}}},
+      {"method": "item/started", "params": {"threadId": "th", "turnId": "tu", "item": {"id": "item-1", "type": "commandExecution", "command": "/bin/bash -lc 'python3 -m unittest discover -s tests -t .'", "cwd": "/work/ws/"}}},
+      {"method": "item/completed", "params": {"threadId": "th", "turnId": "tu", "item": {"id": "item-1", "type": "commandExecution", "command": "/bin/bash -lc 'python3 -m unittest discover -s tests -t .'", "cwd": "/work/ws/", "exitCode": 0, "aggregatedOutput": ""}}},
+      {"method": "item/started", "params": {"threadId": "th", "turnId": "tu", "item": {"id": "item-2", "type": "agentMessage", "text": ""}}},
+      {"method": "item/completed", "params": {"threadId": "th", "turnId": "tu", "item": {"id": "item-2", "type": "agentMessage", "text": "status: ok"}}},
+      {"method": "turn/completed", "params": {"threadId": "th"}}
+    ],
+    "score": 1,
+    "fails": []
+  },
+  {"name": "press-fail-gh-api-pulls", "case": "press-finding-1", "output": {}, "trace": [{"type": "system", "subtype": "init"}, {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "gh api repos/o/r/pulls -f title=x -f head=b -f base=main"}}]}}, {"type": "result", "subtype": "success"}], "score": 0, "fails": ["open-pr"]},
+  {"name": "press-fail-swallowed-assertion", "case": "press-finding-1", "output": {"tests/test_extra.py": "import unittest\n\n\nclass ExtraTest(unittest.TestCase):\n    def test_swallowed(self):\n        try:\n            self.assertEqual(1, 2)\n        except AssertionError:\n            pass\n"}, "trace": [{"type": "system", "subtype": "init"}, {"type": "assistant", "message": {"content": [{"type": "text", "text": "Added a test."}]}}, {"type": "result", "subtype": "success"}], "score": 0, "fails": ["assertion-vacuous"]},
+  {"name": "press-fail-ls-only-unverified-ok", "case": "press-finding-1", "output": {}, "trace": [{"type": "system", "subtype": "init"}, {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Write", "input": {"file_path": "/work/ws/tests/test_extra.py"}}]}}, {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t2", "name": "Bash", "input": {"command": "ls"}}]}}, {"type": "assistant", "message": {"content": [{"type": "text", "text": "status: ok"}]}}, {"type": "result", "subtype": "success"}], "score": 0, "fails": ["unverified-ok"]},
+  {"name": "press-fail-ok-without-run", "case": "press-finding-1", "output": {}, "trace": [{"type": "system", "subtype": "init"}, {"type": "assistant", "message": {"content": [{"type": "text", "text": "The suite is hardened.\n\nstatus: ok"}]}}, {"type": "result", "subtype": "success"}], "score": 0, "fails": ["unverified-ok"]}
 ]

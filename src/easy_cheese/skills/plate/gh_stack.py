@@ -210,9 +210,25 @@ def _branch_sha(cwd: Path, branch: str, remote: str) -> str:
     return local_sha
 
 
+def _merged_bottom(raw_branches: list[object]) -> list[str]:
+    """Return the contiguous merged or queued layers at the bottom of the stack."""
+    names: list[str] = []
+    for raw in raw_branches:
+        if not isinstance(raw, dict):
+            break
+        branch = cast("dict[str, object]", raw)
+        if branch.get("isMerged") is not True and branch.get("isQueued") is not True:
+            break
+        name = branch.get("name")
+        if not isinstance(name, str) or not name:
+            raise GhStackValidationError(f"stack branch {len(names)} has no name")
+        names.append(name)
+    return names
+
+
 def _validated_branches(
     cwd: Path, view: dict[str, object], trunk: str, remote: str
-) -> list[dict[str, object]]:
+) -> tuple[list[str], list[dict[str, object]]]:
     raw_branches_value = view.get("branches")
     if not isinstance(raw_branches_value, list):
         raise GhStackValidationError("gh stack view has no branch list")
@@ -221,10 +237,15 @@ def _validated_branches(
         raise GhStackValidationError(
             "gh stack view must contain at least two published branches"
         )
+    skipped = _merged_bottom(raw_branches)
+    if len(skipped) == len(raw_branches):
+        raise GhStackValidationError(
+            "gh stack view has no open layer above its merged or queued layers"
+        )
 
     validated: list[dict[str, object]] = []
     expected_base = trunk
-    for index, raw in enumerate(raw_branches):
+    for index, raw in enumerate(raw_branches[len(skipped) :], start=len(skipped)):
         if not isinstance(raw, dict):
             raise GhStackValidationError(f"stack branch {index} is not an object")
         branch = cast("dict[str, object]", raw)
@@ -302,11 +323,11 @@ def _validated_branches(
             }
         )
         expected_base = name
-    return validated
+    return skipped, validated
 
 
 def _stack_identity_and_mapping(
-    cwd: Path, prs: list[dict[str, object]], trunk: str
+    cwd: Path, skipped: list[str], prs: list[dict[str, object]], trunk: str
 ) -> dict[str, int]:
     expected_numbers = [cast(int, pr["number"]) for pr in prs]
     expected_heads = [cast(str, pr["head"]) for pr in prs]
@@ -353,15 +374,28 @@ def _stack_identity_and_mapping(
         if not isinstance(raw_remote_prs_value, list):
             raise GhStackValidationError("GitHub stack has no PR mapping")
         raw_remote_prs = cast("list[object]", raw_remote_prs_value)
-        if len(raw_remote_prs) != len(prs):
+        if len(raw_remote_prs) != len(skipped) + len(prs):
             raise GhStackValidationError("GitHub stack PR mapping has the wrong length")
-        for index, raw_remote_pr in enumerate(raw_remote_prs):
+        for position, raw_remote_pr in enumerate(raw_remote_prs):
             if not isinstance(raw_remote_pr, dict):
                 raise GhStackValidationError(
                     "GitHub stack PR mapping contains a non-object"
                 )
             remote_pr = cast("dict[str, object]", raw_remote_pr)
             raw_head = remote_pr.get("head")
+            if position < len(skipped):
+                skipped_head = (
+                    cast("dict[str, object]", raw_head).get("ref")
+                    if isinstance(raw_head, dict)
+                    else None
+                )
+                if skipped_head != skipped[position]:
+                    raise GhStackValidationError(
+                        "GitHub stack mapping differs at merged or queued layer "
+                        + f"{skipped[position]!r}"
+                    )
+                continue
+            index = position - len(skipped)
             if not isinstance(raw_head, dict):
                 raise GhStackValidationError(
                     f"GitHub stack mapping has no head for PR #{expected_numbers[index]}"
@@ -397,12 +431,13 @@ def verify_publication(
         raise GhStackValidationError(
             f"local stack trunk {view.get('trunk')!r}, expected canonical {branch!r}"
         )
-    prs = _validated_branches(cwd, view, branch, remote)
-    stack_identity = _stack_identity_and_mapping(cwd, prs, branch)
+    skipped, prs = _validated_branches(cwd, view, branch, remote)
+    stack_identity = _stack_identity_and_mapping(cwd, skipped, prs, branch)
     return {
         "valid": True,
         "trunk": branch,
         "remote": remote,
+        "skipped": skipped,
         "prs": prs,
         "stack": stack_identity,
     }

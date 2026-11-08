@@ -5,8 +5,10 @@ Main tracks no archives. Each dist commit holds the complete tree of one main
 commit plus the archives built from it. One push moves the branch, so a clone
 sees the old skills and archives or the new ones, never a mix. The branch is
 append-only: a publish fast-forwards it and records its source in a
-`Source-Commit` trailer. A source that does not descend from the last
-published source is refused, so a late or manual run cannot move dist back.
+`Source-Commit` trailer. A source older than the last published one is a
+no-op, and a source that diverges from it is refused, so a late or manual run
+cannot move dist back. A hand-pushed tip with no trailer is published over, so
+it cannot stall every later run.
 """
 
 from __future__ import annotations
@@ -28,7 +30,7 @@ ARCHIVES = "skills/*/scripts/*.pyz"
 
 @dataclass(frozen=True)
 class Result:
-    status: str  # "published" or "unchanged"
+    status: str  # "published", "unchanged", or "superseded"
     commit: str
     source: str
 
@@ -110,8 +112,13 @@ def publish(
     if tip is not None:
         published = _git(repo, "log", "-1", f"--format=%(trailers:key={TRAILER},valueonly)", tip)
         if not published:
-            raise SystemExit(f"publish_dist: {branch} tip {tip} has no {TRAILER} trailer")
-        if not _is_ancestor(repo, published, source):
+            print(
+                f"publish_dist: {branch} tip {tip} has no {TRAILER} trailer; publishing over it",
+                file=sys.stderr,
+            )
+        elif source != published and _is_ancestor(repo, source, published):
+            return Result("superseded", tip, source)
+        elif not _is_ancestor(repo, published, source):
             raise SystemExit(
                 f"publish_dist: {branch} already holds {published}, which {source} "
                 + "does not descend from; refusing to move dist back"
