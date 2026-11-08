@@ -147,13 +147,9 @@ Do not accept an unrelated failure as a reproduction.
 Classify the symptom before you form hypotheses.
 
 - Continue at the current model tier for a clean stack trace and a reliable loop.
-- Upgrade the model tier for races, cross-module failures, performance regressions, or Heisenbugs.
+- Upgrade to the `powerful` tier for races, cross-module failures, performance regressions, or Heisenbugs.
 
-Use the harness command for the model upgrade.
-For Claude, use `/model opus`.
-Then use `/effort`.
-Use the named equivalent for Codex or OMP.
-Use a generic model upgrade on other hosts.
+The per-harness upgrade commands live in `../cheese/references/routing-policy.md` § Roles x tiers.
 
 ## Phase 3: Form hypotheses
 

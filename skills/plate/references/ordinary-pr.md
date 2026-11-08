@@ -117,23 +117,19 @@ Claims:
 
 ### Diagram
 
-Add one Mermaid diagram only when the structure is the point of the review:
+Add one Mermaid diagram at most, and only when the structure is the point of the review.
+Pick it with the checklist and the smallest-set rules in [`diagrams.md`](../../cheese/references/diagrams.md).
+When several items apply, draw the one that shows the riskiest change.
 
-| Change | Diagram |
-| --- | --- |
-| A data or control flow that crosses three or more modules | `flowchart` of that flow |
-| A changed message order between components or agents | `sequenceDiagram` |
-| A stack of PRs | `flowchart` of the stack order, with this PR marked |
-
-Add no diagram to a small fix, a docs-only change, or an independent PR.
-`check-pr-body --diagram-base <base>` applies the first row to the paths changed since `<base>`.
+Add no diagram to a small fix, a docs-only pull request, or an independent PR.
+A stack layer keeps a `flowchart` of the stack order, with this PR marked.
+`check-pr-body --diagram-base <base>` applies the three-module flow item to the paths changed since `<base>`.
 It requires a `flowchart` when three or more code modules change and one is added, removed, or renamed.
 Tests, fixtures, and vendored code are not modules. When it requires none, it prints one line that says why.
 If the review does not need a required diagram, write `Diagram: none, <reason>` in the body instead.
-The `sequenceDiagram` row stays a judgment call.
-Derive the diagram from the diff. Show only components that the diff changes, plus their direct callers.
-Keep it to 15 nodes or fewer. Quote a label that holds punctuation, for example `R["router.select()"]`.
-Never use `end` as a node id. Use `<br>` for a line break. Do not add theme or style directives.
+The other checklist items stay a judgment call.
+Derive the diagram from the diff. Show only the elements that the diff changes, plus their neighbors.
+Draw it by the notation and Mermaid rules in `diagrams.md`.
 
 ## Push verification
 

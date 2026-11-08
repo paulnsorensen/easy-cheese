@@ -1,6 +1,6 @@
 """Decide from a diff's changed paths whether a PR body needs a Mermaid diagram.
 
-Code applies the first row of `ordinary-pr.md` § Diagram so the same diff always
+Code applies the three-module flow item of `diagrams.md` § When to draw so the same diff always
 gets the same answer: a flow that crosses three or more modules needs a flowchart,
 while a small fix, a docs-only change, and an independent PR need none.
 """

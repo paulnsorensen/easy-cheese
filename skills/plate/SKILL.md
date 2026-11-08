@@ -111,6 +111,7 @@ Commit-only work and ordinary PR work use this transaction. Stacked work uses th
    Do not bypass hooks.
 6. **Verify** — Inspect the status and the committed file set.
 7. **Publish when requested** — Follow [`references/ordinary-pr.md`](references/ordinary-pr.md). Read the PR after publication. Verify it.
+   Draw any PR diagram by [`diagrams.md`](../cheese/references/diagrams.md) from [`diagram-templates.md`](../cheese/references/diagram-templates.md).
 
 Commit-only mode stops after verification. It does not push or open a PR.
 
