@@ -27,6 +27,7 @@ Title: `Deployment view: port prefixes`.
 - Problem: the switches have no port prefix table.
 - Decision: a fixed /64 prefix for each port; the table continues for all 32 ports.
 - Crux: the prefix width.
+- Open: [TBD] the prefix for port 32.
 - Placement:
 
 ```text
@@ -100,6 +101,7 @@ Title: `Deployment view: Network`.
 - Decision: a routed network for bootstrap, since routed networks are the modern choice.
 - Goals: reliability, simplicity, speed of install, low cost, easy support, and a good experience for the installer, the firmware engineer, and the operator.
 - Crux: getting the network right.
+- Open: [TBD] edge cases.
 - Placement:
 
 ```text

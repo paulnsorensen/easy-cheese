@@ -26,6 +26,7 @@ Title: `Container view: Rate limiter`.
 - Ownership: the platform team owns the limiter, with support from every backend team.
 - Documentation: one page that explains the limiter to every client team, every backend team, and the support desk.
 - Crux: high availability.
+- Open: [TBD] client messaging.
 - Placement:
 
 ```text
@@ -61,6 +62,7 @@ Title: `Flow view: counter script`.
 - Problem: two calls per request race on the counter.
 - Decision: one atomic script that calls `INCR` on the client key, calls `EXPIRE` when the count is 1, and returns 0 when the count is over the limit.
 - Crux: the script round trip.
+- Open: [TBD] the script timeout value.
 - Placement:
 
 ```text
@@ -107,12 +109,13 @@ Legend: cylinder = data store.
 ```text
 slice: gateway rate limiting
 spine step: entry
-public interface: none; API responses keep their current shape
+public interface: none new; the outage signal to clients is open
 private: the local cap counter; the store health check
 crust delta: none
 arrows: none new
 ```
 
+- Open: [TBD] whether clients see a signal, such as a response header, that exact limits are off during the outage.
 - Out of scope: per-client billing quotas.
 - Verification: stop the store under load, and check that clients keep getting answers and that backend load stays under the local caps.
 

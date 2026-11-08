@@ -22,9 +22,10 @@ Title: `Flow view: data-holding class`.
 - Problem: a developer writes the same constructor and comparison for every data class. A type checker needs the fields without a plugin.
 - Decision: a class decorator that reads the annotations.
 - Seam: the decorator is the only entry point. A per-field helper overrides a default or leaves a field out of comparison.
-- Invariants: field order is annotation order. A field with a mutable default fails at class creation, not at use.
-- Failure modes: a class that already defines a method keeps its own method.
+- Invariants: field order is annotation order. A field with a list, dict, or set default fails at class creation, not at use.
+- Failure modes: a class that already defines its own constructor, representation, or equality method keeps that method. A class that asks for ordering and already defines an ordering method fails at class creation.
 - Crux: the rule for default values and for inheritance of fields.
+- Open: [TBD] whether classes get ordering by default.
 - Placement:
 
 ```text
@@ -68,6 +69,7 @@ exec(f"def __init__(self, {params}):\n    {body}", globals_, ns)
 
 - Comparison: build a tuple of the fields in order, then compare the two tuples.
 - Crux: the speed of the generated constructor.
+- Open: [TBD] the slots default.
 - Placement:
 
 ```text
@@ -97,6 +99,7 @@ Title: `Flow view: data classes`.
 - Problem: data classes have too much code.
 - Decision: a feature that writes the code for the developer.
 - Crux: less code.
+- Open: [TBD] ordering.
 - Placement:
 
 ```text

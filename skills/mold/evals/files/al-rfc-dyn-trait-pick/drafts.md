@@ -27,6 +27,7 @@ TypeParamBounds = Bound { "+" Bound } ;
 ```
 
 - Crux: the look-ahead cost of the new token.
+- Open: [TBD] the lint name.
 - Placement:
 
 ```text
@@ -65,6 +66,7 @@ Title: `State view: trait objects`.
 - Success: the new syntax feels natural to most people within a year.
 - Documentation: update the book, the reference, and the error messages so that they all use the clearer form.
 - Crux: clarity.
+- Open: [TBD] the lint default.
 - Placement:
 
 ```text

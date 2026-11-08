@@ -16,6 +16,7 @@ Title: `Container view: Store`.
 - Problem: we need a database.
 - Decision: pick a distributed SQL database.
 - Crux: picking the right database.
+- Open: [TBD] the license.
 - Placement:
 
 ```text
@@ -61,6 +62,7 @@ CREATE INDEX ON instance (project_id, state);
 ```
 
 - Crux: the index on project and state. It serves the instance list page.
+- Open: [TBD] the index fill factor.
 - Placement:
 
 ```text
@@ -102,6 +104,7 @@ Legend: cylinder = data store.
 - Decision: a distributed SQL store.
 - Rejected: a single-writer replicated store does not meet the required write scale-out. A key-value store is rejected because it shifts relational queries into application code.
 - Risks: the operations owner validates recovery; the release owner verifies redistribution rights before selection.
+- Open: [TBD] whether the license of the chosen store allows shipping it inside the appliance.
 - Crux: operating maturity. The fault tests and the results live in a linked report, not in this doc.
 - Placement:
 

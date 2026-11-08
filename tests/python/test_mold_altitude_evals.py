@@ -2,10 +2,15 @@
 
 Each altitude topic has a draft case and a pick case in one family, so a
 near-copy never crosses a train, validation, or holdout split. The set needs
-at least three task families, because the skillz splitter refuses fewer.
+at least four task families, because the skillz splitter refuses fewer.
 
 A draft fixture records the user's fork decisions and leaves one fork open.
-The draft case must hold that fork as `[TBD]` instead of deciding it.
+The draft case must hold that fork as `[TBD]`, `[?]`, or `[BLOCKED]` instead
+of deciding it.
+
+A prompt gives the task, the files, and the output form. It never states a
+rule that an assertion grades, so a Mold without that rule fails the case.
+Each assertion is one skillz EARS criterion, and one ID has one text.
 
 The pick answer key must be a permutation of the three labels. All three
 drafts share the same surface sections, so no single section, fence, or
@@ -41,8 +46,29 @@ VERDICTS = ("too-low", "right", "too-high")
 ALLOWED_FENCES = {"mermaid", "text"}
 DIAGRAM_KINDS = {"flowchart", "sequenceDiagram", "stateDiagram-v2", "erDiagram", "classDiagram"}
 FAMILIES = {"alt-runtime", "alt-rack", "alt-language", "alt-product", "diag-structure", "diag-behavior", "diag-data"}
-# The skillz splitter needs a train, a validation, and a holdout family.
-MINIMUM_FAMILIES = 3
+# The skillz splitter needs two train families, a validation family, and a holdout family.
+MINIMUM_FAMILIES = 4
+# Phrases that state a graded Mold rule. A prompt that holds one gives the rule away.
+RULE_LEAKS = (
+    "execution_holds",
+    "handshake.md",
+    "voice.md",
+    "references/diagrams.md",
+    "do not decide",
+    "simulate a user reply",
+    "Placement block",
+    "pseudocode",
+    "helper signature",
+    "rejected option",
+    "Title: <view>",
+)
+ASSERTION = re.compile(r"^\[([A-Z][A-Z0-9-]+) \| (critical|pass-fail|quality) \| (Ubiquitous|Event|Unwanted|Optional)\] (.+)$")
+EARS_TRIGGER = {"Ubiquitous": None, "Event": "WHEN", "Unwanted": "IF", "Optional": "WHERE"}
+# The criterion shape that skillz accepts (`_ears` in skillz_experiments/_cases.py): one optional
+# leading WHEN, WHILE, IF, or WHERE clause, then one THE <subject> SHALL <response>.
+EARS = re.compile(r"(?:(?P<trigger>WHEN|WHILE|IF|WHERE)\s+\S.*?\s+)?THE\s+\S.*?\s+SHALL\s+\S.*", re.S)
+EARS_WORDS = re.compile(r"\b(?:WHEN|WHILE|IF|WHERE|THE|SHALL)\b")
+QUOTED = re.compile(r"`[^`]*`|\"[^\"]*\"")
 # The most pick cases that one surface cue or length rank may predict in full.
 MAX_CUE_HITS = 4
 FENCE = re.compile(r"^\s*(```+|~~~+)\s*([\w+-]*)")
@@ -80,10 +106,16 @@ def _answer_key(case: dict[str, object]) -> dict[str, str]:
     return dict(KEY.findall(cast(str, case["expected_output"])))
 
 
+def _split_drafts(text: str) -> dict[str, str]:
+    parts = re.split(r"^## Draft ([XYZ])\n", text, flags=re.M)
+    labels = parts[1::2]
+    assert labels == list(LABELS), labels
+    drafts = dict(zip(labels, parts[2::2], strict=True))
+    return {label: body.split("\nSource:", 1)[0] for label, body in drafts.items()}
+
+
 def _drafts(case: dict[str, object]) -> dict[str, str]:
-    parts = re.split(r"^## Draft ([XYZ])\n", _fixture(case), flags=re.M)
-    drafts = dict(zip(parts[1::2], parts[2::2], strict=True))
-    return {label: text.split("\nSource:", 1)[0] for label, text in drafts.items()}
+    return _split_drafts(_fixture(case))
 
 
 def _ids(case: dict[str, object]) -> set[str]:
@@ -144,7 +176,49 @@ def test_draft_prompt_tier_matches_the_problem_fixture() -> None:
     for case in _draft_cases():
         assert f"`tier: {_fixture_tier(case)}`" in cast(str, case["prompt"])
         assert "answer/spec.md" in cast(str, case["prompt"])
-        assert {"R-ALT-DIAGRAM", "R-ALT-HOLD"} <= _ids(case)
+        assert {"R-ALT-DIAGRAM", "R-ALT-HOLD-OPEN"} <= _ids(case)
+
+
+def _leaks(prompt: str) -> list[str]:
+    return [phrase for phrase in RULE_LEAKS if phrase in prompt]
+
+
+def test_prompts_do_not_hand_over_the_graded_rules() -> None:
+    for case in _cases():
+        assert not _leaks(cast(str, case["prompt"])), case["name"]
+
+
+def test_leak_probe_rejects_the_original_hold_prompt() -> None:
+    leaky = "Keep each open fork, marked as `references/handshake.md` allows, with an `execution_holds` entry."
+    assert _leaks(leaky) == ["execution_holds", "handshake.md"]
+
+
+def _ears(text: str) -> str | None:
+    """Return the leading EARS keyword of one skillz criterion, `THE` when it has none, or None."""
+    plain = QUOTED.sub('""', text).strip()
+    match = EARS.fullmatch(plain)
+    if not match:
+        return None
+    expected = ([match["trigger"]] if match["trigger"] else []) + ["THE", "SHALL"]
+    return (match["trigger"] or "THE") if EARS_WORDS.findall(plain) == expected else None
+
+
+def test_assertions_are_single_ears_criteria_with_one_text_per_id() -> None:
+    texts: dict[str, str] = {}
+    for case in _cases():
+        for assertion in cast(list[str], case["assertions"]):
+            match = ASSERTION.match(assertion)
+            assert match, (case["name"], assertion)
+            rid, _, form, text = match.groups()
+            assert _ears(text) == (EARS_TRIGGER[form] or "THE"), (rid, form, text)
+            assert texts.setdefault(rid, text) == text, f"{rid} has two texts"
+
+
+def test_ears_probe_rejects_a_compound_or_lowercase_assertion() -> None:
+    assert _ears("THE spec SHALL keep the fork open.") == "THE"
+    assert _ears("WHEN a fork is open THE spec SHALL hold it.") == "WHEN"
+    assert _ears("The spec shall keep the fork open.") is None
+    assert _ears("WHEN a fork is open THE spec SHALL hold it. WHEN a choice is made THE spec SHALL record it.") is None
 
 
 def test_draft_cases_hold_the_open_fork_instead_of_deciding_it() -> None:
@@ -152,7 +226,8 @@ def test_draft_cases_hold_the_open_fork_instead_of_deciding_it() -> None:
         prompt = cast(str, case["prompt"])
         fixture = _fixture(case)
         assert "AGENT-DECIDED: no human" not in prompt, case["name"]
-        assert "`execution_holds`" in prompt and "do not simulate a user reply" in prompt
+        assert "Nobody answers a question in this run." in prompt, case["name"]
+        assert {"R-ALT-HOLD-USER", "R-ALT-HOLD-OPEN"} <= _ids(case), case["name"]
         assert "## Recorded user decisions" in fixture, case["name"]
         forks = re.findall(r"^- (D-\d+ \(user\)|Open \(no user decision yet\)):", fixture, re.M)
         assert forks.count("Open (no user decision yet)") == 1, case["name"]
@@ -161,7 +236,7 @@ def test_draft_cases_hold_the_open_fork_instead_of_deciding_it() -> None:
         assert len(forks) <= 2 or _fixture_tier(case) == "full", case["name"]
 
 
-# Each view case maps to (the phrase in its expected output, the `diagrams.md` term for that view).
+# Each view case maps to (expected output phrase, `diagrams.md` checklist term, fixture fact that selects it).
 VIEW_CASES = {
     "dg-view-container": ("Container view", "**Container** view", "adds a report service"),
     "dg-view-component": ("Component view", "**Component** view", "The change stays inside it."),
@@ -177,7 +252,7 @@ VIEW_CASES = {
     ),
     "dg-view-database": ("database diagram", "**database** diagram", "adds two tables"),
     "dg-view-state": ("`stateDiagram-v2`", "**state** diagram", "no table, column, or service changes"),
-    "dg-view-flow": ("flow diagram", "**flow** diagram", "Only the rule branches change, inside one module."),
+    "dg-view-flow": ("flow diagram", "**flow** diagram", "Each ticket crosses three existing modules"),
     "dg-view-overlap-async": ("asynchronous `sequenceDiagram`", "**asynchronous sequence** diagram", "already exist"),
     "dg-view-overlap-container": ("Container view", "**Container** view", "The search service and its index are new."),
     "dg-view-pressure": ("database diagram", "**database** diagram", "The real risk is the schema"),
@@ -197,7 +272,7 @@ def test_diagram_view_cases_name_one_checklist_view() -> None:
         assert re.search(rf"Draw an? {re.escape(term)}\b", checklist), term
         assert f"`tier: {_fixture_tier(case)}`" in prompt
         assert "answer/diagrams.md" in prompt
-        assert {"R-DIAG-VIEW", "R-DIAG-NOTATION"} <= _ids(case)
+        assert {"R-DIAG-VIEW", "R-DIAG-C4-FLOWCHART", "R-DIAG-MERMAID"} <= _ids(case)
         assert ("R-DIAG-SMALLEST" in _ids(case)) == (name == "dg-view-pressure")
 
 
@@ -286,7 +361,7 @@ def _surface_features(text: str) -> set[str]:
     found |= {f"field:{field}" for field in fields}
     if any(lang not in ALLOWED_FENCES for lang in langs):
         found.add("has:body fence")
-    for token in ("TBD", "<br>[", "subgraph", "Legend:", "|---|", "because", "func ", "def ", "`"):
+    for token in ("TBD", "<br>[", "subgraph", "Legend:", "|---|", "because", "func ", "def ", "`", "user decides"):
         if token in text:
             found.add(f"has:{token}")
     return found
@@ -342,12 +417,26 @@ def test_cue_probe_rejects_a_fixture_set_with_a_token_cue() -> None:
     assert _cue_hits(leaky) == len(keys)
 
 
-def test_fence_rule_rejects_the_too_low_bodies() -> None:
+# A private helper with a call signature in the Placement block is a below-altitude detail.
+PRIVATE_SIGNATURE = re.compile(r"^private: .*\w\([^)]*\)", re.M)
+
+
+def test_each_too_low_draft_holds_a_body_or_a_helper_signature() -> None:
     rejected: set[str] = set()
     for case in _pick_cases():
-        rejected.update(fence_violations(_draft_with(case, "too-low")))
+        too_low = _draft_with(case, "too-low")
+        violations = fence_violations(too_low)
+        assert violations or PRIVATE_SIGNATURE.search(too_low), case["name"]
+        assert not PRIVATE_SIGNATURE.search(_draft_with(case, "right")), case["name"]
+        rejected.update(violations)
     assert {"yaml", "ebnf", "python", "sql"} <= rejected
     assert fence_violations("```text\nslice: billing\n```\n") == []
+    assert not PRIVATE_SIGNATURE.search("private: zone windows; sent records\n")
+
+
+def test_draft_split_rejects_a_repeated_label() -> None:
+    with pytest.raises(AssertionError):
+        _ = _split_drafts("## Draft X\na\n## Draft X\nb\n## Draft Y\nc\n## Draft Z\nd\n")
 
 
 def test_fixtures_hold_no_source_skill_or_company_terms() -> None:
@@ -366,13 +455,7 @@ def test_evals_reference_points_at_the_altitude_and_diagram_cases() -> None:
     assert "tests/python/test_mold_altitude_evals.py" in doc
     for family in FAMILIES:
         assert f"`{family}`" in doc, family
-    ids = (
-        "R-ALT-ACTOR", "R-ALT-SEAMS", "R-ALT-CRUX", "R-ALT-DECIDE", "R-ALT-HOLD", "R-ALT-SCOPE", "R-ALT-DIAGRAM",
-        "R-DIAG-VIEW", "R-DIAG-SMALLEST", "R-DIAG-NOTATION",
-        "R-FORK-GRAPH", "R-FORK-C4", "R-FORK-TABLE", "R-FORK-NO-MERMAID", "R-FORK-FIELDS",
-    )
-    for rid in ids:
-        assert f"`{rid}`" in doc, rid
+    assert "`must`" in doc
     for case in _cases():
         for rid in _ids(case):
             assert f"`{rid}`" in doc, rid

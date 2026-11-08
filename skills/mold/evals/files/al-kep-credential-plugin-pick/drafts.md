@@ -17,6 +17,7 @@ Title: `Container view: Credentials`.
 - Problem: credentials are hard to manage.
 - Decision: a flexible extension model for credentials.
 - Crux: flexibility.
+- Open: [TBD] vendor code.
 - Placement:
 
 ```text
@@ -68,8 +69,9 @@ crust delta: new executable message contract
 arrows: node agent -> credential executable
 ```
 
-- Rejected: a network service per node needs a daemon to run and patch. Vendor code stays out of the agent because it keeps the release wait.
-- Out of scope: removing the built-in vendor code in this release. Credentials for things other than images.
+- Rejected: a network service per node, because it needs a daemon to run and patch. Vendor code inside the agent, because it keeps the release wait.
+- Open: [TBD] whether this release removes the built-in vendor code.
+- Out of scope: credentials for things other than images.
 - Verification: contract tests per version, and one manual pull from a private registry.
 
 ## Draft Z
@@ -111,6 +113,7 @@ providers:
 - Logging: each lookup logs the provider name, the image, and a cache hit or miss at debug level.
 - Tests: one table test for each pattern form: exact host, wildcard first part, host with a port number, and path prefix.
 - Crux: the speed of the image match on each pull.
+- Open: [TBD] whether `LoadProviders` reads the file once or on each pull.
 - Placement:
 
 ```text

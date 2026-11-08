@@ -32,6 +32,7 @@ Legend: + = public field.
 - Admin copy: the switch label reads "Daily digest", and its help text reads "Send one summary email each morning."
 - Tests: one snapshot test of the template, and one test for each default.
 - Crux: the form layout on small screens.
+- Open: [TBD] the default morning hour.
 - Placement:
 
 ```text
@@ -76,12 +77,13 @@ Legend: open arrowhead = asynchronous message.
 - Routine parts, one line each: the preferences page, the admin switch, sign-in checks, and the template follow existing patterns.
 - Crux: safe delivery. The provider drops a repeat of the stable (user, local-day) key for 24 hours. Concurrent sends and retries use that key, and every retry happens before local midnight, so it stays inside that window. The sent record only saves a provider call.
 - Crux: timing. The scheduler groups users by zone and sends the window that is due. A late run sends the missed window once, until local midnight, and after that it logs a skip.
+- Open: [TBD] whether each user picks a morning hour, or every user gets the digest at 8:00 local time.
 - Placement:
 
 ```text
 slice: notifications
 spine step: workflow
-public interface: the digest preference (on or off, morning hour)
+public interface: the digest preference (on or off)
 private: zone windows; sent records in the job store
 crust delta: one new preference field
 arrows: scheduler -> digest sender -> email provider
@@ -105,6 +107,7 @@ Title: `Container view: Digest platform`.
 - Problem: users get too many emails.
 - Decision: a queue, a cache, a container platform, and a mesh.
 - Crux: scale.
+- Open: [TBD] the send hour.
 - Placement:
 
 ```text

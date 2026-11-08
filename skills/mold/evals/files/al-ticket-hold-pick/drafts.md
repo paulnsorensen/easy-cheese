@@ -21,7 +21,7 @@ sequenceDiagram
   alt hold is live and confirmation commits before expiry
     Booking-->>Pay: Seat owned
   else expiry has passed or release commits first
-    Booking-->>Pay: Hold gone, refund
+    Booking-->>Pay: Hold gone
   end
 ```
 
@@ -35,7 +35,8 @@ All shown services already exist; only the hold protocol changes.
 - Decision: a timed hold that the booking service owns.
 - Seam: the booking service owns the hold record. The payment step confirms a hold. The expiry job releases it.
 - Invariant: one seat, one live hold or one owner.
-- Failure modes: a payment that lands after expiry gets a refund and a clear message. A crash of the expiry job delays release but never double-sells.
+- Failure modes: a crash of the expiry job delays release but never double-sells.
+- Open: [TBD] what happens to a payment that lands after expiry: a refund, or the seat when it is still free.
 - Crux: the race between payment and expiry.
 - Placement:
 
@@ -67,6 +68,7 @@ Title: `Container view: Ticket site`.
 - Decision: choose a database that scales and is consistent. Add a cache in front of it.
 - Goals: consistency, scale, speed, fairness, and a smooth checkout for buyers, organizers, and on-call engineers.
 - Crux: consistency at scale.
+- Open: [TBD] late payments.
 - Placement:
 
 ```text
@@ -102,6 +104,7 @@ Title: `Dynamic view: seat lock`.
 - Decision: in one transaction, run `SELECT * FROM seat WHERE id = $1 AND status = 'free' FOR UPDATE`, then `UPDATE seat SET status = 'held', held_by = $2 WHERE id = $1`.
 - Release: a cron job runs `UPDATE seat SET status = 'free' WHERE held_until < now()` each minute.
 - Crux: the lock wait time.
+- Open: [TBD] the lock timeout.
 - Placement:
 
 ```text
