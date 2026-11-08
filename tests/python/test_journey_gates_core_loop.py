@@ -151,7 +151,7 @@ def _fixture_params(claude_only: bool = False) -> list[Any]:
 @pytest.mark.parametrize("skill", SKILLS)
 def test_contract_argv_is_the_compiled_source(skill: str) -> None:
     compiler = load_compiler()
-    assert skill in compiler.gated_skills(REPO_ROOT)
+    assert skill in compiler.skills(REPO_ROOT)
     assert contract_argv(skill) == ["python3", "-I", "-c", compiler.compiled_source(REPO_ROOT, skill)]
 
 
@@ -225,38 +225,3 @@ def test_no_trace_fails_every_gate(tmp_path: Path) -> None:
         ws = tmp_path / skill
         (ws / "output").mkdir(parents=True)
         assert run_program(contract_argv(skill), ws) == {"score": 0, "fails": ["no-trace"]}
-
-
-# --- shared helpers that only the Cook gates call ---------------------------
-
-
-def load_common() -> ModuleType:
-    path = REPO_ROOT / "scripts" / "journey_gates" / "common.py"
-    spec = importlib.util.spec_from_file_location("journey_gates_common", path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-@pytest.mark.parametrize(("assertion", "passes"), [("1, 1", True), ("1, 2", False)])
-def test_run_unittests_reports_the_suite_result(tmp_path: Path, assertion: str, passes: bool) -> None:
-    test = f"import unittest\n\n\nclass T(unittest.TestCase):\n    def test_x(self):\n        self.assertEqual({assertion})\n"
-    _put(tmp_path, "tests/__init__.py", "")
-    _put(tmp_path, "tests/test_x.py", test)
-    assert load_common().run_unittests(tmp_path) is passes
-
-
-@pytest.mark.parametrize(("changed", "fails"), [({"pkg/a.py"}, {"source-without-test"}), ({"pkg/a.py", "tests/test_a.py"}, set())])
-def test_rule_source_without_test(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, changed: set[str], fails: set[str]
-) -> None:
-    files = {"pkg/a.py": "X = 1\n", "tests/test_a.py": "def test_a():\n    assert 1 == 1\n"}
-    for rel, text in files.items():
-        _put(tmp_path, rel, text)
-        _put(tmp_path, "output/" + rel, text.replace("1", "2") if rel in changed else text)
-    monkeypatch.chdir(tmp_path)
-    common = load_common()
-    found: set[str] = set()
-    common.rule_source_without_test(common.Workspace(), found)
-    assert found == fails

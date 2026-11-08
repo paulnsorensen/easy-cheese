@@ -330,7 +330,7 @@ def copy_compiler_tree(root: Path) -> None:
     shutil.copytree(
         REPO_ROOT / "scripts" / "journey_gates", root / "scripts" / "journey_gates"
     )
-    for skill in SKILLS:
+    for skill in load_compiler().skills(REPO_ROOT):
         target = root / "skills" / skill / "evals"
         target.mkdir(parents=True)
         shutil.copy(REPO_ROOT / "skills" / skill / "evals" / "autoimprove.json", target)
@@ -1901,7 +1901,7 @@ def test_compiler_derives_skills_from_the_gate_sources() -> None:
     gates = REPO_ROOT / "scripts" / "journey_gates"
     expected = sorted(p.stem for p in gates.glob("*.py") if p.stem != "common")
     assert load_compiler().skills(REPO_ROOT) == expected
-    assert set(expected) == set(SKILLS)
+    assert set(SKILLS) <= set(expected)
 
 
 @pytest.mark.parametrize("skill", SKILLS)

@@ -2,7 +2,8 @@
 
 The deterministic gates of the `/skillz autoimprove` journey suites live as Python sources under `scripts/journey_gates/`.
 `scripts/journey_gate_compiler.py` inlines them into each `skills/<skill>/evals/autoimprove.json` as `kinds.journey.argv = ["python3", "-I", "-c", SOURCE]`.
-Edit the sources, then run the compiler. `tests/python/test_journey_gates.py` fails on drift, so `just check` catches a hand edit of the JSON.
+Edit the sources, then run the compiler. `tests/python/test_journey_gates.py` (cook, mold, press, pasteurize) and `tests/python/test_journey_gates_core_loop.py` (age, cure, plate, wheypoint) fail on drift, so `just check` catches a hand edit of the JSON.
+The compiler finds each skill from its gate module, so a new suite needs only `scripts/journey_gates/<skill>.py` and its contract.
 
 ## Why the sources live outside `skills/`
 
@@ -10,6 +11,7 @@ Edit the sources, then run the compiler. `tests/python/test_journey_gates.py` fa
 - skillz also accepts a `gate` file under `evals/gates/`, but that file would be Python under `skills/`.
 - Inline `argv` keeps the doctrine and still gives the sources lint, type checks, and unit tests.
 - `common.py` holds the shared code. Each skill module imports it inside a `# gate:strip-begin` / `# gate:strip-end` block, which the compiler drops. The compiler exits 2 on an unpaired marker or CRLF.
+- The strip block also drops the skill module's own imports. A module that `common.py` does not import (for example `shutil` or `tempfile`) must sit below `# gate:strip-end`, or the compiled gate raises `NameError`. Put the `# pyright:` pragma inside the strip block.
 
 ## Runtime limits that shape the code
 
@@ -42,6 +44,11 @@ Edit the sources, then run the compiler. `tests/python/test_journey_gates.py` fa
 - `source-without-test` exempts an `__init__.py` only when its body is empty, a docstring, or imports. Executable logic in it needs a test.
 - Only write targets inside the workspace root count. A write to `/tmp` never trips a hold or a production rule.
 
+
+- Age replays the case's `restore-repo.sh` in a temp dir and fails `production-changed` when the visible output tree differs. This catches a write by any route, including `python -c` and `git checkout --`.
+- Plate reads each shell step's exit code (Claude `tool_result`, Codex `exitCode`), because `commit-after-failed-gate` depends on it. A step counts as a gate run only when it runs the gate, not when it reads `scripts/check.sh`.
+- Cure fails `test-regressed` when a test that passed on the fixture tree fails or vanishes in the output. A deferred finding may leave its own test red.
+
 ## Fixture convention
 
 `skills/<skill>/evals/journey-gates.json` is an easy-cheese convention, not a skillz format.
@@ -55,3 +62,8 @@ A restored Press finding report carries `digest: sha256:<hex> (<test path>)`, th
 skillz intake needs at least 4 scored families, train 4 cases from 2 families, 1 validation family (the smallest), and a holdout of at least 6 cases (`_intake.py:24-31`).
 Every scored journey case needs EARS `expected.criteria`.
 `skillz-experiment.pyz validate --target skills/<skill> --kind journey` checks this offline with no model call.
+
+
+Run `/skillz autoimprove` against the skill directory inside the repository, not a copy. Each `skills/<skill>/wedge.toml` inherits `skills/wedge.toml`, whose paths are repo-relative, so a copied skill stops with `wedge-config-invalid`.
+skillz checks the `family` of every `evals.json` task entry even in a `--kind journey` run, and a seed task entry with `files: []` fails the draft loader. The plate `evals.json` prompt entries carry a family for this reason.
+
