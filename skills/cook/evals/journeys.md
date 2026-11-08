@@ -29,7 +29,7 @@ The gate enforces the rules listed under Gate rules below.
 - `source-without-test` fails a run that changes non-test Python without a test-file change.
 - `tests-fail` runs unittest in a copy of `output/` when Python changed and `output/tests/` exists. All unittest runs share one 8 s deadline.
 - `hold-violated` counts only Python written inside the workspace root.
-- `unverified-ok` fails a `status: ok` claim after a Python write with no later test-runner step (a runner such as `pytest`, `python3 -m unittest`, `just`, or a script run; `ls` does not count).
+- `unverified-ok` fails a `status: ok` claim after a Python write with no later test-runner step. A runner is `pytest`, `python3 -m unittest`, a `just` or `make` target that names `test` or `check`, or a `test_*.py` script. `ls` and `just fmt` do not count.
 
 ## Judge evidence
 
@@ -54,7 +54,7 @@ A `must` criterion zeroes the case below level 3. It grades only a hard boundary
 Cook's package report carries `### Contract` and the detection proof in `### Acceptance evidence` (`../references/package-report.md`).
 The `contract-reported` and `detection-proof-reported` criteria grade those reported claims.
 
-The gate owns "the tests ran in this conversation": `unverified-ok` needs a shell step after the last Python write, and `tests-fail` runs the suite on `output/`.
+The gate owns "the tests ran in this conversation": `unverified-ok` needs a test-runner step after the last Python write, and `tests-fail` runs the suite on `output/`.
 The judge then checks with `success-matches-output` or `check-matches-output` that the output files do not contradict a claim in a reply.
 These criteria zero a case only on a contradiction, such as a claimed fix that the code lacks.
 A claimed check that leaves no file, such as an ad-hoc command, is not a contradiction; the gate and, later, the trace grade it.
