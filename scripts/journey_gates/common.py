@@ -934,7 +934,13 @@ def _text(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
-def _claude_steps(event: dict[str, Any]) -> list[tuple[str, str]]:
+# A write tool call that the host denied or that failed changes no file. It stays
+# an `attempt` step: rules that forbid an edit still see it, but it does not count
+# as a write that needs a later test run.
+FAILED_FILE_CHANGE = ("failed", "declined")
+
+
+def _claude_steps(event: dict[str, Any], failed: set[str]) -> list[tuple[str, str]]:
     steps: list[tuple[str, str]] = []
     content = _dict(event.get("message")).get("content")
     for block in _list(content):
@@ -945,13 +951,27 @@ def _claude_steps(event: dict[str, Any]) -> list[tuple[str, str]]:
         elif block.get("type") == "tool_use":
             args = _dict(block.get("input"))
             name = block.get("name")
+            kind = "attempt" if _text(block.get("id")) in failed else "write"
             if name == "Bash":
                 steps.append(("shell", _text(args.get("command"))))
             elif name in ("Write", "Edit", "MultiEdit"):
-                steps.append(("write", _text(args.get("file_path"))))
+                steps.append((kind, _text(args.get("file_path"))))
             elif name == "NotebookEdit":
-                steps.append(("write", _text(args.get("notebook_path"))))
+                steps.append((kind, _text(args.get("notebook_path"))))
     return steps
+
+
+def _failed_tool_ids(event: dict[str, Any]) -> list[str]:
+    """Tool call ids whose result in a Claude `user` event is an error."""
+    content = _dict(event.get("message")).get("content")
+    return [
+        _text(block.get("tool_use_id"))
+        for block in _list(content)
+        if isinstance(block, dict)
+        and block.get("type") == "tool_result"
+        and block.get("is_error") is True
+        and _text(block.get("tool_use_id"))
+    ]
 
 
 def _codex_steps(item: dict[str, Any]) -> list[tuple[str, str]]:
@@ -962,8 +982,9 @@ def _codex_steps(item: dict[str, Any]) -> list[tuple[str, str]]:
             command = shlex.join(str(part) for part in command)
         return [("shell", _text(command))]
     if kind == "fileChange":
+        step = "attempt" if item.get("status") in FAILED_FILE_CHANGE else "write"
         return [
-            ("write", _text(change.get("path")))
+            (step, _text(change.get("path")))
             for change in _list(item.get("changes"))
             if isinstance(change, dict)
         ]
@@ -973,12 +994,13 @@ def _codex_steps(item: dict[str, Any]) -> list[tuple[str, str]]:
 
 
 def load_steps() -> tuple[bool, list[tuple[str, str]], str]:
-    """Return (has an agent turn, ordered text/shell/write steps, workspace root)."""
+    """Return (has an agent turn, ordered text/shell/write/attempt steps, workspace root)."""
     path = Path("trace/events.jsonl")
     if not path.is_file():
         return False, [], ""
     slots: list[Any] = []
     items: dict[Any, dict[str, Any]] = {}
+    failed: set[str] = set()
     turn = False
     root = ""
     item_cwd = ""
@@ -992,7 +1014,9 @@ def load_steps() -> tuple[bool, list[tuple[str, str]], str]:
         method = event.get("method")
         if event.get("type") == "assistant":
             turn = True
-            slots.append(_claude_steps(event))
+            slots.append({"claude": event})
+        elif event.get("type") == "user":
+            failed.update(_failed_tool_ids(event))
         elif event.get("type") == "system" and event.get("subtype") == "init":
             root = root or _text(event.get("cwd"))
         elif method == "thread/started":
@@ -1014,7 +1038,10 @@ def load_steps() -> tuple[bool, list[tuple[str, str]], str]:
             items[key].update(item)
     steps: list[tuple[str, str]] = []
     for slot in slots:
-        steps.extend(slot if isinstance(slot, list) else _codex_steps(items[slot]))
+        if isinstance(slot, dict):
+            steps.extend(_claude_steps(slot["claude"], failed))
+        else:
+            steps.extend(_codex_steps(items[slot]))
     return turn, steps, root or item_cwd
 
 
@@ -1063,10 +1090,14 @@ class Workspace:
             if kind == "shell":
                 self.facts[index] = shell_facts(value, aliases)
 
-    def write_targets(self) -> list[tuple[int, str]]:
-        """Write steps and shell write targets as (step index, path)."""
+    def write_targets(self, attempts: bool = True) -> list[tuple[int, str]]:
+        """Write steps and shell write targets as (step index, path).
+
+        With `attempts`, a denied or failed write tool call counts too.
+        """
+        kinds = ("write", "attempt") if attempts else ("write",)
         found = [
-            (i, value) for i, (kind, value) in enumerate(self.steps) if kind == "write"
+            (i, value) for i, (kind, value) in enumerate(self.steps) if kind in kinds
         ]
         for index, facts in self.facts.items():
             found.extend((index, target) for target in facts.writes)
@@ -1603,7 +1634,7 @@ def rule_unverified_ok(
     if claim < 0:
         return
     last_write = -1
-    for index, path in ws.write_targets():
+    for index, path in ws.write_targets(attempts=False):
         if index < claim and path.endswith(".py"):
             last_write = max(last_write, index)
     if last_write < 0 and not require_run:

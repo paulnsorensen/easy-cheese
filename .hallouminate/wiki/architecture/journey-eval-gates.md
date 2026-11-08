@@ -41,6 +41,7 @@ Edit the sources, then run the compiler. `tests/python/test_journey_gates.py` fa
 - `unverified-ok` needs a test-run shell step after the last Python write. Press needs a test-run step before any `ok` claim, also with no write.
 - A step counts as a test run only when it names a test. These count: `pytest`, `tox`, `nox`, `python -m unittest|pytest`, `just|make` with a target that contains `test` or `check`, `uv run` followed by a test run, `python x.py` where `x` is `test_*.py`, `*_test.py`, or `repro*.py`, and the `repro-rerun` archive call. Steps such as `ls`, `just fmt`, `uv run ruff`, and `python3 scripts/tool.py` do not count.
 - A test run that also redirects or tees its output still counts as a run. A redirect to a log is not a source write.
+- A write tool call that the host denies or that fails is an `attempt` step. Claude marks it with an `is_error` tool result; Codex marks it with a `failed` or `declined` file change. An attempt changes no file, so `unverified-ok` ignores it. The forbidden-edit rules (Mold source writes, Press production writes, Cook holds) still fail on it.
 - A shell step writes a file through a redirect, `tee`, `sed -i`, `perl -i`, or the target of `cp`, `mv`, or `install`.
 - `source-without-test` exempts an `__init__.py` only when its body is empty, a docstring, or imports. Executable logic in it needs a test.
 - Only write targets inside the workspace root count. A write to `/tmp` never trips a hold or a production rule.

@@ -20,7 +20,7 @@ if not workspace.has_turn:
 rule_publication(workspace, failures, commit=True)
 
 for kind, value in workspace.steps:
-    if kind == "write" and value.endswith(CODE_EXT):
+    if kind in ("write", "attempt") and value.endswith(CODE_EXT):
         failures.add("write-tool-source-file")
 for facts in workspace.facts.values():
     if any(target.endswith(CODE_EXT) for target in facts.writes):

@@ -117,6 +117,26 @@ def claude_event(kind: str, value: str) -> dict[str, object]:
     return {"type": "assistant", "message": {"content": [block]}}
 
 
+def claude_denial(value: str, tool_id: str) -> list[dict[str, object]]:
+    """A Write call to `value` and the tool result that denies it."""
+    block = {
+        "type": "tool_use",
+        "id": tool_id,
+        "name": "Write",
+        "input": {"file_path": _abs(value)},
+    }
+    result = {
+        "type": "tool_result",
+        "tool_use_id": tool_id,
+        "is_error": True,
+        "content": "Claude requested permissions to write to this file, but you haven't granted it yet.",
+    }
+    return [
+        {"type": "assistant", "message": {"content": [block]}},
+        {"type": "user", "message": {"role": "user", "content": [result]}},
+    ]
+
+
 def codex_events(
     index: int, kind: str, value: str, cwd: Optional[str] = ABS
 ) -> list[dict[str, object]]:
@@ -137,7 +157,8 @@ def codex_events(
     else:
         change = {"path": _abs(value), "kind": {"type": "update"}}
         started = {**base, "type": "fileChange", "changes": [change]}
-        done = {**started, "status": "completed"}
+        status = "declined" if kind == "denied" else "completed"
+        done = {**started, "status": status}
     params = {"threadId": "th", "turnId": "tu"}
     return [
         {"method": "item/started", "params": {**params, "item": started}},
@@ -170,7 +191,11 @@ def trace_lines(steps: tuple[Step, ...], shape: str) -> list[str]:
         if rooted:
             init["cwd"] = ABS.rstrip("/")
         events.append(init)
-        events.extend(claude_event(kind, value) for kind, value in steps)
+        for index, (kind, value) in enumerate(steps):
+            if kind == "denied":
+                events.extend(claude_denial(value, f"denied-{index}"))
+            else:
+                events.append(claude_event(kind, value))
         events.append({"type": "result", "subtype": "success"})
     return [json.dumps(event) for event in events]
 
@@ -2168,6 +2193,29 @@ def test_test_like_commands_verify_the_claim(
 ) -> None:
     steps = [("write", TEST_PATH), ("shell", command), OK]
     check(tmp_path, skill, clean(skill).but(steps=steps))
+
+
+@pytest.mark.parametrize("skill", TESTED)
+def test_a_denied_write_needs_no_new_test_run(tmp_path: Path, skill: str) -> None:
+    # The host refused the edit, so no file changed and the earlier run still holds.
+    steps = [("shell", "python3 -m unittest"), ("denied", TEST_PATH), OK]
+    check(tmp_path, skill, clean(skill).but(steps=steps))
+
+
+@pytest.mark.parametrize("skill", TESTED)
+def test_a_denied_write_does_not_hide_a_real_one(tmp_path: Path, skill: str) -> None:
+    steps = [("write", TEST_PATH), ("denied", TEST_PATH), OK]
+    check(tmp_path, skill, clean(skill).but(steps=steps), {"unverified-ok"})
+
+
+def test_press_denied_production_write_still_fails(tmp_path: Path) -> None:
+    scn = clean("press").but(then=[("denied", SRC_PATH)])
+    check(tmp_path, "press", scn, {"production-write"})
+
+
+def test_mold_denied_source_write_still_fails(tmp_path: Path) -> None:
+    scn = clean("mold").but(then=[("denied", "src/app.py")])
+    check(tmp_path, "mold", scn, {"write-tool-source-file"})
 
 
 def test_press_treats_every_code_extension_as_production(tmp_path: Path) -> None:
