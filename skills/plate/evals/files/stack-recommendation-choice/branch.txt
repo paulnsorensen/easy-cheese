@@ -1,0 +1,21 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/audit-log. No PR exists for this branch. Mode: auto.
+Quality gate: `just check` passed at every commit tip, checked one by one, and at HEAD (exit 0).
+Stack tools: `{"recommended":"graphite"}`; Graphite is installed and tracks this repository.
+
+$ git log --oneline main..HEAD
+a93f1d0 feat(audit): wire the audit log into the cook runner
+4be7c21 feat(audit): implement the audit log writer
+0d18e5f feat(audit): add the audit event protocol schema
+
+$ git log --name-status --format=%h main..HEAD
+a93f1d0
+M	src/easy_cheese/skills/cook/runner.py
+M	tests/python/test_cook_runner.py
+4be7c21
+A	src/easy_cheese/shared/audit_writer.py
+A	tests/python/test_audit_writer.py
+0d18e5f
+A	src/easy_cheese_schemas/audit_event.py
+
+audit_writer imports audit_event; runner imports audit_writer. No file or hunk is shared between commits.
+Each later commit fails to import without the earlier one.

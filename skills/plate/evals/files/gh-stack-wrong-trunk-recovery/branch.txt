@@ -1,0 +1,13 @@
+Repository: easy-cheese (owner example). The GitHub default branch is main (`gh repo view --json defaultBranchRef` returns main).
+Provider: gh stack, stack-tools status `available`. The stack was published and its PRs exist.
+
+$ gh stack view --json
+{"id":17,"trunk":"origin/main","branches":["feat/a-schema","feat/b-impl","feat/c-wiring"]}
+
+$ gh pr view <n> --json number,headRefName,baseRefName,state,isDraft,autoMergeRequest   (one per PR)
+{"number":701,"headRefName":"feat/a-schema","baseRefName":"main","state":"OPEN","isDraft":false,"autoMergeRequest":null}
+{"number":702,"headRefName":"feat/b-impl","baseRefName":"feat/a-schema","state":"OPEN","isDraft":false,"autoMergeRequest":null}
+{"number":703,"headRefName":"feat/c-wiring","baseRefName":"feat/b-impl","state":"OPEN","isDraft":true,"autoMergeRequest":null}
+
+Merge queue: no PR is queued. Branch SHAs: a1b2c3d, e4f5a6b, 9c8d7e6.
+The user asked to repair the trunk without replacing the PRs.
