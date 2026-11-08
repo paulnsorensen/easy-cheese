@@ -46,7 +46,8 @@ RAW_PUBLISH = re.compile(r"\bgit\b[^;&|\n]*?\bpush\b")
 RAW_COMMIT = re.compile(r"\bgit\b[^;&|\n]*?\bcommit\b")
 RAW_PR = re.compile(r"\bgh\b[^;&|\n]*?\bpr\s+(?:create|new|merge)\b")
 RAW_RUN = re.compile(
-    r"\b(?:pytest|unittest|tox|nox)\b|\b(?:just|make)\s|\buv\s+run\b|\.pyz\b"
+    r"\b(?:pytest|unittest|tox|nox)\b|\b(?:just|make)\s|\buv\s+run\b|\bcoverage\s+run\b"
+    r"|\.pyz\s+repro-rerun\b"
     r"|\bpython[\d.]*\s+[^-\s]"
 )
 RAW_WRITE = re.compile(r"(?:>>?|\btee\s+(?:-\S+\s+)*)\s*[\"']?([^\s\"'|;&<>]+)")
@@ -690,18 +691,33 @@ class Facts:
 
 
 RUNNERS = frozenset(["pytest", "py.test", "tox", "nox", "just", "make"])
+TEST_MODULES = ("unittest", "pytest", "tox", "nox", "coverage")
+# Archive subcommands that run a check. Other archive calls (phase entry, handoff
+# writes, sweeps) verify nothing, so they never count as a test run.
+VERIFY_SUBCOMMANDS = frozenset(["repro-rerun"])
 PYTHON = re.compile(r"^python[\d.]*$")
 
 
+def _archive_runs(args: list[str]) -> bool:
+    sub = next((word for word in args if not word.startswith("-")), "")
+    return sub in VERIFY_SUBCOMMANDS
+
+
 def runs_tests(argv: list[str]) -> bool:
-    """Does this command run a test runner or a script (a repro script, a skill archive)?"""
+    """Does this command run a test runner, a repro script, or a verifying archive call?"""
     if not argv:
         return False
     name = _basename(argv[0])
-    if name in RUNNERS or name.endswith(".pyz"):
+    if name.endswith(".pyz"):
+        return _archive_runs(argv[1:])
+    if name in RUNNERS:
         return True
+    if name == "coverage":
+        return "run" in argv[1:2]
     if name == "uv":
         return "run" in argv[1:3]
+    if name == "uvx":
+        return runs_tests(argv[1:])
     if not PYTHON.match(name):
         return False
     i = 1
@@ -709,11 +725,13 @@ def runs_tests(argv: list[str]) -> bool:
         word = argv[i]
         if word == "-m":
             module = argv[i + 1] if i + 1 < len(argv) else ""
-            return module.split(".")[0] in ("unittest", "pytest", "tox", "nox")
+            return module.split(".")[0] in TEST_MODULES
         if word == "-c" or word == "-":
             return False
         if word.startswith("-"):
             i += 2 if word in ("-W", "-X") else 1
+        elif word.endswith(".pyz"):
+            return _archive_runs(argv[i + 1 :])
         else:
             return True
     return False
@@ -991,6 +1009,9 @@ def _same_path(root: str, path: str, rel: str) -> bool:
 def inside_rel(ws: Workspace, path: str) -> Optional[str]:
     """Workspace-relative form of a write target, or None when it lies outside the
     workspace root, in a skipped runtime directory, or in a dot directory."""
+    # A shell variable, a command substitution, or `~` hides the real location.
+    if "$" in path or "`" in path or path.startswith("~"):
+        return None
     if ws.root:
         full = path if path.startswith("/") else posixpath.join(ws.root, path)
         rel = posixpath.relpath(posixpath.normpath(full), ws.root)
@@ -1468,7 +1489,9 @@ def rule_source_without_test(ws: Workspace, fails: set[str]) -> None:
     for rel, path in ws.output.items():
         if not is_py(rel) or not ws.ast_changed(rel):
             continue
-        if is_init(rel) and trivial_init(read_text(path)):
+        # A package marker never proves a test; a source marker counts only when it
+        # holds executable logic.
+        if is_init(rel) and (is_test(rel) or trivial_init(read_text(path))):
             continue
         (tests if is_test(rel) else source).append(rel)
     if source and not tests:
@@ -1504,9 +1527,10 @@ def rule_unverified_ok(
 
 def run_unittests(
     root: Path, timeout: float = 8, deadline: Optional[float] = None
-) -> bool:
-    """Run unittest discovery in `root`; True when it passes.
+) -> Optional[bool]:
+    """Run unittest discovery in `root`: True passes, False fails, None is unknown.
 
+    None means a timeout, no time left before `deadline`, or a start error.
     The run is bounded: the child gets its own session, its output is captured,
     and the whole process group is killed at the deadline or on exit. A shared
     `deadline` (a `time.monotonic()` value) caps several runs together.
@@ -1514,7 +1538,7 @@ def run_unittests(
     if deadline is not None:
         timeout = min(timeout, deadline - time.monotonic())
         if timeout <= 0:
-            return False
+            return None
     proc: Optional[subprocess.Popen[bytes]] = None
     try:
         proc = subprocess.Popen(
@@ -1529,10 +1553,10 @@ def run_unittests(
         try:
             proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
-            return False
+            return None
         return proc.returncode == 0
     except OSError:
-        return False
+        return None
     finally:
         if proc is not None:
             # SIGKILL fails only when the group already exited or is not ours.

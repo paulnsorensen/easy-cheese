@@ -130,11 +130,13 @@ if any(
 DEADLINE = time.monotonic() + 8
 has_suite = Path("output/tests").is_dir()
 suite_ok = None
+suite_ran = False
 if has_suite and any(
     is_py(rel) and workspace.raw_changed(rel) for rel in workspace.output
 ):
-    suite_ok = run_unittests(Path("output"), deadline=DEADLINE)
-    if not suite_ok:
+    suite_ok, suite_ran = run_unittests(Path("output"), deadline=DEADLINE), True
+    # A timeout fails closed: an unknown output suite is not a passing one.
+    if suite_ok is not True:
         failures.add("tests-fail")
 
 # Correction exemption: a fix to a failing fixture suite may change source with no
@@ -142,11 +144,11 @@ if has_suite and any(
 # fixture tree's unittest suite fails and the output suite passes. Pasteurize keeps
 # the strict rule, since a diagnosed bug needs its own regression test.
 if "source-without-test" in failures and has_suite:
-    if suite_ok is None:
+    if not suite_ran:
         suite_ok = run_unittests(Path("output"), deadline=DEADLINE)
-    # No time left means the fixture suite is unknown, not failing: keep the failure.
-    if suite_ok and DEADLINE - time.monotonic() > 1:
-        if not run_unittests(Path("."), deadline=DEADLINE):
-            failures.discard("source-without-test")
+    # Only a fixture suite that ran and failed proves the correction. A timeout or
+    # no time left leaves it unknown, so the failure stays.
+    if suite_ok is True and run_unittests(Path("."), deadline=DEADLINE) is False:
+        failures.discard("source-without-test")
 
 emit(failures)

@@ -1757,6 +1757,9 @@ def test_press_new_code_file_in_the_workspace_fails(tmp_path: Path, step: Step) 
         ("write", "/tmp/scratch/helper.py"),
         ("write", ".cheese/press/report.md"),
         ("write", "tests/test_new.py"),
+        ("write", "$tmp/probe.py"),
+        ("shell", "printf x > ~/scratch/probe.py"),
+        ("shell", 'tmp=$(mktemp -d); printf x > "$tmp/probe.py"'),
     ],
 )
 def test_press_allowed_writes_pass(tmp_path: Path, step: Step) -> None:
@@ -1800,9 +1803,12 @@ def test_json_quoted_status_ok_is_a_claim(tmp_path: Path, skill: str) -> None:
         "pytest -q",
         "python3 repro.py",
         "uv run pytest tests",
+        "uvx pytest",
         "just test",
-        "tools/check.pyz run",
         "python3 -m unittest",
+        "python3 -m coverage run -m unittest",
+        ".agents/skills/pasteurize/scripts/pasteurize.pyz repro-rerun --runs 3 -- python3 r.py",
+        "python3 .agents/skills/pasteurize/scripts/pasteurize.pyz repro-rerun -- python3 r.py",
     ],
 )
 def test_a_test_runner_step_verifies_the_claim(
@@ -1813,12 +1819,58 @@ def test_a_test_runner_step_verifies_the_claim(
 
 
 @pytest.mark.parametrize("skill", TESTED)
-@pytest.mark.parametrize("command", ["ls", "python3 -c 'print(1)'", "git status"])
+@pytest.mark.parametrize(
+    "command",
+    [
+        "ls",
+        "python3 -c 'print(1)'",
+        "git status",
+        "tools/check.pyz run",
+        "python3 .agents/skills/press/scripts/press.pyz write-handoff-artifact --slug x",
+        ".agents/skills/press/scripts/press.pyz wheypoint-resolve --ref x",
+        "python3 .agents/skills/pasteurize/scripts/pasteurize.pyz debug-tag-sweep",
+        "uvx ruff check .",
+    ],
+)
 def test_a_non_runner_step_does_not_verify_the_claim(
     tmp_path: Path, skill: str, command: str
 ) -> None:
     steps = [("write", TEST_PATH), ("shell", command), OK]
     check(tmp_path, skill, clean(skill).but(steps=steps), {"unverified-ok"})
+
+
+@pytest.mark.parametrize("skill", WITH_SOURCE)
+def test_a_test_package_marker_is_not_a_test_change(tmp_path: Path, skill: str) -> None:
+    marker = "import sys\n\nsys.path.insert(0, '.')\n"
+    steps = (("write", SRC_PATH), ("write", "tests/__init__.py"), VERIFY, OK)
+    scn = Scn(FILES, {SRC_PATH: PRICING_NEW, "tests/__init__.py": marker}, steps)
+    check(tmp_path, skill, scn, {"source-without-test"})
+
+
+def load_common() -> ModuleType:
+    path = REPO_ROOT / "scripts" / "journey_gates" / "common.py"
+    spec = importlib.util.spec_from_file_location("journey_gates_common", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_run_unittests_reports_a_timeout_as_unknown(tmp_path: Path) -> None:
+    common = load_common()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "__init__.py").write_text("")
+    (tmp_path / "tests" / "test_slow.py").write_text(
+        "import time\nimport unittest\n\n\nclass T(unittest.TestCase):\n"
+        "    def test_slow(self):\n        time.sleep(5)\n"
+    )
+    assert common.run_unittests(tmp_path, timeout=0.5) is None
+    assert common.run_unittests(tmp_path, deadline=time.monotonic() - 1) is None
+    (tmp_path / "tests" / "test_slow.py").write_text(
+        "import unittest\n\n\nclass T(unittest.TestCase):\n"
+        "    def test_fails(self):\n        self.assertEqual(1, 2)\n"
+    )
+    assert common.run_unittests(tmp_path) is False
 
 
 def test_press_claim_without_any_run_fails(tmp_path: Path) -> None:
