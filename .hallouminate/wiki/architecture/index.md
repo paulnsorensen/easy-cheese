@@ -6,6 +6,7 @@
 - [bundle-command-dispatch](./bundle-command-dispatch.md) — Bundle command dispatch
 - [handoff-preamble-grammar](./handoff-preamble-grammar.md) — Handoff preamble grammar
 - [hard-cheese-gate-contract](./hard-cheese-gate-contract.md) — Hard-cheese gate contract
+- [journey-eval-gates](./journey-eval-gates.md) — Journey eval gates
 - [plate-runtime-contract](./plate-runtime-contract.md) — Plate runtime contract
 - [publication-gateway-invariants](./publication-gateway-invariants.md) — Publication gateway invariants
 - [pyz-bundling-pipeline](./pyz-bundling-pipeline.md) — Pyz bundling pipeline
