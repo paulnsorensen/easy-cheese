@@ -27,7 +27,10 @@ Criteria that restate report sections or volunteer a statement that `SKILL.md` d
 
 ## Gate summary
 
-The journey gate (`journey-gates.json`, press rows) fails a run when any of these happens.
+The compiled journey gate is `kinds.journey.argv` in `autoimprove.json`.
+The compiler builds it from `scripts/journey_gates/press.py` and the shared gate code.
+`journey-gates.json` holds recorded fixtures that replay against this gate.
+The gate fails a run when any of these happens.
 
 | Rule | Fails the run when |
 |---|---|

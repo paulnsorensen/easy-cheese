@@ -6,7 +6,7 @@ Edit the sources, then run the compiler. `tests/python/test_journey_gates.py` fa
 
 ## Why the sources live outside `skills/`
 
-- The bundle doctrine forbids hand-written Python under `skills/` (see [[architecture/skill-python-bundle-doctrine]]).
+- The bundle doctrine forbids hand-written Python under `skills/` (see [skill-python-bundle-doctrine](./skill-python-bundle-doctrine.md)).
 - skillz also accepts a `gate` file under `evals/gates/`, but that file would be Python under `skills/`.
 - Inline `argv` keeps the doctrine and still gives the sources lint, type checks, and unit tests.
 - `common.py` holds the shared code. Each skill module imports it inside a `# gate:strip-begin` / `# gate:strip-end` block, which the compiler drops. The compiler exits 2 on an unpaired marker or CRLF.
