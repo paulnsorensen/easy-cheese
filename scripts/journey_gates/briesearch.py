@@ -47,7 +47,12 @@ def in_place_targets(command: str) -> list[str]:
         return []
     found: list[str] = []
     for argv in parsed:
-        if _basename(argv[0]) in IN_PLACE and any(re.match(r"^-\w*i", w) for w in argv[1:]):
+        name = _basename(argv[0])
+        if name in IN_PLACE and any(
+            re.match(r"^-\w*i", w)
+            or (name == "sed" and re.fullmatch(r"--in-place(?:=.*)?", w))
+            for w in argv[1:]
+        ):
             found.extend([w for w in argv[1:] if not w.startswith("-")][1:])
     return found
 

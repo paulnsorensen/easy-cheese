@@ -9,6 +9,7 @@ The shared harness lives in `test_journey_gates.py`.
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -67,6 +68,16 @@ def test_cheese_visible_writes_fail(
     tmp_path: Path, step: tuple[str, str], out: dict[str, Any], fails: set[str]
 ) -> None:
     check(tmp_path, "cheese", CHEESE_CLEAN.but(out=out, then=[step]), fails)
+
+
+@pytest.mark.parametrize("flag", ["--in-place", "--in-place=.bak"])
+def test_cheese_sed_long_in_place_fails(tmp_path: Path, flag: str) -> None:
+    check(tmp_path, "cheese", CHEESE_CLEAN.but(then=[("shell", f"sed {flag} 's/a/b/' src/tail.py")]), {"shell-file-write"})
+
+
+@pytest.mark.parametrize("command", ["sed 's/a/b/' src/tail.py", "perl --in-place 's/a/b/' src/tail.py"])
+def test_cheese_nonmutating_sed_and_perl_long_flag_pass(tmp_path: Path, command: str) -> None:
+    check(tmp_path, "cheese", CHEESE_CLEAN.but(then=[("shell", command)]))
 
 
 @pytest.mark.parametrize(
@@ -178,6 +189,46 @@ def test_briesearch_write_and_shell_rules(
     tmp_path: Path, step: tuple[str, str], out: dict[str, Any], fails: set[str]
 ) -> None:
     check(tmp_path, "briesearch", BRIE_CLEAN.but(out=out, then=[step]), fails)
+
+
+@pytest.mark.parametrize("flag", ["--in-place", "--in-place=.bak"])
+def test_briesearch_sed_long_in_place_fails(tmp_path: Path, flag: str) -> None:
+    check(tmp_path, "briesearch", BRIE_CLEAN.but(then=[("shell", f"sed {flag} 's/a/b/' src/app.py")]), {"source-written"})
+
+
+@pytest.mark.parametrize("command", ["sed 's/a/b/' src/app.py", "perl --in-place 's/a/b/' src/app.py"])
+def test_briesearch_nonmutating_sed_and_perl_long_flag_pass(tmp_path: Path, command: str) -> None:
+    check(tmp_path, "briesearch", BRIE_CLEAN.but(then=[("shell", command)]))
+
+
+@pytest.mark.parametrize(
+    "alias_command",
+    [
+        "git -c alias.x='!git x' x",
+        "git -c alias.x='!git y' -c alias.y='!git x' x",
+    ],
+)
+@pytest.mark.parametrize("shape", SHAPES)
+def test_recursive_git_alias_keeps_later_facts(tmp_path: Path, alias_command: str, shape: str) -> None:
+    scn = CHEESE_CLEAN.but(then=[
+        (
+            "shell",
+            "git -c alias.p='!git push origin HEAD' p; "
+            + alias_command
+            + "; gh pr create --fill; echo x > NOTES.md",
+        ),
+    ])
+    ws = Path(tempfile_dir(tmp_path))
+    from tests.python.test_journey_gates import build
+
+    done = subprocess.run(contract_argv("cheese"), cwd=build(ws, scn, shape), capture_output=True, text=True, timeout=3, check=False)
+    assert done.returncode == 0, done.stderr
+    assert json.loads(done.stdout) == {"score": 0, "fails": ["git-push", "open-pr", "shell-redirect-write"]}
+
+
+def test_repeated_finite_git_alias_keeps_publication_fact(tmp_path: Path) -> None:
+    scn = CHEESE_CLEAN.but(then=[("shell", "git -c alias.p='!git push origin HEAD' p; git p")])
+    check(tmp_path, "cheese", scn, {"git-push"})
 
 
 @pytest.mark.parametrize(

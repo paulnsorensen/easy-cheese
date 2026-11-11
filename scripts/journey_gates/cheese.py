@@ -66,7 +66,11 @@ def file_targets(argv: list[str]) -> list[str]:
     args = [word for word in argv[1:] if not word.startswith("-")]
     if name in FILE_COMMANDS:
         return args[-1:] if name == "cp" else args
-    if name in IN_PLACE and any(re.match(r"^-\w*i", word) for word in argv[1:]):
+    if name in IN_PLACE and any(
+        re.match(r"^-\w*i", word)
+        or (name == "sed" and re.fullmatch(r"--in-place(?:=.*)?", word))
+        for word in argv[1:]
+    ):
         return args[1:]
     return []
 

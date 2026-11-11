@@ -718,6 +718,7 @@ def _scan(
 ) -> None:
     _record_aliases(parsed, aliases)
     queue = list(parsed)
+    expanded_aliases: set[str] = set()
     last_write = -1
     ran_after = False
     for position, (argv, redirs) in enumerate(queue):
@@ -732,7 +733,8 @@ def _scan(
                 sub, shell_text = _resolve_alias(_git_subcommand(argv)[0], aliases)
                 if sub:
                     facts.git.add(sub)
-                if shell_text:
+                if shell_text and shell_text not in expanded_aliases:
+                    expanded_aliases.add(shell_text)
                     queue.extend(_commands(shell_text, 1))
             elif name == "gh" and _gh_publishes(argv):
                 facts.pr = True
@@ -1448,8 +1450,10 @@ def run_unittests(root: Path, timeout: int = 8) -> bool:
             try:
                 os.killpg(proc.pid, signal.SIGKILL)
             except OSError:
+                # The child can exit before cleanup kills its process group.
                 pass
             try:
                 proc.communicate(timeout=2)
             except (subprocess.TimeoutExpired, OSError, ValueError):
+                # Cleanup is best effort after the verdict is fixed.
                 pass
