@@ -99,10 +99,7 @@ def _rg_files(roots: list[Path], glob: str) -> list[Path] | None:
     existing = [str(root) for root in roots if root.exists()]
     if not existing:
         return []
-    # The same prune set as the walk, so both backends return the same hits.
-    prune_globs = [
-        arg for name in sorted(_PRUNE_DIRS) for arg in ("-g", f"!**/{name}/**")
-    ]
+    prune_globs = [arg for name in sorted(_PRUNE_DIRS) for arg in ("-g", f"!{name}")]
     try:
         completed = subprocess.run(
             [
