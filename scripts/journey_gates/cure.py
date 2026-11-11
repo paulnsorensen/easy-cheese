@@ -59,10 +59,12 @@ def unittest_results(root: Path, timeout: int = 6) -> Optional[dict[str, str]]:
             try:
                 os.killpg(proc.pid, signal.SIGKILL)
             except OSError:
+                # The group may already be gone. Cleanup must not change the test outcome.
                 pass
             try:
                 proc.communicate(timeout=2)
             except (subprocess.TimeoutExpired, OSError, ValueError):
+                # Reaping is best effort and must not replace a completed or unknown outcome.
                 pass
 
 

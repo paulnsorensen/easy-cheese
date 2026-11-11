@@ -195,6 +195,31 @@ def test_claude_fixture_gives_the_same_verdict_as_codex(tmp_path: Path, skill: s
     assert run_program(contract_argv(skill), ws) == {"score": fixture["score"], "fails": fixture["fails"]}
 
 
+@pytest.mark.parametrize(
+    ("break_passing_test", "expected"),
+    [(False, {"score": 1, "fails": []}), (True, {"score": 0, "fails": ["test-regressed"]})],
+)
+def test_cure_cleanup_preserves_completed_test_outcomes(
+    tmp_path: Path, break_passing_test: bool, expected: dict[str, Any]
+) -> None:
+    fixture = next(fx for fx in load_fixtures("cure") if fx["name"] == "cure-pass-apply")
+    ws = materialize(tmp_path, "cure", fixture, fixture["trace"])
+    if break_passing_test:
+        source = (ws / "output/src/shop.py").read_text(encoding="utf-8")
+        _put(ws, "output/src/shop.py", source.replace("return int(text.strip())", "return 0"))
+    assert run_program(contract_argv("cure"), ws) == expected
+
+
+def test_cure_timed_out_test_remains_unknown_and_bounded(tmp_path: Path) -> None:
+    fixture = next(fx for fx in load_fixtures("cure") if fx["name"] == "cure-pass-apply")
+    ws = materialize(tmp_path, "cure", fixture, fixture["trace"])
+    source = (ws / "output/src/shop.py").read_text(encoding="utf-8")
+    _put(ws, "output/src/shop.py", "import time\ntime.sleep(30)\n" + source)
+    started = time.monotonic()
+    assert run_program(contract_argv("cure"), ws) == {"score": 1, "fails": []}
+    assert time.monotonic() - started < SANDBOX_SECONDS / 2
+
+
 @pytest.mark.parametrize(("skill", "fixture"), _fixture_params())
 def test_fixture_schema(skill: str, fixture: dict[str, Any]) -> None:
     assert REQUIRED_KEYS <= set(fixture) <= FIXTURE_KEYS
