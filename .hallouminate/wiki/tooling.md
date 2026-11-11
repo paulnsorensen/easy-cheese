@@ -93,6 +93,58 @@ gate.
   operation, and report the precision loss.
 - **Workflow skills stay portable.** There is no repo-wide MCP requirement.
 
+## Development-only prompt optimization
+
+The prompt laboratory is an experimental repository tool, not an installed skill.
+It uses direct GEPA to optimize Markdown through a custom evaluator.
+DSPy is not required because the candidate is text, not a DSPy program.[^prompt-lab-fit]
+The scripts and optional development dependencies stay outside every skill bundle.[^prompt-lab-code]
+
+The evaluator checks decision-state preservation across anonymized conversation turns.
+It is a behavioral proxy, not proof that an installed agent executes tools correctly.
+Training and optimizer-visible validation use separate scenario families.
+A third holdout remains outside optimization and requires an explicit evaluation run.
+Generated candidates require human review and never update installed prompts automatically.[^prompt-lab-code]
+
+The agent laboratory provides two outcome-graded runners.
+The legacy runner uses disposable fixture copies and mutation-based tests.
+It exports a candidate only when the best candidate strictly beats the seed on train plus validation.[^agent-lab-code]
+
+### Agent Lab: bounded optimization on selected repositories
+
+Agent Lab does not select repositories or run a continuous optimizer.
+The operator selects `tasks mine --repo`, supplies a task file, and starts a bounded `optimize --runner tilth` invocation.
+The tool exports candidates for review; it never changes installed skills automatically.[^agent-lab-code]
+
+Mining reads supported GitHub author metadata and preserves trusted-author defaults, SHA pins, and test-only patches.
+The current Tilth checker accepts pytest tasks and proves failure at the base and success at the fixed head.
+An explicit `--lint-command` preserves the repository's lint argument vector.
+Absent lint evidence fails the erosion guard; a no-op command is not valid lint evidence.[^agent-lab-mine]
+
+Each Cook candidate builds current Wedge archives in a disposable worktree.
+The plugin registers Cook and carries companion skill resources, including Press, Age, Cure, and Plate.
+Candidate changes stay inside Cook's existing allowlist.[^agent-lab-build]
+
+Tilth evaluations require exact, unique task coverage and valid diff and lint measurements.
+Train and validation stay separate from the sealed holdout.
+Stable task IDs separate GEPA's training and validation cache entries.
+Split-local numeric IDs can reuse training scores as validation evidence.
+Reflection uses authenticated `claude -p`, with tools disabled, a per-call dollar cap, and a finite timeout.
+Reflection and benchmark evaluations share `--max-runs`; exhaustion writes partial results and returns a non-success status.[^agent-lab-code]
+
+Promotion evaluates the sealed holdout on Haiku, Sonnet, and Opus.
+It requires non-regressing accuracy on every model, non-dominance on both objectives, and at least one strict improvement.
+Source checks and offline tests do not establish live model quality or savings.[^agent-lab-graduate]
+
+[^prompt-lab-fit]: https://github.com/gepa-ai/optimize-anything-artifact; https://github.com/stanfordnlp/dspy/blob/main/docs/docs/diving-deeper/gepa-in-depth.md (checked 2026-09-24).
+[^prompt-lab-code]: scripts/prompt_lab.py; requirements/prompt-lab.txt; tests/fixtures/prompt_lab/dataset.json; docs/prompt-lab.md.
+[^agent-lab-code]: scripts/agent_lab.py:274-409,955-1131; tests/fixtures/prompt_lab/agent_tasks.json; tests/python/test_agent_lab.py; docs/prompt-lab.md.
+[^agent-lab-mine]: scripts/agent_lab_mine.py:291-334; docs/prompt-lab.md:109-123.
+[^agent-lab-build]: scripts/agent_lab_candidate.py:23-29,210-259; tests/python/test_agent_lab_candidate.py.
+[^agent-lab-graduate]: scripts/agent_lab_scoring.py:105-134,157-220; scripts/agent_lab_tilth.py; docs/prompt-lab.md:136-159.
+
+_Source: PR #728 repair contract and implementation · Updated: 2026-11-11 · Supersedes: fixture-only Agent Lab runtime description from 2026-09-25._
+
 ## `.pyz` archives
 
 Each Python skill ships one executable `skills/<skill>/scripts/<skill>.pyz`.

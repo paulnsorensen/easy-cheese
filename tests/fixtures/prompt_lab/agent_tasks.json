@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "provenance": "Original synthetic fixture; each task injects one bug into repo/calc.py and its unit test proves the fix.",
+  "repo": "repo",
+  "tasks": [
+    {
+      "id": "train-mean-divisor",
+      "family": "mean",
+      "split": "train",
+      "capability": "fix",
+      "prompt": "The mean() helper in calc.py returns the wrong value for every non-empty list. Find the arithmetic error and fix it. Run tests/test_calc.py to confirm.",
+      "mutations": [
+        {"file_path": "calc.py", "original": "return sum(values) / len(values)", "mutated": "return sum(values) / (len(values) - 1)"}
+      ],
+      "test_command": ["python3", "-m", "unittest", "-q", "tests.test_calc.MeanTests"],
+      "forbidden_strings": ["I cannot", "I don't have access"]
+    },
+    {
+      "id": "validation-clamp-bounds",
+      "family": "clamp",
+      "split": "validation",
+      "capability": "fix",
+      "prompt": "clamp() in calc.py no longer limits values to the requested range. Fix the bounds logic without changing the function signature. Run tests/test_calc.py to confirm.",
+      "mutations": [
+        {"file_path": "calc.py", "original": "return max(low, min(value, high))", "mutated": "return min(low, max(value, high))"}
+      ],
+      "test_command": ["python3", "-m", "unittest", "-q", "tests.test_calc.ClampTests"],
+      "forbidden_strings": ["I cannot", "I don't have access"]
+    },
+    {
+      "id": "holdout-median-even",
+      "family": "median",
+      "split": "holdout",
+      "capability": "fix",
+      "prompt": "median() in calc.py is wrong for lists with an even number of items. Fix the middle-element selection. Run tests/test_calc.py to confirm.",
+      "mutations": [
+        {"file_path": "calc.py", "original": "return (ordered[middle - 1] + ordered[middle]) / 2", "mutated": "return (ordered[middle] + ordered[middle + 1]) / 2"}
+      ],
+      "test_command": ["python3", "-m", "unittest", "-q", "tests.test_calc.MedianTests"],
+      "forbidden_strings": ["I cannot", "I don't have access"]
+    }
+  ]
+}

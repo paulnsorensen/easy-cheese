@@ -7,8 +7,11 @@ the next session does not repeat the search. It then breaks the problem into
 self-contained per-skill pieces and records the design intent for the pieces
 that come last (`/mold`, skill routing).
 
-Status: landscape and intent. No design decision is locked. PR #722 is the
-only code.
+Status: historical landscape and intent as of 2026-09-26.
+The PR #728 repair now includes #722's code and a bounded Tilth-backed Cook optimizer.
+The current contract uses Haiku, Sonnet, and Opus for promotion, not Fable.
+See [Agent Lab in Tooling](./tooling.md#agent-lab-bounded-optimization-on-selected-repositories) for repository selection, guards, and runtime behavior.
+The tables and suggested order below preserve the original research context; they are not current runtime instructions.
 
 ## The one-line answer
 
@@ -167,4 +170,4 @@ Sep 23 summary cites. Locate it by date if needed.
    manual and budgeted.
 7. `/mold` and routing last.
 
-_Source: deployment reference correction for [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729) · Updated: 2026-09-28 · Supersedes: extensionless launcher references from the initial Wedge proposal._
+_Source: 2026-09-26 research, PR #729 deployment correction, and PR #728 repair contract · Updated: 2026-11-11 · Supersedes: the claim that #722 is the only code and the historical Fable promotion requirement._
