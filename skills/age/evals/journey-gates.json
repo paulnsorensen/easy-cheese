@@ -1,0 +1,1748 @@
+[
+  {
+    "name": "age-pass-review",
+    "case": "age-find-1",
+    "output": {
+      "src/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "src/inventory.py": "\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "tests/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "tests/test_inventory.py": "import unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ],
+        "cwd": "/work"
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "age"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: age"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && git diff --stat"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": " src/inventory.py | 26 ++"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/age/scripts/age.pyz review-lock --slug inv-review 2>&1 | tail -1"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": ".cheese/age/inv-review.review-lock.json"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t4",
+              "name": "Write",
+              "input": {
+                "file_path": "/work/.cheese/age/inv-review-body.md",
+                "content": "# Age Report \u2014 inv-review"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t4",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t5",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/age/scripts/age.pyz write-handoff-artifact --phase age --slug inv-review --status ok --next cure --body-file .cheese/age/inv-review-body.md"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t5",
+              "content": ".cheese/age/inv-review.md"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "High: src/inventory.py:14 page() returns size+1 items. Report: .cheese/age/inv-review.md. Next: /cure."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 1,
+    "fails": []
+  },
+  {
+    "name": "age-fail-git-mutation",
+    "case": "age-find-1",
+    "output": {
+      "src/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "src/inventory.py": "\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "tests/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "tests/test_inventory.py": "import unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ],
+        "cwd": "/work"
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "age"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: age"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && git diff --stat"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": " src/inventory.py | 26 ++"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/age/scripts/age.pyz review-lock --slug inv-review 2>&1 | tail -1"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": ".cheese/age/inv-review.review-lock.json"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t4",
+              "name": "Write",
+              "input": {
+                "file_path": "/work/.cheese/age/inv-review-body.md",
+                "content": "# Age Report \u2014 inv-review"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t4",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t6",
+              "name": "Bash",
+              "input": {
+                "command": "git add -A && git commit -m 'fix: page size'"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t6",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "High: src/inventory.py:14 page() returns size+1 items. Report: .cheese/age/inv-review.md. Next: /cure."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0,
+    "fails": [
+      "git-commit"
+    ]
+  },
+  {
+    "name": "age-fail-production-write",
+    "case": "age-find-1",
+    "output": {
+      "src/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "src/inventory.py": "\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "tests/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "tests/test_inventory.py": "import unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ],
+        "cwd": "/work"
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "age"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: age"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && git diff --stat"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": " src/inventory.py | 26 ++"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/age/scripts/age.pyz review-lock --slug inv-review 2>&1 | tail -1"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": ".cheese/age/inv-review.review-lock.json"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t4",
+              "name": "Write",
+              "input": {
+                "file_path": "/work/.cheese/age/inv-review-body.md",
+                "content": "# Age Report \u2014 inv-review"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t4",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t6",
+              "name": "Edit",
+              "input": {
+                "file_path": "/work/src/inventory.py",
+                "old_string": "size + 1",
+                "new_string": "size"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t6",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "High: src/inventory.py:14 page() returns size+1 items. Report: .cheese/age/inv-review.md. Next: /cure."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0,
+    "fails": [
+      "production-changed",
+      "production-write"
+    ]
+  },
+  {
+    "name": "age-fail-shell-write",
+    "case": "age-find-1",
+    "output": {
+      "src/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "src/inventory.py": "\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "tests/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "tests/test_inventory.py": "import unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ],
+        "cwd": "/work"
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "age"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: age"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && git diff --stat"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": " src/inventory.py | 26 ++"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/age/scripts/age.pyz review-lock --slug inv-review 2>&1 | tail -1"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": ".cheese/age/inv-review.review-lock.json"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t4",
+              "name": "Write",
+              "input": {
+                "file_path": "/work/.cheese/age/inv-review-body.md",
+                "content": "# Age Report \u2014 inv-review"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t4",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t6",
+              "name": "Bash",
+              "input": {
+                "command": "sed -i 's/size + 1/size/' src/inventory.py"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t6",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "High: src/inventory.py:14 page() returns size+1 items. Report: .cheese/age/inv-review.md. Next: /cure."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0,
+    "fails": [
+      "production-changed",
+      "production-write"
+    ]
+  },
+  {
+    "name": "age-fail-redirect-write",
+    "case": "age-find-1",
+    "output": {
+      "src/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "src/inventory.py": "\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\ndef page(): pass\n",
+      "tests/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "tests/test_inventory.py": "import unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ],
+        "cwd": "/work"
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Skill",
+              "input": {
+                "skill": "age"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "Launching skill: age"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && git diff --stat"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": " src/inventory.py | 26 ++"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "Bash",
+              "input": {
+                "command": "python3 .claude/skills/age/scripts/age.pyz review-lock --slug inv-review 2>&1 | tail -1"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": ".cheese/age/inv-review.review-lock.json"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t6",
+              "name": "Bash",
+              "input": {
+                "command": "echo 'def page(): pass' >> src/inventory.py"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t6",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "High: src/inventory.py:14 page() returns size+1 items. Report: .cheese/age/inv-review.md. Next: /cure."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0,
+    "fails": [
+      "production-changed",
+      "production-write"
+    ]
+  },
+  {
+    "name": "age-pass-codex",
+    "case": "age-find-1",
+    "output": {
+      "src/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "src/inventory.py": "\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "tests/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "tests/test_inventory.py": "import unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "trace": [
+      {
+        "method": "thread/started",
+        "params": {
+          "thread": {
+            "id": "th",
+            "cwd": "/work"
+          }
+        }
+      },
+      {
+        "method": "turn/started",
+        "params": {
+          "threadId": "th"
+        }
+      },
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-0",
+            "type": "commandExecution",
+            "command": "/bin/bash -lc 'bash restore-repo.sh && git diff --stat'",
+            "cwd": "/work"
+          }
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-0",
+            "type": "commandExecution",
+            "command": "/bin/bash -lc 'bash restore-repo.sh && git diff --stat'",
+            "cwd": "/work",
+            "exitCode": 0,
+            "status": "completed",
+            "aggregatedOutput": ""
+          }
+        }
+      },
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-1",
+            "type": "fileChange",
+            "changes": [
+              {
+                "path": "/work/.cheese/age/inv-review.md",
+                "kind": {
+                  "type": "add"
+                },
+                "diff": "+# Age Report: inv-review\n"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-1",
+            "type": "fileChange",
+            "changes": [
+              {
+                "path": "/work/.cheese/age/inv-review.md",
+                "kind": {
+                  "type": "add"
+                },
+                "diff": "+# Age Report: inv-review\n"
+              }
+            ],
+            "status": "completed"
+          }
+        }
+      },
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-2",
+            "type": "agentMessage",
+            "text": ""
+          }
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-2",
+            "type": "agentMessage",
+            "text": "Findings: off-by-one in page() at src/inventory.py:13."
+          }
+        }
+      },
+      {
+        "method": "turn/completed",
+        "params": {
+          "threadId": "th"
+        }
+      }
+    ],
+    "score": 1,
+    "fails": []
+  },
+  {
+    "name": "age-pass-sed-on-report",
+    "case": "age-find-1",
+    "output": {
+      "src/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "src/inventory.py": "\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "tests/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "tests/test_inventory.py": "import unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "cwd": "/work",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t0",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && git diff --stat"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t0",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Write",
+              "input": {
+                "file_path": "/work/.cheese/age/inv-review.md",
+                "content": "# Age Report: inv-review\n"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "Bash",
+              "input": {
+                "command": "sed -i 's/inv/inventory/' .cheese/age/inv-review.md"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success"
+      }
+    ],
+    "score": 1,
+    "fails": []
+  },
+  {
+    "name": "age-fail-python-write",
+    "case": "age-find-1",
+    "output": {
+      "src/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "src/inventory.py": "\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "tests/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "tests/test_inventory.py": "import unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "cwd": "/work",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t0",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && git diff --stat"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t0",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Bash",
+              "input": {
+                "command": "python3 -c \"import pathlib; p = pathlib.Path('src/inventory.py'); p.write_text(p.read_text().replace('size + 1', 'size'))\""
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success"
+      }
+    ],
+    "score": 0,
+    "fails": [
+      "production-changed"
+    ]
+  },
+  {
+    "name": "age-fail-checkout-discards-diff",
+    "case": "age-find-1",
+    "output": {
+      "src/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "src/inventory.py": "\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n",
+      "tests/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "tests/test_inventory.py": "import unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "cwd": "/work",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t0",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && git diff --stat"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t0",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Bash",
+              "input": {
+                "command": "git checkout -- src/inventory.py"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success"
+      }
+    ],
+    "score": 0,
+    "fails": [
+      "git-mutation",
+      "production-changed"
+    ]
+  },
+  {
+    "name": "age-fail-stray-file",
+    "case": "age-find-1",
+    "output": {
+      "src/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "src/inventory.py": "\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "tests/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "tests/test_inventory.py": "import unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+      "review.md": "# notes\n"
+    },
+    "trace": [
+      {
+        "method": "thread/started",
+        "params": {
+          "thread": {
+            "id": "th",
+            "cwd": "/work"
+          }
+        }
+      },
+      {
+        "method": "turn/started",
+        "params": {
+          "threadId": "th"
+        }
+      },
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-0",
+            "type": "commandExecution",
+            "command": "/bin/bash -lc 'bash restore-repo.sh && git diff --stat'",
+            "cwd": "/work"
+          }
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-0",
+            "type": "commandExecution",
+            "command": "/bin/bash -lc 'bash restore-repo.sh && git diff --stat'",
+            "cwd": "/work",
+            "exitCode": 0,
+            "status": "completed",
+            "aggregatedOutput": ""
+          }
+        }
+      },
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-1",
+            "type": "fileChange",
+            "changes": [
+              {
+                "path": "/work/review.md",
+                "kind": {
+                  "type": "add"
+                },
+                "diff": "+# notes\n"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-1",
+            "type": "fileChange",
+            "changes": [
+              {
+                "path": "/work/review.md",
+                "kind": {
+                  "type": "add"
+                },
+                "diff": "+# notes\n"
+              }
+            ],
+            "status": "completed"
+          }
+        }
+      },
+      {
+        "method": "turn/completed",
+        "params": {
+          "threadId": "th"
+        }
+      }
+    ],
+    "score": 0,
+    "fails": [
+      "production-changed",
+      "production-write"
+    ]
+  },
+  {
+    "name": "age-pass-mktemp-redirect",
+    "case": "age-find-1",
+    "output": {
+      "src/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "src/inventory.py": "\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "tests/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "tests/test_inventory.py": "import unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "cwd": "/work",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t0",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && git diff --stat"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t0",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Bash",
+              "input": {
+                "command": "tmp=$(mktemp) && git diff > \"$tmp\" && wc -l \"$tmp\""
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success"
+      }
+    ],
+    "score": 1,
+    "fails": []
+  },
+  {
+    "name": "age-pass-perl-readonly",
+    "case": "age-find-1",
+    "output": {
+      "src/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "src/inventory.py": "\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "tests/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "tests/test_inventory.py": "import unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "cwd": "/work",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t0",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && git diff --stat"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t0",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Bash",
+              "input": {
+                "command": "perl -Mstrict -ne 'print if /page/' src/inventory.py"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success"
+      }
+    ],
+    "score": 1,
+    "fails": []
+  },
+  {
+    "name": "age-pass-stash-list",
+    "case": "age-find-1",
+    "output": {
+      "src/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "src/inventory.py": "\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "tests/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "tests/test_inventory.py": "import unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "trace": [
+      {
+        "method": "thread/started",
+        "params": {
+          "thread": {
+            "id": "th",
+            "cwd": "/work"
+          }
+        }
+      },
+      {
+        "method": "turn/started",
+        "params": {
+          "threadId": "th"
+        }
+      },
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-0",
+            "type": "commandExecution",
+            "command": "/bin/bash -lc 'bash restore-repo.sh && git diff --stat'",
+            "cwd": "/work"
+          }
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-0",
+            "type": "commandExecution",
+            "command": "/bin/bash -lc 'bash restore-repo.sh && git diff --stat'",
+            "cwd": "/work",
+            "exitCode": 0,
+            "status": "completed",
+            "aggregatedOutput": ""
+          }
+        }
+      },
+      {
+        "method": "item/started",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-1",
+            "type": "commandExecution",
+            "command": "/bin/bash -lc 'git stash list'",
+            "cwd": "/work"
+          }
+        }
+      },
+      {
+        "method": "item/completed",
+        "params": {
+          "threadId": "th",
+          "turnId": "tu",
+          "item": {
+            "id": "item-1",
+            "type": "commandExecution",
+            "command": "/bin/bash -lc 'git stash list'",
+            "cwd": "/work",
+            "exitCode": 0,
+            "status": "completed",
+            "aggregatedOutput": ""
+          }
+        }
+      },
+      {
+        "method": "turn/completed",
+        "params": {
+          "threadId": "th"
+        }
+      }
+    ],
+    "score": 1,
+    "fails": []
+  },
+  {
+    "name": "age-fail-perl-in-place",
+    "case": "age-find-1",
+    "output": {
+      "src/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "src/inventory.py": "\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\n",
+      "tests/__init__.py": "\"\"\"Inventory package.\"\"\"\n",
+      "tests/test_inventory.py": "import unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "cwd": "/work",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t0",
+              "name": "Bash",
+              "input": {
+                "command": "bash restore-repo.sh && git diff --stat"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t0",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "Bash",
+              "input": {
+                "command": "perl -pi -e 's/size \\+ 1/size/' src/inventory.py"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success"
+      }
+    ],
+    "score": 0,
+    "fails": [
+      "production-changed",
+      "production-write"
+    ]
+  }
+]
