@@ -130,3 +130,7 @@
 - 2026-11-01 · affinage:pr-848 · curated · adr/mold-review-canvas-010.md, adr/mold-review-canvas-008.md, adr/index.md · review fixes: moved the requirements, fork-settlement, and phone-pane decisions into amending ADR 010; made `settled_fork_ids` cumulative; named waiting and dependency-error states in the canvas contract.
 - 2026-11-02 · affinage:pr-848 · curated · adr/mold-review-canvas-010.md · the phone shapes minimum now applies to the shape content below the tabs (it measured 106 px at 375x667 and 124 px at 844x390); recomputed test citations.
 - 2026-11-02 · cook:issue-849 · curated · adr/mold-review-canvas-010.md · `review publish` returns non-blocking `warnings` for malformed, missing, open-and-settled, and cyclic fork dependencies and for dropped requirement IDs; it warns and does not reject, so ADR 008 stays true and the browser defence stays testable.
+
+- 2026-11-11 · 8111c6959d89bad8 · merged · tooling.md, skill-optimization-landscape.md · Record PR #728's bounded, operator-selected Agent Lab path, current Wedge builds, strict evidence guards, CLI reflection limits, and Haiku/Sonnet/Opus promotion. Mark the September landscape as historical. Both exact probes rank first; both natural probes rank first.
+
+- 2026-11-11 · 2418fb16099496ae · merged · tooling.md · Record globally unique GEPA task identities to prevent training-cache reuse as validation evidence. Exact probes rank first; natural probes rank first and second. PR #728 remains open. The action `merged` describes wiki ingestion, not a GitHub merge.
