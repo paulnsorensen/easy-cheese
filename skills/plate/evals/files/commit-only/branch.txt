@@ -1,0 +1,21 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/melt-conflict-summary. No PR exists. The user wants a local commit only.
+Required artifacts: none beyond the code change. Quality gate: not yet run; `just check` is the project gate and exits 0 when run.
+
+$ git status --short
+ M src/easy_cheese/skills/melt/summary.py
+ M tests/python/test_melt_summary.py
+?? .cheese/plate/body.md
+?? scratch.log
+?? .env.local
+
+$ git diff --stat
+ src/easy_cheese/skills/melt/summary.py | 22 ++++++++++++++++++----
+ tests/python/test_melt_summary.py      | 31 +++++++++++++++++++++++++++++++
+ 2 files changed, 49 insertions(+), 4 deletions(-)
+
+$ git log --oneline -3
+91c0d2e docs(melt): describe the conflict summary
+5a41b73 fix(melt): treat an empty unmerged-path list as resolved
+c07be12 chore(deps): bump uv lock
+
+The diff adds a conflict-count line to the melt summary and a test for it.

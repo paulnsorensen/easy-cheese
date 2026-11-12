@@ -1,0 +1,16 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/spec-landing. No PR exists for this branch. Mode: auto.
+The user said: "Use one PR." Quality gate: `just check` passed at HEAD (exit 0). Required artifacts: none.
+
+$ git log --oneline main..HEAD
+7f0b3d1 feat(mold): read landing layers in the spec loader
+21c4e88 feat(schemas): add the landing block to the spec schema
+
+$ git diff --name-status --find-renames main...HEAD
+M	src/easy_cheese/skills/mold/spec_loader.py
+M	src/easy_cheese_schemas/spec.py
+M	tests/python/test_spec_loader.py
+
+A caller supplied this pr_plan. It is evidence only:
+{"shape":"stacked_linear","target_branch":"main","groups":[
+ {"branch":"feat/spec-landing-schema","base":"main","title":"feat(schemas): add the landing block","commits":["21c4e88"],"depends_on":[]},
+ {"branch":"feat/spec-landing-loader","base":"feat/spec-landing-schema","title":"feat(mold): read landing layers","commits":["7f0b3d1"],"depends_on":["feat/spec-landing-schema"]}]}

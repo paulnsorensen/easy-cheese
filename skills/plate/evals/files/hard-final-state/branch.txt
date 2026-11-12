@@ -1,0 +1,15 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/queue-backoff. No PR exists. Invocation: /plate --hard. Mode: auto.
+Quality gate: `just check` exits 0 when run. Required artifact: docs/adr/queue-backoff-001.md (tracked, backend tilth).
+
+$ tilth_write ... create docs/adr/queue-backoff-001.md   -> ok, tag 9C21
+$ tilth_read docs/adr/queue-backoff-001.md               -> read-back matches the written text (Decision: capped exponential backoff)
+
+$ git status --short
+ M src/easy_cheese/shared/queue.py
+ M tests/python/test_queue.py
+?? docs/adr/queue-backoff-001.md
+
+Tracked artifact diff digest at the reviewed state: sha256:3f9a61c0d2e47b85
+
+When /hard-cheese runs on the final context it returns:
+{"status":"LOGGED","findings":["queue.py: retry cap constant lacks a unit comment","ADR: consequences section omits the broker restart case"]}

@@ -1,0 +1,18 @@
+Repository: easy-cheese (owner example). Trunk: main. Provider: gh stack, stack-tools status `available`, http_status 200.
+The bottom PR merged on GitHub. GitHub cascaded the stack server-side. The local branches have not synced yet.
+
+$ gh stack view --short
+main
+  feat/a-schema  #601  MERGED
+  feat/b-impl    #602  OPEN
+  feat/c-wiring  #603  OPEN
+
+$ git log --oneline origin/feat/b-impl..feat/b-impl
+(no output)
+$ git log --oneline origin/feat/c-wiring..feat/c-wiring
+(no output)
+
+$ git status --short
+(clean)
+
+No unpublished local commits exist on any stack branch.

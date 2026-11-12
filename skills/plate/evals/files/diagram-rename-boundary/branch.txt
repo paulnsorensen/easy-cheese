@@ -1,0 +1,22 @@
+Repository: easy-cheese. Trunk: main. Branch: refactor/melt-side-pick. No PR exists for this branch.
+Quality gate: `just check` passed at HEAD (exit 0).
+PR template: .github/PULL_REQUEST_TEMPLATE.md with sections What changed / Why / How to verify / Non-obvious changes / Risk / rollout notes / Checklist.
+
+$ git log --oneline main..HEAD
+5d1 refactor(melt): rename conflict_pick to side_pick
+
+$ git diff --stat main...HEAD
+ src/easy_cheese/skills/melt/batch_resolve.py                   | 2 +-
+ src/easy_cheese/skills/melt/commands.py                        | 2 +-
+ .../melt/{conflict_pick.py => side_pick.py}                    | 0
+ tests/python/{test_melt_conflict_pick.py => test_melt_side_pick.py} | 2 +-
+ 4 files changed, 3 insertions(+), 3 deletions(-)
+
+$ git diff --name-status --find-renames main...HEAD
+M	src/easy_cheese/skills/melt/batch_resolve.py
+M	src/easy_cheese/skills/melt/commands.py
+R100	src/easy_cheese/skills/melt/conflict_pick.py	src/easy_cheese/skills/melt/side_pick.py
+R097	tests/python/test_melt_conflict_pick.py	tests/python/test_melt_side_pick.py
+
+The module keeps its package, its public functions, and their signatures.
+The two callers and the test change only their import line. No call order, data flow, or module boundary changes.

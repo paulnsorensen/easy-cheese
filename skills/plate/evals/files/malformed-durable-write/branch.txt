@@ -1,0 +1,13 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/queue-backoff. No PR exists.
+Required artifact: docs/adr/queue-backoff-001.md (tracked, backend tilth). Quality gate: not yet run.
+
+$ tilth_read paths=["docs/adr/queue-backoff-001.md"]
+[docs/adr/queue-backoff-001.md#7F3C]
+1:# ADR 001: Queue backoff
+2:
+3:Status: proposed
+
+$ tilth_write edits=[{"path":"docs/adr/queue-backoff-001.md","tag":"7F3C","ops":[{"op":"replace_text","start":3,"end":3,"old":"Status: proposed","new":"Status: accepted"}]}]
+error: invalid op: replace_text takes only old and new. start and end belong to the replace op. Nothing was written.
+
+The backend is healthy: a tilth_read of the same file succeeds right after the error.

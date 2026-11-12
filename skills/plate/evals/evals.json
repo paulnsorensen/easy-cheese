@@ -4,142 +4,290 @@
     {
       "id": 0,
       "name": "commit-only",
-      "prompt": "Commit these finished changes locally; do not push or open a PR.",
+      "family": "legacy-commit-only",
+      "prompt": "Commit these finished changes locally; do not push or open a PR. Dry run: the state is described in evals/files/commit-only/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write each command you would run, in order, one per line, to output/commands.txt. Write your final report to output/report.md.",
       "expected_output": "Runs final artifact inventory and read-back, then project quality gate, inspects diff, stages named files only, creates a Conventional Commit, verifies status, and stops without asking PR layout or publishing.",
-      "files": []
+      "assertions": [
+        "Does not ask the user any question, including about PR layout or topology.",
+        "output/commands.txt runs `just check` before the first `git commit`, and reads `git status` and the diff before any `git add`.",
+        "Staging names the two modified paths (summary.py and test_melt_summary.py) one by one. No `git add -A`, `git add .`, or `git commit -a` appears, and .env.local, scratch.log, and .cheese/ are never staged.",
+        "Exactly one `git commit` is run. Its subject has the Conventional Commit form type(scope): description, and the command has no --no-verify and no --amend. A `git status` check follows the commit.",
+        "No `git push`, `gh pr create`, or stack command appears, and output/report.md says the run stopped after the local commit."
+      ],
+      "files": ["evals/files/commit-only/branch.txt"]
     },
     {
       "id": 1,
       "name": "cohesive-single-auto-selection",
-      "prompt": "Open a PR for this finished, cohesive feature and its tests.",
+      "family": "legacy-topology",
+      "prompt": "Open a PR for this finished, cohesive feature and its tests. Dry run: the state is described in evals/files/cohesive-single-auto-selection/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
       "expected_output": "Recognizes one cohesive review unit, selects a single PR, and proceeds without asking topology, including under auto.",
-      "files": []
+      "assertions": [
+        "Does not ask the user any question and does not stop for confirmation; output/halt.md does not exist.",
+        "output/plan.json has shape single with exactly one group, based on main, with branch feat/cheese-route-hints and both commits (6ce03f7 and d41b9a2).",
+        "output/pr-1.md contains a line that starts with `Plated as single:` and gives a reason.",
+        "output/pr-1.md has no `Stack: n of m` line and no mermaid stack-order graph, and is at most 40 non-blank lines.",
+        "output/pr-1.md names test_cheese_hints.py as the test that fails before the change, and lists no verification other than `just check` passing."
+      ],
+      "files": ["evals/files/cohesive-single-auto-selection/branch.txt"]
     },
     {
       "id": 2,
       "name": "stack-recommendation-choice",
-      "prompt": "Open a PR for a change with a shared protocol layer, dependent implementation, and final wiring.",
+      "family": "legacy-topology",
+      "prompt": "Open a PR for a change with a shared protocol layer, dependent implementation, and final wiring. Dry run: the state is described in evals/files/stack-recommendation-choice/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
       "expected_output": "Names the independently reviewable ordered layers, decides stacked_linear without asking, and states the decision as one 'Plated as' line before any commit or branch-layout mutation.",
-      "files": []
+      "assertions": [
+        "Does not ask the user any question and does not stop for confirmation; output/halt.md does not exist.",
+        "output/plan.json has shape stacked_linear with exactly three groups in the order protocol schema (0d18e5f), writer (4be7c21), wiring (a93f1d0). The first group is based on main, each later group is based on the previous group's branch and depends_on it, and each commit sits in exactly one group.",
+        "Each output/pr-<n>.md has exactly one line that starts with `Plated as stacked_linear:` and gives a reason that names the dependency order.",
+        "Each PR body has a `Stack: <n> of 3` line, and at least the first body has a mermaid flowchart of the three stacked PRs.",
+        "No group is single or orthogonal_flat, and the plan does not merge the layers into one group."
+      ],
+      "files": ["evals/files/stack-recommendation-choice/branch.txt"]
     },
     {
       "id": 3,
       "name": "explicit-single-authoritative",
-      "prompt": "Plate this as one PR.",
+      "family": "explicit-choice",
+      "prompt": "Plate this as one PR. Dry run: the state is described in evals/files/explicit-single-authoritative/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md. Write each command you would run, in order, one per line, to output/commands.txt.",
       "expected_output": "Treats the explicit single-PR choice as authoritative, decides without asking, then runs durable-write and quality gates, commits named files, pushes, creates with explicit base/head and --body-file, and verifies via gh pr view.",
-      "files": []
+      "assertions": [
+        "Does not ask the user any question, including whether a stack would be better.",
+        "output/plan.json has shape single with one group, branch feat/manifest-landing, based on main.",
+        "output/commands.txt runs `just check` before `git add`. `git add` names the three modified paths one by one and never stages .cheese/ or the whole tree. Then one `git commit` follows.",
+        "output/commands.txt pushes only the named branch (`git push -u origin feat/manifest-landing`) with no force flag, and reads the remote head with `git ls-remote` before `gh pr create`.",
+        "output/commands.txt creates the PR with `--base main --head feat/manifest-landing --body-file`, never inline `--body`, runs `check-pr-body` first, ends with `gh pr view --json`, and contains no gt command."
+      ],
+      "files": ["evals/files/explicit-single-authoritative/branch.txt"]
     },
     {
       "id": 12,
       "name": "ambiguous-review-shape",
-      "prompt": "Open a PR for this finished branch; the changes share a goal but may form separable layers.",
+      "family": "legacy-topology",
+      "prompt": "Open a PR for this finished branch; the changes share a goal but may form separable layers. Dry run: the state is described in evals/files/ambiguous-review-shape/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
       "expected_output": "Weighs the cohesion and layer evidence, decides single unless clean commit or whole-file boundaries exist, and records the reason in one line without asking the user.",
-      "files": []
+      "assertions": [
+        "Does not ask the user any question and does not stop for confirmation; output/halt.md does not exist.",
+        "output/plan.json has shape single with exactly one group that holds all three commits (3b60a52, 8d1c9f3, e2a7740).",
+        "output/pr-1.md has exactly one `Plated as single:` line, and its reason names the overlapping hunks in checkpoint.py or the absence of a clean boundary.",
+        "output/pr-1.md has no `Stack: n of m` line and no stack-order graph."
+      ],
+      "files": ["evals/files/ambiguous-review-shape/branch.txt"]
     },
     {
       "id": 13,
       "name": "pr-plan-cannot-override-explicit-choice",
-      "prompt": "Use one PR. A supplied pr_plan recommends a stack.",
+      "family": "explicit-choice",
+      "prompt": "Use one PR. A supplied pr_plan recommends a stack. Dry run: the state is described in evals/files/pr-plan-cannot-override-explicit-choice/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
       "expected_output": "Keeps the explicit single-PR choice, decides without asking, and treats the plan only as non-authoritative review-shape evidence.",
-      "files": []
+      "assertions": [
+        "Does not ask the user any question, including whether to follow the supplied plan.",
+        "output/plan.json has shape single with exactly one group that holds both commits (21c4e88 and 7f0b3d1). It does not copy the supplied stacked_linear shape or its two groups.",
+        "output/pr-1.md has a `Plated as single:` line whose reason says the user chose one PR.",
+        "output/pr-1.md has no `Stack: n of m` line and no stack-order graph, and output/pr-2.md does not exist."
+      ],
+      "files": ["evals/files/pr-plan-cannot-override-explicit-choice/branch.txt"]
     },
     {
       "id": 4,
       "name": "existing-pr-no-choice",
-      "prompt": "Push these fixes to the PR already open for this branch.",
+      "family": "legacy-existing-pr",
+      "prompt": "Push these fixes to the PR already open for this branch. Dry run: the state is described in evals/files/existing-pr-no-choice/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write each command you would run, in order, one per line, to output/commands.txt. Write your final report to output/report.md.",
       "expected_output": "Does not ask layout. Detects ordinary versus stack metadata, commits safely, then uses the matching update path and verifies the PR.",
-      "files": []
+      "assertions": [
+        "Does not ask the user any question, including about PR layout.",
+        "output/commands.txt reads the PR with `gh pr view --json` before the first `git commit`, and runs `just check` before that commit.",
+        "Staging names the two modified paths one by one. .cheese/ is never staged, and the commit is new: no --amend and no --no-verify.",
+        "The push is `git push origin fix/cheese-route-typo` with no --force or --force-with-lease. No `gh pr create`, `gt`, `git town`, or `gh stack submit` appears.",
+        "output/commands.txt ends by reading PR 412 back (`gh pr view`) and checking the remote head. output/report.md says the ordinary PR 412 was kept."
+      ],
+      "files": ["evals/files/existing-pr-no-choice/branch.txt"]
     },
     {
       "id": 5,
       "name": "write-failure-halts",
-      "prompt": "Open a PR, but the promised ADR write fails read-back.",
+      "family": "legacy-durable-writes",
+      "prompt": "Open a PR, but the promised ADR write fails read-back. Dry run: the state is described in evals/files/write-failure-halts/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md. Write each command you would run, in order, one per line, to output/commands.txt; create the file empty if you would run none.",
       "expected_output": "Halts before just check, staging, commit, push, or PR creation; reports a {target, backend, verified:false} completion row.",
-      "files": []
+      "assertions": [
+        "output/halt.md exists and names the step as `durable write`. Neither output/plan.json nor any output/pr-<n>.md exists.",
+        "output/halt.md has a completion row for docs/adr/queue-backoff-001.md with backend tilth and verified false.",
+        "output/commands.txt contains no `just check`, `git add`, `git commit`, `git push`, or `gh pr create`.",
+        "No output file says the ADR is written, verified, or complete, and the run does not ask the user a question."
+      ],
+      "files": ["evals/files/write-failure-halts/branch.txt"]
     },
     {
       "id": 6,
       "name": "hallouminate-fallback",
-      "prompt": "Publish this repo; hallouminate is unavailable and the implementation made a durable design decision.",
+      "family": "legacy-durable-writes",
+      "prompt": "Publish this repo; hallouminate is unavailable and the implementation made a durable design decision. Dry run: the state is described in evals/files/hallouminate-fallback/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md. Write each command you would run, in order, one per line, to output/commands.txt; write each file you would create or edit as a line `write <path>`, and put the ADR text in output/adr.md.",
       "expected_output": "Writes and reads back a tracked docs/adr fallback, includes it in the commit, and does not hand-edit a wiki.",
-      "files": []
+      "assertions": [
+        "output/commands.txt has a `write docs/adr/<slug>-NNN.md` line for a new tracked ADR. No line writes, edits, or redirects into .hallouminate/, and no `echo >`, `cat >`, or sed writes the ADR.",
+        "A read-back of the ADR (tilth_read or tilth_diff) follows the write and comes before `just check`.",
+        "The `git add` line names docs/adr/<slug>-NNN.md together with queue.py and test_queue.py, and never uses `git add .` or `-A`.",
+        "output/adr.md records the decision (capped exponential backoff, 2s base, 60s cap) and its reason (fixed delays overloaded the broker).",
+        "The run does not ask the user a question and does not stop at the unavailable wiki."
+      ],
+      "files": ["evals/files/hallouminate-fallback/branch.txt"]
     },
     {
       "id": 7,
       "name": "graphite-post-merge",
-      "prompt": "The bottom Graphite PR merged. Sync and republish the remaining stack.",
+      "family": "legacy-post-merge",
+      "prompt": "The bottom Graphite PR merged. Sync and republish the remaining stack. Dry run: the state is described in evals/files/graphite-post-merge/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write each command you would run, in order, one per line, to output/commands.txt.",
       "expected_output": "Uses gt sync, gt log short, and gt submit --stack; never bare rebase or single-branch push.",
-      "files": []
+      "assertions": [
+        "output/commands.txt runs `gt sync`, then `gt log short`, then `gt submit --stack`, in that order.",
+        "No `git rebase`, `git push`, `git merge`, or `git pull` appears anywhere in output/commands.txt.",
+        "No `gt submit` line lacks `--stack`, and no bare `gt modify` appears.",
+        "After the submit, output/commands.txt reads the PR bases back (`gh pr view` for #502 and #503, or equivalent)."
+      ],
+      "files": ["evals/files/graphite-post-merge/branch.txt"]
     },
     {
       "id": 8,
       "name": "git-town-post-merge",
-      "prompt": "The bottom Git Town PR merged. Catch up the rest.",
+      "family": "legacy-post-merge",
+      "prompt": "The bottom Git Town PR merged. Catch up the rest. Dry run: the state is described in evals/files/git-town-post-merge/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write each command you would run, in order, one per line, to output/commands.txt.",
       "expected_output": "Uses git town sync --stack and git town branch. Conflict recovery uses git town continue/skip, not bare git rebase continuation.",
-      "files": []
+      "assertions": [
+        "output/commands.txt runs `git town sync --stack` with `--non-interactive`, and every state-changing git town command carries `--non-interactive`.",
+        "After the conflict, output/commands.txt stages src/easy_cheese/skills/cook/runner.py by name and then runs `git town continue` (or `git town skip`).",
+        "No `git rebase --continue`, `git rebase`, or `git commit` is used to finish the conflict.",
+        "output/commands.txt runs `git town branch` to inspect lineage, and has no single-branch `git push`."
+      ],
+      "files": ["evals/files/git-town-post-merge/branch.txt"]
     },
     {
       "id": 9,
       "name": "gh-stack-post-merge",
-      "prompt": "The bottom gh stack PR merged. What should happen locally?",
+      "family": "legacy-post-merge",
+      "prompt": "The bottom gh stack PR merged. What should happen locally? Dry run: the state is described in evals/files/gh-stack-post-merge/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write each command you would run, in order, one per line, to output/commands.txt. Write your final report to output/report.md.",
       "expected_output": "Uses gh stack sync to pull server-cascaded state and gh stack view; submits only for unpublished local commits.",
-      "files": []
+      "assertions": [
+        "output/commands.txt runs `gh stack sync --remote origin` through `plate.pyz gh-stack-run --`, then `gh stack view`.",
+        "No `gh stack submit` and no `gh stack push` appears, because no local commit is unpublished. output/report.md gives that reason.",
+        "`gh-stack-verify --trunk main --remote origin` runs after the sync.",
+        "No `git rebase`, `git pull`, `git push`, `gt`, or `git town` command appears."
+      ],
+      "files": ["evals/files/gh-stack-post-merge/branch.txt"]
     },
     {
       "id": 10,
       "name": "stack-without-boundaries",
-      "prompt": "Make this a stack.",
+      "family": "legacy-stack-provider",
+      "prompt": "Make this a stack. Dry run: the state is described in evals/files/stack-without-boundaries/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md. Write each command you would run, in order, one per line, to output/commands.txt.",
       "expected_output": "Honors the stack choice and derives layer boundaries from existing commits or whole files without asking; when no clean boundary exists, it collapses to single and states why instead of inventing boundaries.",
-      "files": []
+      "assertions": [
+        "Does not ask the user any question, including whether to split by hunk.",
+        "output/plan.json has shape single with exactly one group that holds commit 5c0e8a1.",
+        "output/pr-1.md has a `Plated as single:` line, and the body says the requested stack collapsed because no clean boundary exists (one commit; each part fails the gate alone).",
+        "output/commands.txt has no `git reset`, `git rebase -i`, `git add -p`, `gt create`, `gt split`, or other history rewrite or stack creation."
+      ],
+      "files": ["evals/files/stack-without-boundaries/branch.txt"]
     },
     {
       "id": 14,
       "name": "gh-stack-not-enabled",
-      "prompt": "Publish this as a stack. gh-stack is the only installed provider and its repository preflight answers 404.",
+      "family": "legacy-stack-provider",
+      "prompt": "Publish this as a stack. gh-stack is the only installed provider and its repository preflight answers 404. Dry run: the state is described in evals/files/gh-stack-not-enabled/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write each command you would run, in order, one per line, to output/commands.txt; create the file empty if you would run none. Write your final report to output/report.md.",
       "expected_output": "Reads the stack-tools gh-stack status not-enabled from the read-only repos/{owner}/{repo}/stacks preflight, halts before any stack mutation, and reports the repository-enablement requirement rather than retrying or emulating a stack with plain pushes.",
-      "files": []
+      "assertions": [
+        "output/report.md halts and says Stacked PRs must be enabled for the repository, with the 404 status named.",
+        "output/commands.txt contains no `gh stack init`, `gh stack submit`, `gh stack push`, `gh stack link`, `git push`, or `gh pr create`.",
+        "The run does not retry the preflight: the `repos/{owner}/{repo}/stacks` call appears at most once in output/commands.txt.",
+        "output/report.md does not offer plain pushes or separate PRs as a substitute stack, and does not call the 404 an authentication failure."
+      ],
+      "files": ["evals/files/gh-stack-not-enabled/branch.txt"]
     },
     {
       "id": 15,
       "name": "gh-stack-preflight-auth-failure",
-      "prompt": "Publish this as a gh-stack stack; the enablement preflight answers 401.",
+      "family": "legacy-stack-provider",
+      "prompt": "Publish this as a gh-stack stack; the enablement preflight answers 401. Dry run: the state is described in evals/files/gh-stack-preflight-auth-failure/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write each command you would run, in order, one per line, to output/commands.txt; create the file empty if you would run none. Write your final report to output/report.md.",
       "expected_output": "Reports an authentication failure, not a repository-enablement requirement, and does not treat the non-200 response as proof that Stacked PRs is disabled.",
-      "files": []
+      "assertions": [
+        "output/report.md halts and names an authentication failure (HTTP 401, Bad credentials) as the cause, owned by the environment.",
+        "output/report.md does not tell the user to enable Stacked PRs and does not say the feature is disabled.",
+        "output/commands.txt contains no `gh stack init`, `gh stack submit`, `git push`, or `gh pr create`, and does not rerun the preflight.",
+        "output/report.md preserves the 401 status and the stderr text, and points to fixing credentials (for example `gh auth login`)."
+      ],
+      "files": ["evals/files/gh-stack-preflight-auth-failure/branch.txt"]
     },
     {
       "id": 11,
       "name": "hard-final-state",
-      "prompt": "Plate --hard and open a PR.",
+      "family": "legacy-durable-writes",
+      "prompt": "Plate --hard and open a PR. Dry run: the state is described in evals/files/hard-final-state/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md. Write each command you would run, in order, one per line, to output/commands.txt. Write the JSON context you would give /hard-cheese to output/hard-context.json.",
       "expected_output": "Runs final writing gate and validation before giving hard-cheese the final artifact inventory and completion rows, then publishes only if the gate passes.",
-      "files": []
+      "assertions": [
+        "output/hard-context.json has the four fields artifacts, inventory, tracked_diff_digest, and gate. Its artifacts row for docs/adr/queue-backoff-001.md has verified true, and its tracked_diff_digest is sha256:3f9a61c0d2e47b85.",
+        "In output/commands.txt, `just check` comes before the /hard-cheese call, and the /hard-cheese call comes before `git push` and `gh pr create`.",
+        "Because the gate status is LOGGED, the run publishes without asking the user, and output/pr-1.md records both logged findings.",
+        "output/halt.md does not exist, and output/plan.json is present."
+      ],
+      "files": ["evals/files/hard-final-state/branch.txt"]
     },
     {
       "id": 16,
       "name": "malformed-durable-write",
-      "prompt": "Plate this work. The durable ADR write was rejected: the replace_text op carried start and end line numbers alongside old and new.",
-      "expected_output": "Halts at the durable write step, names the failure plate-owned because replace_text carries only old and new and never start/end, then re-runs the canonical sequence for that file \u2014 fresh tagged read, one stale-safe write with the corrected op shape, diff read-back \u2014 instead of reporting a backend outage, retrying the stale tag, or falling back to a shell redirect or host editor.",
-      "files": []
+      "family": "legacy-durable-writes",
+      "prompt": "Plate this work. The durable ADR write was rejected: the replace_text op carried start and end line numbers alongside old and new. Dry run: the state is described in evals/files/malformed-durable-write/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write each command you would run, in order, one per line, to output/commands.txt; write each tool call as its name and JSON arguments. Write your final report to output/report.md.",
+      "expected_output": "Halts at the durable write step, names the failure plate-owned because replace_text carries only old and new and never start/end, then re-runs the canonical sequence for that file — fresh tagged read, one stale-safe write with the corrected op shape, diff read-back — instead of reporting a backend outage, retrying the stale tag, or falling back to a shell redirect or host editor.",
+      "assertions": [
+        "output/report.md names the step `durable write` and calls the failure plate-owned (a call-shape defect). It does not call it a backend outage or an environment failure.",
+        "In output/commands.txt a new tilth_read of docs/adr/queue-backoff-001.md comes before the corrected tilth_write, and the write does not reuse tag 7F3C.",
+        "The corrected tilth_write uses replace_text with only old and new. Neither start nor end appears in that op.",
+        "A diff or read-back of the file follows the corrected write, and no `just check`, `git add`, or `git commit` comes before it.",
+        "output/commands.txt has no sed, echo or cat redirect, heredoc, or host editor call that writes the ADR."
+      ],
+      "files": ["evals/files/malformed-durable-write/branch.txt"]
     },
     {
       "id": 17,
       "name": "review-surface-request",
-      "prompt": "Plate this branch and tell me whether the diff is safe to merge.",
+      "family": "legacy-routing",
+      "prompt": "Plate this branch and tell me whether the diff is safe to merge. Dry run: the state is described in evals/files/review-surface-request/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write each command you would run, in order, one per line, to output/commands.txt; create the file empty if you would run none. Write your final report to output/report.md.",
       "expected_output": "Halts at classify and names the failure plate-owned: the review judgment is /age's, not /plate's, so it never computes a review surface for its own sake. Reports the routing and either proceeds with the publication half alone or stops for the user to route the review, never blending a quality verdict into the completion record.",
-      "files": []
+      "assertions": [
+        "output/report.md routes the merge-safety judgment to /age and says it is not a /plate task.",
+        "output/report.md names the mode step `classify` and calls the request routing plate-owned, not an environment failure.",
+        "No output file gives a verdict on whether the diff is safe to merge, and none lists review findings or severities.",
+        "output/commands.txt has no review or GitHub inspection command such as `gh pr diff`, `gh pr review`, or `gh pr checks`."
+      ],
+      "files": ["evals/files/review-surface-request/branch.txt"]
     },
     {
       "id": 18,
       "name": "gh-stack-warning-only-failure",
-      "prompt": "gh stack submit exited zero but warned that it failed to update the stack on GitHub. Is publication complete?",
+      "family": "legacy-stack-provider",
+      "prompt": "gh stack submit exited zero but warned that it failed to update the stack on GitHub. Is publication complete? Dry run: the state is described in evals/files/gh-stack-warning-only-failure/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write each command you would run, in order, one per line, to output/commands.txt. Write your final report to output/report.md.",
       "expected_output": "Treats the warning as publication failure, preserves the command output, and does not report completion until gh-stack-verify confirms every PR base, head, state, SHA, and remote stack mapping.",
-      "files": []
+      "assertions": [
+        "output/report.md says publication is not complete and halts at `publish`, even though the exit code was 0.",
+        "output/report.md preserves the warning text (Failed to update stack on GitHub, HTTP 422) and the verifier's mapping mismatch.",
+        "output/commands.txt runs `gh-stack-verify --trunk main --remote origin` and does not report completion before it.",
+        "Any later stack mutation goes through `plate.pyz gh-stack-run --`, and no plain `git push` or new `gh pr create` replaces the stack."
+      ],
+      "files": ["evals/files/gh-stack-warning-only-failure/branch.txt"]
     },
     {
       "id": 19,
       "name": "gh-stack-wrong-trunk-recovery",
-      "prompt": "This published gh stack was initialized with origin/main as its trunk. Repair it without replacing the PRs.",
+      "family": "legacy-stack-provider",
+      "prompt": "This published gh stack was initialized with origin/main as its trunk. Repair it without replacing the PRs. Dry run: the state is described in evals/files/gh-stack-wrong-trunk-recovery/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write each command you would run, in order, one per line, to output/commands.txt. Write your final report to output/report.md.",
       "expected_output": "Rejects origin/main as a remote-tracking trunk, snapshots PR identities and stack state, halts for merged, queued, auto-merge-enabled, or non-open PRs, and otherwise un-stacks and re-adopts the same branches on main before verifying the same PR numbers and exact remote mapping.",
-      "files": []
+      "assertions": [
+        "No command in output/commands.txt passes origin/main as a trunk or base. The trunk argument is main, and `gh-stack-preflight --trunk main --remote origin` runs before the first unstack.",
+        "The snapshot (`gh stack view --json` and `gh pr view ... autoMergeRequest` for each PR) comes before `gh stack unstack 17`.",
+        "Re-adoption is `gh stack init --base main feat/a-schema feat/b-impl feat/c-wiring` in bottom-to-top order, with no `gh pr create` and no `gh pr close`.",
+        "The submit goes through `gh-stack-run` and omits `--open`, because PR 703 was a draft, and is followed by `gh-stack-verify --trunk main --remote origin`.",
+        "output/report.md compares the PR numbers 701, 702, and 703 with the snapshot."
+      ],
+      "files": ["evals/files/gh-stack-wrong-trunk-recovery/branch.txt"]
     },
     {
       "id": 30,
@@ -165,7 +313,7 @@
       "assertions": [
         "Does not ask the user any question and does not stop for confirmation.",
         "output/plan.json has shape single with one group based on main.",
-        "The PR body is at most 20 non-blank lines, not counting one diagram or a template checklist, and does not restate the diff line by line.",
+        "The PR body is at most 20 non-blank lines, not counting a template checklist, and does not restate the diff line by line.",
         "The PR body has no mermaid block.",
         "The PR body names the regression test that fails before the fix."
       ],
@@ -282,7 +430,7 @@
       "expected_output": "A single PR with a very short body: one-line what, one-line why, mkdocs strict build as the check, Non-obvious changes None, Risk none. No diagram, no filler.",
       "assertions": [
         "output/plan.json has shape single.",
-        "The PR body is at most 20 non-blank lines, not counting one diagram or a template checklist.",
+        "The PR body is at most 20 non-blank lines, not counting a template checklist.",
         "Each prose section is one to three sentences; the body has no marketing words such as comprehensive, robust, seamless, or significantly.",
         "The PR body has no mermaid block.",
         "Does not ask the user any question."
@@ -314,7 +462,7 @@
         "The diagram shows the router, the cache, the CLI probe, the MCP probe, and the web fallback in that decision order.",
         "The diagram has at most 15 nodes and names no module that is absent from the diff.",
         "The mermaid syntax is valid for GitHub: labels with punctuation are quoted, and no node id is a bare lowercase end.",
-        "The PR body is at most 40 lines, not counting the diagram."
+        "The PR body is at most 40 non-blank lines, not counting the diagram or a template checklist."
       ],
       "files": ["evals/files/diagram-cross-module-flow/branch.txt"]
     },
@@ -328,9 +476,25 @@
         "The PR body has one mermaid sequenceDiagram.",
         "The diagram shows Cook, the coder, and the reviewer, with the handback, the ack, the ready reply, and then the reviewer dispatch, in that order.",
         "The diagram or body shows the 120 s missing-ready path that marks the curd blocked.",
-        "The PR body is at most 40 lines, not counting the diagram."
+        "The PR body is at most 40 non-blank lines, not counting the diagram or a template checklist."
       ],
       "files": ["evals/files/diagram-sequence-protocol/branch.txt"]
+    },
+    {
+      "id": 48,
+      "name": "diagram-rename-boundary",
+      "family": "diagram-flow",
+      "prompt": "Open a PR. Dry run: the finished branch is described in evals/files/diagram-rename-boundary/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "A single PR for a rename that keeps every boundary. check-pr-body requires a flowchart for this diff (three code modules change and one is renamed), so the body records the skip with a `Diagram: none, <reason>` line that names the rename instead of drawing a diagram. The body says the change preserves behavior.",
+      "assertions": [
+        "Does not ask the user any question and does not stop for confirmation.",
+        "output/plan.json has shape single.",
+        "The PR body has no mermaid block.",
+        "The PR body has a line that starts with `Diagram: none, ` followed by a reason that names the rename or the unchanged boundaries.",
+        "The PR body states that the change preserves behavior and names the rename as the mechanism.",
+        "The PR body is at most 40 non-blank lines, not counting a template checklist."
+      ],
+      "files": ["evals/files/diagram-rename-boundary/branch.txt"]
     },
     {
       "id": 43,
