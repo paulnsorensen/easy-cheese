@@ -132,3 +132,5 @@ remains an explicit, equally actionable numbered choice.
    Do not guess.
 4. Return the normalized value to the calling skill.
    The caller owns what happens after selection.
+5. Before the caller acts, state the selected option and the next action in one visible prose sentence.
+   Never act on an answer silently.
