@@ -1,0 +1,7 @@
+id: ts-eval
+valid:
+  - const value = JSON.parse(text);
+  - model.eval();
+invalid:
+  - eval(text);
+  - const run = new Function("a", body);

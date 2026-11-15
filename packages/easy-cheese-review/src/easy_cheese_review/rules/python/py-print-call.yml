@@ -1,0 +1,10 @@
+id: py-print-call
+language: python
+severity: warning
+message: A `print()` call can be debug output left in library code.
+note: Use logging, or keep print only in a command-line entry point.
+metadata:
+  dimension: deslop
+  base: low
+rule:
+  pattern: print($$$ARGS)

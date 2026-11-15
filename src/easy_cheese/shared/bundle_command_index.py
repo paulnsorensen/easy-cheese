@@ -63,6 +63,7 @@ COMMAND_BUNDLES: dict[str, tuple[str, ...]] = {
     'research-layout': ('briesearch',),
     'resolve': ('wheypoint',),
     'review': ('mold',),
+    'review-evidence': ('age',),
     'review-instructions': ('age',),
     'review-lock': ('age',),
     'review-plan-check': ('age',),

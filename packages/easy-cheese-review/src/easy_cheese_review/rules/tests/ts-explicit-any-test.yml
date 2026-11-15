@@ -1,0 +1,7 @@
+id: ts-explicit-any
+valid:
+  - 'function read(data: unknown): string { return String(data); }'
+  - 'const company = "anyone";'
+invalid:
+  - 'function read(data: any): string { return data.value; }'
+  - 'const items: any[] = [];'

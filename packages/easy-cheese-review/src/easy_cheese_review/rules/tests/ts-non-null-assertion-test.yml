@@ -1,0 +1,6 @@
+id: ts-non-null-assertion
+valid:
+  - const ready = !loading;
+  - if (user !== null) { use(user); }
+invalid:
+  - const user = users.find((u) => u.id === id)!;

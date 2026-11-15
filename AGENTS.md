@@ -45,6 +45,12 @@ them while enforcement is implemented separately.
   runtime code lives under `src/easy_cheese/`, split between
   `skills/<python_skill_name>/`, `shared/`, and `cli/`. Skill slugs remain
   kebab-case; Python package segments use underscores.
+- `easy-cheese-review` is a second published distribution. It lives in
+  `packages/easy-cheese-review/` with its own `pyproject.toml` and
+  `src/easy_cheese_review/`, so it builds its own wheel. It holds the `/age`
+  severity rubric, the ast-grep rule pack as package data, and the review
+  facts. It may import only `easy_cheese_schemas`. The `/age` archive includes
+  it through `skills/age/wedge.toml`.
 - `cli/` holds command surfaces only; it may import `shared/` and schemas.
   `shared/` code must not import `cli/`.
 - Archives may contain Python modules, bytecode, and immutable package

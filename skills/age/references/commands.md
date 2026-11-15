@@ -13,6 +13,7 @@
 | `paths` | Slugify, validate, resolve, and list .cheese artifact paths | `slugify`, `validate`, `existing`, `resolve`, `list`, `domain-model-target` |
 | `read-handoff-slug` | Read the handoff preamble back from a phase artifact |  |
 | `render-html` | Render a markdown report into one self-contained offline HTML file |  |
+| `review-evidence` | Scan a review range with the easy-cheese-review rule pack and facts (JSON out) |  |
 | `review-instructions` | Collect scoped repository and explicit external instruction sources |  |
 | `review-lock` | Record the production tree digest that keeps /age review-only |  |
 | `review-plan-check` | Check a review plan against supplied dispatch observations (JSON in, JSON out) |  |

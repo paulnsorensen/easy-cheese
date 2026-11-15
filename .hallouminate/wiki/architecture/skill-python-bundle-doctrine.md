@@ -30,8 +30,22 @@ src/
 └── easy_cheese_schemas/
 ```
 
-`easy_cheese_schemas` is the independently published distribution.
+`easy_cheese_schemas` is an independently published distribution.
 Wedge copies selected local runtime packages directly; this build does not create internal application or shared-runtime wheels.[^3]
+
+`easy-cheese-review` is a second published distribution with its own project directory:
+
+```text
+packages/easy-cheese-review/
+├── pyproject.toml          # its own wheel; depends on easy-cheese-schemas>=4
+└── src/easy_cheese_review/ # rubric, ast-grep rule pack (package data), facts
+```
+
+A separate project directory lets the package build its own wheel and sdist without a second `pyproject.toml` at the repository root.
+The package may import only `easy_cheese_schemas`, never `easy_cheese`.
+`skills/age/wedge.toml` lists it in `include`, so only the `/age` archive carries it.
+A skill-level `include` replaces the shared one, so that list repeats the schemas.
+`skills/age/commands.py` keeps the `severity` leaves literal and imports its targets lazily, so repository scripts that import the manifest from `src/` alone still work.[^11]
 
 Skill slugs use kebab-case. Python package segments use underscores.
 Skill-owned code lives in `src/easy_cheese/skills/<python_skill_name>/`.
@@ -142,5 +156,6 @@ The [Pyz bundling pipeline](./pyz-bundling-pipeline.md) records the current buil
 [^8]: src/easy_cheese/shared/bundle_commands.py; src/easy_cheese/skills/*/commands.py
 [^9]: https://github.com/paulnsorensen/easy-cheese/pull/729; https://github.com/paulnsorensen/easy-cheese/issues/732
 [^10]: https://github.com/paulnsorensen/easy-cheese/pull/807; .github/workflows/publish-dist.yml; scripts/publish_dist.py; .github/workflows/retarget-dist-prs.yml
+[^11]: packages/easy-cheese-review/pyproject.toml; skills/age/wedge.toml; src/easy_cheese/skills/age/commands.py
 
 _Source: user-approved A correction to PR #729 and the dist move in PR #807 · Updated: 2026-10-17 · Supersedes: launcher-and-lock deployment, whole-runtime vendoring, and temporary test archives; the custom builder remains retired._

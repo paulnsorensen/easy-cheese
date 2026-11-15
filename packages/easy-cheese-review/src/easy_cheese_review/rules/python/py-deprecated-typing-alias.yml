@@ -1,0 +1,18 @@
+id: py-deprecated-typing-alias
+language: python
+severity: warning
+message: A `typing` alias that builtin generics or `|` unions replace.
+note: Use `list`, `dict`, `X | None`, and `X | Y` (Ruff UP006, UP007, UP045).
+metadata:
+  dimension: deslop
+  base: low
+rule:
+  kind: import_from_statement
+  all:
+    - has:
+        field: module_name
+        regex: '^typing$'
+    - has:
+        kind: dotted_name
+        regex: '^(List|Dict|Set|FrozenSet|Tuple|Type|Optional|Union)$'
+        stopBy: end

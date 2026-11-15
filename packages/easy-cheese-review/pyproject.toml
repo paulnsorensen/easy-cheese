@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "easy-cheese-review"
+version = "0.1.0"
+description = "Review evidence for easy-cheese reviewers: the severity rubric, an ast-grep rule pack, and deterministic diff facts."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Paul Sorensen" }]
+keywords = ["code-review", "ast-grep", "agents", "easy-cheese"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Quality Assurance",
+]
+# The package is pure Python. The ast-grep binary is optional at run time:
+# without it, every fact is `unknown` and the scan returns no hits.
+dependencies = ["easy-cheese-schemas>=4", "typing-extensions>=4.12.2"]
+
+[project.urls]
+Homepage = "https://github.com/paulnsorensen/easy-cheese"
+Repository = "https://github.com/paulnsorensen/easy-cheese"
+Issues = "https://github.com/paulnsorensen/easy-cheese/issues"
+
+# The rule pack (rules/**) is package data under the import package, so the
+# wheel carries it without extra configuration.
+[tool.hatch.build.targets.wheel]
+packages = ["src/easy_cheese_review"]
+
+[tool.hatch.build.targets.sdist]
+only-include = ["src/easy_cheese_review", "README.md", "LICENSE"]

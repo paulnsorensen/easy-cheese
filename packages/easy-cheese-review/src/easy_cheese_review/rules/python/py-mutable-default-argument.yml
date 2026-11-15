@@ -1,0 +1,24 @@
+id: py-mutable-default-argument
+language: python
+severity: warning
+message: A mutable default argument is shared across every call.
+note: Default to None and create the value in the function body.
+metadata:
+  dimension: correctness
+  base: medium
+rule:
+  any:
+    - kind: default_parameter
+    - kind: typed_default_parameter
+  has:
+    field: value
+    any:
+      - kind: list
+      - kind: dictionary
+      - kind: set
+      - kind: list_comprehension
+      - kind: dictionary_comprehension
+      - kind: set_comprehension
+      - pattern: list()
+      - pattern: dict()
+      - pattern: set()

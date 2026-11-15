@@ -1,0 +1,18 @@
+id: py-mutable-default-argument
+valid:
+  - |
+    def add(item, items=None):
+        return items
+  - |
+    def add(item, items: tuple[int, ...] = ()):
+        return items
+invalid:
+  - |
+    def add(item, items=[]):
+        return items
+  - |
+    def add(item, seen: dict[str, int] = {}):
+        return seen
+  - |
+    def add(item, seen=set()):
+        return seen
