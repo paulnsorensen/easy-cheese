@@ -30,8 +30,21 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # Skills whose synthetic scenarios (`clean`) model a Cook-shaped workspace.
 SKILLS = ("cook", "mold", "press", "pasteurize")
 # Skills whose fixtures this file replays. Skill-specific rule tests for the
-# skills outside SKILLS live in `test_journey_gates_<skill>.py`.
-GATE_SKILLS = ("affinage", "cook", "hard-cheese", "melt", "mold", "pasteurize", "press")
+# skills outside SKILLS live in `test_journey_gates_<skill>.py`; the routing and
+# thinking gates (cheese, briesearch, culture) have theirs in
+# `test_journey_gates_routing.py`.
+GATE_SKILLS = (
+    "affinage",
+    "briesearch",
+    "cheese",
+    "cook",
+    "culture",
+    "hard-cheese",
+    "melt",
+    "mold",
+    "pasteurize",
+    "press",
+)
 # Skills whose fixtures, replays, and rule tests live in
 # `test_journey_gates_core_loop.py`.
 CORE_LOOP_SKILLS = ("age", "cure", "wheypoint")
@@ -1214,7 +1227,7 @@ def load_fixtures(skill: str) -> list[dict[str, Any]]:
 
 def load_cases(skill: str) -> dict[str, dict[str, str]]:
     cases = json.loads((_evals(skill) / "journeys.json").read_text(encoding="utf-8"))
-    return {case["id"]: case["files"] for case in cases}
+    return {case["id"]: case.get("files", {}) for case in cases}
 
 
 def _fixture_params(claude_only: bool = False) -> list[Any]:

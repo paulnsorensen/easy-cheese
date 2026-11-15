@@ -44,13 +44,20 @@ The compiler finds each skill from its gate module, so a new suite needs only `s
 - A step counts as a test run only when it names a test. These count: `pytest`, `tox`, `nox`, `python -m unittest|pytest`, `just|make` with a target that contains `test` or `check`, `uv run` followed by a test run, `python x.py` where `x` is `test_*.py`, `*_test.py`, or `repro*.py`, and the `repro-rerun` archive call. Steps such as `ls`, `just fmt`, `uv run ruff`, and `python3 scripts/tool.py` do not count.
 - A test run that also redirects or tees its output still counts as a run. A redirect to a log is not a source write.
 - A write tool call that the host denies or that fails is an `attempt` step. Claude marks it with an `is_error` tool result; Codex marks it with a `failed` or `declined` file change. An attempt changes no file, so `unverified-ok` ignores it. The forbidden-edit rules (Mold source writes, Press production writes, Cook holds) still fail on it.
-- A shell step writes a file through a redirect, `tee`, `sed -i`, `perl -i`, or the target of `cp`, `mv`, or `install`.
+- A shell step writes a file through a redirect, `tee`, `sed -i`, `sed --in-place`, `perl -i`, or the target of `cp`, `mv`, or `install`. Perl has no `--in-place` option, so `perl --in-place` writes nothing.
+- A `git` alias body expands once per shell step, so a recursive alias (`alias.x='!git x'`) cannot hang the gate, and later commands in the step still count.
 - `source-without-test` exempts an `__init__.py` only when its body is empty, a docstring, or imports. Executable logic in it needs a test.
 - Only write targets inside the workspace root count. A write to `/tmp` never trips a hold or a production rule.
 - Interpreter code on stdin (`python3 - <<EOF`) gets the same publication scan as `python3 -c`.
 - One `CODE_EXT` tuple in `common.py` defines the code extensions for the Mold and Press rules.
 - Age replays the case's `restore-repo.sh` in a temp dir and fails `production-changed` when the visible output tree differs. This catches a write by any route, including `python -c` and `git checkout --`.
 - Cure fails `test-regressed` when a test that passed on the fixture tree fails or vanishes in the output. A deferred finding may leave its own test red.
+- Router and thinking gates (`cheese.py`, `briesearch.py`, `culture.py`) forbid visible writes or code writes; hidden state (`.cheese/`) and scratch paths (`/tmp/`, workspace `tmp/`) stay exempt. Strip the trace's workspace root before a scratch check, because both harnesses report absolute paths.
+- Cheese reports a `sed -i`, `cp`, or `touch` target as `shell-file-write` and only other `facts.writes` targets as `shell-redirect-write`, so one write gives one fail code.
+- The Briesearch `fabricated-url` rule counts a URL as seen only when a fixture, a user turn, or a tool result holds it. A URL that only the agent's own command holds (Claude `tool_use` input, Codex `commandExecution.command`) is not evidence.
+- Cheese has no Python bundle, so `/wheypoint resolve` is never staged. Its `--continue` journeys grade an honest stop, not a dispatch from a hand-read note.
+- Case `files` cannot hold dot paths (skillz `_cases.relative` rejects them). Seed `.cheese/` state with a restore script that the request asks the agent to run, and say so in the suite's out-of-scope list.
+- `skillz-experiment.pyz validate` does not run the criteria check that `run` runs (skillz #694). Check criteria offline with `_cases.case_criteria` until that lands.
 
 ## Fixture convention
 

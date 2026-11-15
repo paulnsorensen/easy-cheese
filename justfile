@@ -103,6 +103,22 @@ test:
 mold-review-build:
     corepack pnpm --dir frontend/mold-review run build
 
+# Fail when the tracked Mold assets differ from a fresh build. The Vite build is
+# deterministic, so drift means a change (often a dependency bump) skipped the
+# rebuild. CI runs this on a clean checkout; locally, uncommitted asset edits fail it.
+mold-review-assets-check: mold-review-build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    assets=src/easy_cheese/skills/mold/assets
+    drift=$(git status --porcelain --untracked-files=all -- "$assets")
+    [[ -z $drift ]] && exit 0
+    printf '%s\n' "$drift" | head -n 20 >&2
+    printf 'The tracked Mold assets in %s differ from a fresh build (%d paths).\n' \
+        "$assets" "$(printf '%s\n' "$drift" | wc -l)" >&2
+    printf 'Run `just mold-review-build` and commit the result. A dependency bump\n' >&2
+    printf '(for example a Dependabot pnpm-lock.yaml update) that changes the bundle needs this too.\n' >&2
+    exit 1
+
 # Build and exercise the development-only Mold review browser harness
 test-mold-review: mold-review-build wedge-build test-mold-review-browser
 

@@ -796,7 +796,8 @@ def _inplace_targets(argv: list[str]) -> list[str]:
             break
         if word.startswith("--"):
             key = word.split("=")[0]
-            inplace = inplace or key == "--in-place"
+            # Only sed has a long --in-place option; perl rejects it.
+            inplace = inplace or (key == "--in-place" and not perl)
             if key in ("--expression", "--file"):
                 scripted = True
                 i += 1 if "=" in word else 2
@@ -874,6 +875,7 @@ def _scan(
 ) -> None:
     _record_aliases(parsed, aliases)
     queue = list(parsed)
+    expanded_aliases: set[str] = set()
     last_write = -1
     ran_after = False
     for position, (argv, redirs) in enumerate(queue):
@@ -887,7 +889,10 @@ def _scan(
                 sub, shell_text = _resolve_alias(_git_subcommand(argv)[0], aliases)
                 if sub:
                     facts.git.add(sub)
-                if shell_text:
+                # A recursive alias would grow the queue forever; expand each
+                # alias body once.
+                if shell_text and shell_text not in expanded_aliases:
+                    expanded_aliases.add(shell_text)
                     queue.extend(_commands(shell_text, 1))
             elif name == "gh" and _gh_publishes(argv):
                 facts.pr = True
