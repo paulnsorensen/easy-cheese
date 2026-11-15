@@ -508,22 +508,92 @@ def test_operation_scans_from_repository_root(repo: Path, monkeypatch: pytest.Mo
     assert state["conflict_marker_files"] == ["file.txt"]
 
 
-def test_operation_blocks_oversized_regular_file_before_continue(repo: Path) -> None:
-    scan_limit = 8 * 1024 * 1024
-
+def resolved_merge(repo: Path) -> None:
     conflict(repo)
     _ = (repo / "file.txt").write_text("resolved\n")
     _ = git(repo, "add", "file.txt")
-    large = repo / "large.txt"
-    chunk = b"safe\n" * 1024
-    with large.open("wb") as stream:
-        written = 0
-        while written <= scan_limit:
-            written += stream.write(chunk)
+
+
+def place(repo: Path, side: str, content: bytes) -> None:
+    """Put ``content`` only where ``side`` names: the worktree, or the index."""
+    path = repo / "asset.js"
+    _ = path.write_bytes(content)
+    if side == "index":
+        _ = git(repo, "add", "asset.js")
+        _ = path.write_bytes(b"clean\n")
+
+
+LONG_LINE = b"a" * (200 * 1024)
+SIDES = pytest.mark.parametrize("side", ["worktree", "index"])
+
+
+@SIDES
+@pytest.mark.parametrize(
+    "content",
+    [LONG_LINE, LONG_LINE + b"\n", LONG_LINE + b"<<<<<<< ours" + LONG_LINE + b"\n"],
+    ids=["no-newline", "newline", "marker-inside-line"],
+)
+def test_operation_continues_past_long_line_without_marker(repo: Path, side: str, content: bytes) -> None:
+    resolved_merge(repo)
+    place(repo, side, content)
+
+    assert operation_cmd()["conflict_marker_files"] == []
+    assert operation_cmd(continue_operation=True)["status"] == "complete"
+
+
+@SIDES
+@pytest.mark.parametrize("marker", [b"<<<<<<< ours", b">>>>>>> theirs", b"||||||| base", b"<<<<<<<"])
+def test_operation_blocks_marker_on_line_after_long_line(repo: Path, side: str, marker: bytes) -> None:
+    resolved_merge(repo)
+    place(repo, side, LONG_LINE + b"\n" + marker + b"\nrest\n")
 
     state = operation_cmd(continue_operation=True)
 
-    assert large.stat().st_size > scan_limit
     assert state["status"] == "blocked"
-    assert state["conflict_marker_files"] == ["large.txt"]
+    assert state["conflict_marker_files"] == ["asset.js"]
     assert git(repo, "rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0
+
+
+@SIDES
+def test_operation_scans_files_past_eight_mebibytes(repo: Path, side: str) -> None:
+    resolved_merge(repo)
+    large = b"safe\n" * (2 * 1024 * 1024)
+    assert len(large) > 8 * 1024 * 1024
+
+    place(repo, side, large)
+    assert operation_cmd()["conflict_marker_files"] == []
+
+    place(repo, side, large + b"<<<<<<< ours\n")
+    state = operation_cmd(continue_operation=True)
+
+    assert state["status"] == "blocked"
+    assert state["conflict_marker_files"] == ["asset.js"]
+    assert git(repo, "rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0
+
+
+@pytest.mark.parametrize("read", [1, 2], ids=["first-read", "second-read"])
+@pytest.mark.parametrize("shift", range(-10, 3))
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        (b"\n<<<<<<< ours\n", True),
+        (b"\r\n>>>>>>>\r\n", True),
+        (b"\n|||||||", True),
+        (b"\n<<<<<<<x\n", False),
+        (b"\n<<<<<<\n", False),
+        (b"x<<<<<<< ours\n", False),
+        (b"\n<<<<<<<>>>>>>> theirs\n", False),
+    ],
+)
+def test_marker_scan_holds_across_read_boundaries(read: int, shift: int, line: bytes, expected: bool) -> None:
+    import io
+
+    from easy_cheese.skills.melt import operation
+
+    probe = cast("int", getattr(operation, "_BINARY_PROBE_BYTES"))
+    chunk = cast("int", getattr(operation, "_CHUNK_BYTES"))
+    scan = cast("Callable[[io.BytesIO], bool]", getattr(operation, "_stream_has_markers"))
+    boundary = probe + (read - 1) * chunk
+    content = b"a" * (boundary + shift) + line
+
+    assert scan(io.BytesIO(content)) is expected

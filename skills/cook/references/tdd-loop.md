@@ -10,6 +10,12 @@ When a change adds or modifies behavior, write the test before the implementatio
 
 A test that passes against unimplemented code gives a false positive. Check that the test fails for the expected reason when that is cheap to do.
 
+Shape each new test by [`../../cheese/references/test-shape.md`](../../cheese/references/test-shape.md).
+Extend the existing test file.
+Write one table row for each equivalence class.
+Use a property test instead of `range(N)` trials.
+Stack tables only when each axis selects a branch.
+
 ### First acceptance coverage
 
 For behavior work, Cook owns the acceptance demonstration before Press. This is a reported obligation, not a gate. It adds no gate, no receipt, and no enforcement command.

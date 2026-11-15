@@ -7,6 +7,8 @@ research report is still `$XDG_DATA_HOME/cheese/<project>/research/`
 when its evidence should ground repository decisions across sessions.
 
 <!-- HALLOUMINATE:INDEX-START -->
+- [behavioral-acceptance-ears-loops](./behavioral-acceptance-ears-loops.md) — Behavioral acceptance: EARS, BDD, tests, and bounded loops
+- [behavioral-acceptance-easy-cheese-suggestions](./behavioral-acceptance-easy-cheese-suggestions.md) — Applying behavioral acceptance research to easy-cheese
 - [c4-model-evaluation](./c4-model-evaluation.md) — C4 model evaluation and alternatives
 - [c4-models-as-code-tools](./c4-models-as-code-tools.md) — C4 models-as-code tools comparison
 - [language-reviewability-evidence](./language-reviewability-evidence.md) — Language readability and reviewability evidence (AI-review era)
