@@ -61,6 +61,18 @@ The former `slug`/`contract`/`est_edit_lines` shape is not the current decomposi
 The schema-backed decomposition path uses `easy_cheese_schemas.manifest.reject_shared_curd_files`.
 No active caller depends on the removed Curd-block parser.
 
+The Wiring node graph algorithm is shared in the same way.
+`src/easy_cheese_schemas/wiring_graph.py` holds `cycle_errors` and `compute_waves`.
+Four modules use it:
+
+- `src/easy_cheese/shared/fanout/wiring.py` (`cycle_errors`);
+- `src/easy_cheese/shared/fanout/wiring_topo_sort.py` (`compute_waves`, `WiringCycleError`);
+- `src/easy_cheese_schemas/manifest.py` (`cycle_errors`);
+- `src/easy_cheese/skills/mold/review.py` (`cycle_errors`).
+
+Before PR #414, three separate graph implementations had drifted in behavior and in cycle-message wording.
+Only the algorithm moved. Each caller keeps its own invariant surface and error translation.
+
 The validators remain separate entry points.
 Their shared types and entity rules do not require a combined validator.
 
