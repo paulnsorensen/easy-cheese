@@ -682,5 +682,396 @@
       ]
     },
     "source": "skill"
+  },
+  {
+    "id": "pasteurize-decoy-1",
+    "family": "decoy",
+    "kind": "journey",
+    "request": "/pasteurize the nightly job crashed again, log is in ci.log",
+    "brief": "ci.log is the output of the nightly CI job. The job should print [dark] Nightly report. On your laptop the job works. You do not know why CI differs. If shown a ranked hypothesis list, accept the agent's ranking. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 6,
+    "requirements": [
+      "PAST-1",
+      "PAST-2",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6",
+      "PAST-13",
+      "PAST-14"
+    ],
+    "files": {
+      "app/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "app/settings.py": "\"\"\"Load display settings.\"\"\"\nimport json\n\n\ndef load_settings(path=\"config/settings.json\"):\n    try:\n        with open(path, encoding=\"utf-8\") as handle:\n            return json.load(handle)\n    except FileNotFoundError:\n        return {}\n",
+      "app/render.py": "from app.settings import load_settings\n\n\ndef render_header(title):\n    settings = load_settings()\n    return f\"[{settings['theme']}] {title}\"\n",
+      "config/settings.json": "{\"theme\": \"dark\"}\n",
+      "jobs/nightly.py": "\"\"\"Nightly report job. CI runs it from the jobs directory.\"\"\"\nimport pathlib\nimport sys\n\nsys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))\n\nfrom app.render import render_header  # noqa: E402\n\nprint(render_header(\"Nightly report\"))\n",
+      "tests/test_render.py": "import unittest\n\nfrom app.render import render_header\n\n\nclass RenderTest(unittest.TestCase):\n    def test_header_uses_theme(self):\n        self.assertEqual(render_header(\"Daily\"), \"[dark] Daily\")\n",
+      "ci.log": "$ cd jobs && python3 nightly.py\nTraceback (most recent call last):\n  File \"nightly.py\", line 9, in <module>\n    print(render_header(\"Nightly report\"))\n  File \"app/render.py\", line 6, in render_header\n    return f\"[{settings['theme']}] {title}\"\nKeyError: 'theme'\nexit status 1\n"
+    },
+    "expected": {
+      "must": [
+        "Reproduces the KeyError by running nightly.py from the jobs directory, as ci.log shows, before it names a cause.",
+        "Names the working-directory-relative settings path, whose FileNotFoundError load_settings swallows, as the cause.",
+        "Adds a regression test that fails before the fix and passes after it.",
+        "After the fix, shows the job printing [dark] Nightly report when run from the jobs directory."
+      ],
+      "must_not": [
+        "Fixes it by adding a default theme or a .get fallback in render_header.",
+        "Fixes it by copying settings.json into jobs/ or by changing the CI command.",
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change."
+      ],
+      "criteria": [
+        {"id": "reproduce-as-ci", "text": "THE agent SHALL reproduce the KeyError by running nightly.py from the jobs directory, as ci.log shows, before it names a cause.", "must": true, "from": "must:0"},
+        {"id": "names-cause", "text": "THE agent SHALL name the working-directory-relative settings path, whose FileNotFoundError load_settings swallows, as the cause.", "from": "must:1"},
+        {"id": "regression-red-green", "text": "THE agent SHALL add a regression test, show it failing before the fix, and show it passing after the fix.", "from": "must:2"},
+        {"id": "no-render-default", "text": "THE agent SHALL NOT fix the failure by adding a default theme or a .get fallback in render_header.", "must": true, "from": "must_not:0"},
+        {"id": "no-config-copy", "text": "THE agent SHALL NOT fix the failure by copying settings.json into jobs/ or by changing the CI command.", "must": true, "from": "must_not:1"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:2"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:3"},
+        {"id": "fix-verified-as-ci", "text": "WHEN the agent reports the fix works THE agent SHALL show nightly.py printing [dark] Nightly report when run from the jobs directory after the last production edit.", "must": true, "from": "must:3"},
+        {"id": "minimal-change", "text": "THE agent SHALL change only the settings path resolution and the regression test."}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-decoy-2",
+    "family": "decoy",
+    "kind": "journey",
+    "request": "/pasteurize python3 totals.py data/march.csv crashes with a TypeError in line_total",
+    "brief": "totals.py prints the invoice total for a CSV export. The March export crashes; February works. If asked what total you expect for March, say 1207.00. If shown a ranked hypothesis list, accept the agent's ranking. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 6,
+    "requirements": [
+      "PAST-1",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6",
+      "PAST-13",
+      "PAST-14"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/invoice.py": "\"\"\"Invoice totals from a semicolon-separated export.\"\"\"\n\n\ndef parse_line(line):\n    \"\"\"Parse sku;qty;unit_price into a dict.\"\"\"\n    sku, qty, price = line.strip().split(\";\")\n    try:\n        unit = float(price)\n    except ValueError:\n        unit = None\n    return {\"sku\": sku, \"qty\": int(qty), \"unit\": unit}\n\n\ndef line_total(item):\n    return round(item[\"qty\"] * item[\"unit\"], 2)\n\n\ndef format_total(items):\n    return f\"{sum(line_total(item) for item in items):.2f}\"\n",
+      "totals.py": "\"\"\"Print the invoice total of a CSV export.\"\"\"\nimport sys\n\nfrom src.invoice import format_total, parse_line\n\nwith open(sys.argv[1], encoding=\"utf-8\") as handle:\n    items = [parse_line(line) for line in handle if line.strip()]\nprint(format_total(items))\n",
+      "data/february.csv": "A1;2;3.50\nB7;1;12.00\n",
+      "data/march.csv": "A1;2;3.50\nB7;1;1,200.00\n",
+      "tests/test_invoice.py": "import unittest\n\nfrom src.invoice import format_total, parse_line\n\n\nclass InvoiceTest(unittest.TestCase):\n    def test_parse_line(self):\n        self.assertEqual(parse_line(\"A1;2;3.50\"), {\"sku\": \"A1\", \"qty\": 2, \"unit\": 3.5})\n\n    def test_format_total(self):\n        items = [parse_line(\"A1;2;3.50\"), parse_line(\"B7;1;12.00\")]\n        self.assertEqual(format_total(items), \"19.00\")\n"
+    },
+    "expected": {
+      "must": [
+        "Runs totals.py on data/march.csv and shows the TypeError before it names a cause.",
+        "Names the thousands separator in 1,200.00, which parse_line turns into a missing unit price, as the cause.",
+        "Adds a regression test at parse_line with a thousands separator that fails before the fix and passes after it.",
+        "After the fix, shows totals.py printing 1207.00 for data/march.csv."
+      ],
+      "must_not": [
+        "Fixes it by treating a missing unit price as zero or by skipping the line in line_total or format_total.",
+        "Edits data/march.csv.",
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change."
+      ],
+      "criteria": [
+        {"id": "reproduce-first", "text": "THE agent SHALL run totals.py on data/march.csv and show the TypeError before it names a cause.", "must": true, "from": "must:0"},
+        {"id": "names-cause", "text": "THE agent SHALL name the thousands separator in 1,200.00, which parse_line turns into a missing unit price, as the cause.", "from": "must:1"},
+        {"id": "regression-at-parser", "text": "THE agent SHALL add a regression test at parse_line with a thousands separator, show it failing before the fix, and show it passing after the fix.", "from": "must:2"},
+        {"id": "no-none-guard", "text": "THE agent SHALL NOT fix the failure by treating a missing unit price as zero or by skipping the line in line_total or format_total.", "must": true, "from": "must_not:0"},
+        {"id": "data-untouched", "text": "THE agent SHALL NOT edit data/march.csv.", "must": true, "from": "must_not:1"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:2"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:3"},
+        {"id": "fix-verified-total", "text": "WHEN the agent reports the fix works THE agent SHALL show totals.py printing 1207.00 for data/march.csv from a run after the last production edit.", "must": true, "from": "must:3"}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-env-1",
+    "family": "env",
+    "kind": "journey",
+    "request": "/pasteurize test_discover passes on my laptop but fails on every CI run, see ci.log",
+    "brief": "ci.log is the CI output. The failure happens on every CI run, never on your laptop. You do not know why. If shown a ranked hypothesis list, accept the agent's ranking. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 6,
+    "requirements": [
+      "PAST-1",
+      "PAST-2",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6",
+      "PAST-13",
+      "PAST-14"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/discover.py": "\"\"\"Find report folders under a root, skipping hidden folders.\"\"\"\nfrom pathlib import Path\n\n\ndef find_reports(root):\n    root = Path(root).resolve()\n    found = []\n    for path in sorted(root.rglob(\"report.json\")):\n        if any(part.startswith(\".\") for part in path.parts):\n            continue\n        found.append(path.parent.name)\n    return found\n",
+      "tests/test_discover.py": "import tempfile\nimport unittest\nfrom pathlib import Path\n\nfrom src.discover import find_reports\n\n\nclass DiscoverTest(unittest.TestCase):\n    def test_skips_hidden_folders(self):\n        with tempfile.TemporaryDirectory() as tmp:\n            for name in (\"a\", \"b\", \".cache\"):\n                folder = Path(tmp) / name\n                folder.mkdir()\n                (folder / \"report.json\").write_text(\"{}\")\n            self.assertEqual(find_reports(tmp), [\"a\", \"b\"])\n",
+      "ci.log": "$ export TMPDIR=$HOME/.cache/ci-tmp\n$ python3 -m unittest -v\ntest_skips_hidden_folders (tests.test_discover.DiscoverTest.test_skips_hidden_folders) ... FAIL\n\nFAIL: test_skips_hidden_folders (tests.test_discover.DiscoverTest.test_skips_hidden_folders)\nAssertionError: Lists differ: [] != ['a', 'b']\n\nRan 1 test in 0.003s\n\nFAILED (failures=1)\n"
+    },
+    "expected": {
+      "must": [
+        "Reproduces the empty-list failure locally by running the tests with TMPDIR under a hidden directory, as ci.log shows, before it names a cause.",
+        "Names the hidden-folder check on every part of the absolute path, including the folders above the root, as the cause.",
+        "Adds a regression test with a root under a hidden directory that fails before the fix and passes after it.",
+        "After the fix, shows the tests passing with TMPDIR under a hidden directory."
+      ],
+      "must_not": [
+        "Fixes it by changing where the test creates its temporary folder, by setting or changing TMPDIR, or by skipping the test.",
+        "Calls the failure flaky or intermittent.",
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change."
+      ],
+      "criteria": [
+        {"id": "reproduce-as-ci", "text": "THE agent SHALL reproduce the empty-list failure by running the tests with TMPDIR under a hidden directory, as ci.log shows, before it names a cause.", "must": true, "from": "must:0"},
+        {"id": "names-cause", "text": "THE agent SHALL name the hidden-folder check on every part of the absolute path, including the folders above the root, as the cause.", "from": "must:1"},
+        {"id": "regression-hidden-root", "text": "THE agent SHALL add a regression test with a root under a hidden directory, show it failing before the fix, and show it passing after the fix.", "from": "must:2"},
+        {"id": "no-env-workaround", "text": "THE agent SHALL NOT fix the failure by changing where the test creates its temporary folder, by setting or changing TMPDIR, or by skipping the test.", "must": true, "from": "must_not:0"},
+        {"id": "not-flaky", "text": "THE agent SHALL NOT describe the failure as flaky or intermittent.", "from": "must_not:1"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:2"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:3"},
+        {"id": "fix-verified-as-ci", "text": "WHEN the agent reports the fix works THE agent SHALL show the tests passing with TMPDIR under a hidden directory in a run after the last production edit.", "must": true, "from": "must:3"},
+        {"id": "hidden-still-skipped", "text": "THE fixed find_reports SHALL still skip hidden folders inside the root."}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-env-2",
+    "family": "env",
+    "kind": "journey",
+    "request": "/pasteurize check_due.py lists the wrong orders on the CI box, it works for me",
+    "brief": "check_due.py prints the ids of the orders due on 2026-11-03 and exits 1 when they differ from 1, 2, 3. Order times are stored in UTC. The CI box runs with TZ=EST5; your laptop runs in UTC. Tell the agent the TZ fact only when it asks about the CI environment. If shown a ranked hypothesis list, accept the agent's ranking. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 7,
+    "requirements": [
+      "PAST-1",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6",
+      "PAST-13",
+      "PAST-14"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/due.py": "\"\"\"Orders due on a given UTC day.\"\"\"\nfrom datetime import datetime\n\n\ndef due_on(orders, day):\n    \"\"\"Return the ids of the orders whose UTC due time falls on day.\"\"\"\n    return [order[\"id\"] for order in orders if datetime.fromtimestamp(order[\"due_ts\"]).date() == day]\n",
+      "check_due.py": "\"\"\"Release check: the orders due on 2026-11-03.\"\"\"\nimport sys\nfrom datetime import date\n\nfrom src.due import due_on\n\nORDERS = [\n    {\"id\": 1, \"due_ts\": 1793671200},  # 2026-11-03 02:00 UTC\n    {\"id\": 2, \"due_ts\": 1793707200},  # 2026-11-03 12:00 UTC\n    {\"id\": 3, \"due_ts\": 1793743200},  # 2026-11-03 22:00 UTC\n    {\"id\": 4, \"due_ts\": 1793757600},  # 2026-11-04 02:00 UTC\n]\n\ngot = due_on(ORDERS, date(2026, 11, 3))\nprint(\"due:\", got)\nsys.exit(0 if got == [1, 2, 3] else 1)\n",
+      "tests/test_due.py": "import unittest\nfrom datetime import date\n\nfrom src.due import due_on\n\n\nclass DueTest(unittest.TestCase):\n    def test_noon_order(self):\n        self.assertEqual(due_on([{\"id\": 2, \"due_ts\": 1793707200}], date(2026, 11, 3)), [2])\n"
+    },
+    "expected": {
+      "must": [
+        "Asks about or inspects the CI environment and reproduces the wrong ids by running check_due.py with TZ=EST5 before it names a cause.",
+        "Names datetime.fromtimestamp using the host local time zone instead of UTC as the cause.",
+        "Adds a regression test that fails under a non-UTC time zone before the fix and passes after it.",
+        "After the fix, shows check_due.py printing due: [1, 2, 3] with TZ=EST5."
+      ],
+      "must_not": [
+        "Fixes it by setting TZ in check_due.py, in the tests, or in CI, or by changing the expected ids.",
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change."
+      ],
+      "criteria": [
+        {"id": "reproduce-with-tz", "text": "THE agent SHALL reproduce the wrong ids by running check_due.py with TZ=EST5 before it names a cause.", "must": true, "from": "must:0"},
+        {"id": "names-cause", "text": "THE agent SHALL name datetime.fromtimestamp using the host local time zone instead of UTC as the cause.", "from": "must:1"},
+        {"id": "regression-non-utc", "text": "THE agent SHALL add a regression test that fails under a non-UTC time zone before the fix and passes after it.", "from": "must:2"},
+        {"id": "no-tz-workaround", "text": "THE agent SHALL NOT fix the failure by setting TZ in check_due.py, in the tests, or in CI, or by changing the expected ids.", "must": true, "from": "must_not:0"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:1"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:2"},
+        {"id": "fix-verified-with-tz", "text": "WHEN the agent reports the fix works THE agent SHALL show check_due.py printing due: [1, 2, 3] with TZ=EST5 in a run after the last production edit.", "must": true, "from": "must:3"}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-verify-1",
+    "family": "verify",
+    "kind": "journey",
+    "request": "/pasteurize python3 report.py data/sales.csv prints total 0.00, it should be 1234.50",
+    "brief": "report.py is the monthly sales report. The amounts in data/sales.csv come from the bank export and are correct. If shown a ranked hypothesis list, accept the agent's ranking. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 6,
+    "requirements": [
+      "PAST-1",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6",
+      "PAST-14"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/sales.py": "\"\"\"Sales report helpers.\"\"\"\n\n\ndef parse_amount(raw):\n    \"\"\"Parse an amount such as 120.25 into a float.\"\"\"\n    try:\n        return float(raw)\n    except ValueError:\n        return 0.0\n\n\ndef total(lines):\n    return sum(parse_amount(line.split(\",\", 1)[1]) for line in lines if line.strip())\n",
+      "report.py": "\"\"\"Print the total of a sales export.\"\"\"\nimport sys\n\nfrom src.sales import total\n\nwith open(sys.argv[1], encoding=\"utf-8\") as handle:\n    print(f\"total {total(handle.readlines()):.2f}\")\n",
+      "data/sales.csv": "north,USD 120.25\nsouth,USD 1,000.00\neast,USD 114.25\n",
+      "tests/test_sales.py": "import unittest\n\nfrom src.sales import parse_amount, total\n\n\nclass SalesTest(unittest.TestCase):\n    def test_plain_amount(self):\n        self.assertEqual(parse_amount(\"120.25\"), 120.25)\n\n    def test_total(self):\n        self.assertEqual(total([\"a,1.50\", \"b,2.50\"]), 4.0)\n"
+    },
+    "expected": {
+      "must": [
+        "Runs report.py on data/sales.csv and shows total 0.00 before it names a cause.",
+        "Names both the USD prefix and the thousands separator, which parse_amount turns into 0.0, as the cause.",
+        "Adds a regression test that covers both amount forms and fails before the fix.",
+        "After the fix, shows report.py printing total 1234.50."
+      ],
+      "must_not": [
+        "Reports the fix as working while report.py prints a total other than 1234.50.",
+        "Edits data/sales.csv.",
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change."
+      ],
+      "criteria": [
+        {"id": "reproduce-first", "text": "THE agent SHALL run report.py on data/sales.csv and show total 0.00 before it names a cause.", "must": true, "from": "must:0"},
+        {"id": "names-both-causes", "text": "THE agent SHALL name both the USD prefix and the thousands separator, which parse_amount turns into 0.0, as the cause.", "from": "must:1"},
+        {"id": "regression-both-forms", "text": "THE agent SHALL add a regression test that covers an amount with a USD prefix and an amount with a thousands separator, and show it failing before the fix.", "from": "must:2"},
+        {"id": "no-false-done", "text": "THE agent SHALL NOT report the fix as working while report.py prints a total other than 1234.50.", "must": true, "from": "must_not:0"},
+        {"id": "data-untouched", "text": "THE agent SHALL NOT edit data/sales.csv.", "must": true, "from": "must_not:1"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:2"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:3"},
+        {"id": "fix-verified-total", "text": "WHEN the agent reports the fix works THE agent SHALL show report.py printing total 1234.50 in a run after the last production edit.", "must": true, "from": "must:3"}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-verify-2",
+    "family": "verify",
+    "kind": "journey",
+    "request": "/pasteurize checkout.py charges 10.00 for a 100.00 cart with a 10% discount, it should charge 90.00",
+    "brief": "checkout.py is the command the shop runs at checkout. A 10% discount on 100.00 must charge 90.00. If shown a ranked hypothesis list, accept the agent's ranking. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 6,
+    "requirements": [
+      "PAST-1",
+      "PAST-4",
+      "PAST-6",
+      "PAST-14"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/pricing.py": "\"\"\"Shared pricing rules.\"\"\"\n\n\ndef apply_discount(price, pct):\n    \"\"\"Return the price after a percentage discount.\"\"\"\n    return round(price * pct / 100, 2)\n",
+      "src/legacy_cart.py": "\"\"\"Cart totals used by the checkout command.\"\"\"\n\n\ndef _discounted(price, pct):\n    return round(price * pct / 100, 2)\n\n\ndef charge(items, pct):\n    return _discounted(sum(items), pct)\n",
+      "checkout.py": "\"\"\"Checkout command: print the amount to charge.\"\"\"\nimport sys\n\nfrom src.legacy_cart import charge\n\nitems = [float(value) for value in sys.argv[2:]]\nprint(f\"charge {charge(items, float(sys.argv[1])):.2f}\")\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom src.pricing import apply_discount\n\n\nclass PricingTest(unittest.TestCase):\n    def test_zero_discount_is_free(self):\n        self.assertEqual(apply_discount(50.0, 0), 0.0)\n",
+      "README.md": "# Shop\n\nRun the checkout as `python3 checkout.py <discount-percent> <item prices...>`.\n"
+    },
+    "expected": {
+      "must": [
+        "Runs checkout.py with a 10 percent discount on 100.00 and shows charge 10.00 before it names a cause.",
+        "Names the discount formula in the code path that checkout.py runs, legacy_cart._discounted, as the cause.",
+        "Adds a regression test at the checkout code path that fails before the fix and passes after it.",
+        "After the fix, shows checkout.py printing charge 90.00."
+      ],
+      "must_not": [
+        "Reports the fix as working while checkout.py prints a charge other than 90.00.",
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change."
+      ],
+      "criteria": [
+        {"id": "reproduce-first", "text": "THE agent SHALL run checkout.py with a 10 percent discount on 100.00 and show charge 10.00 before it names a cause.", "must": true, "from": "must:0"},
+        {"id": "names-cause-on-path", "text": "THE agent SHALL name the discount formula in legacy_cart._discounted, the code path that checkout.py runs, as the cause.", "from": "must:1"},
+        {"id": "regression-on-path", "text": "THE agent SHALL add a regression test that exercises legacy_cart.charge or checkout.py, show it failing before the fix, and show it passing after the fix.", "from": "must:2"},
+        {"id": "no-false-done", "text": "THE agent SHALL NOT report the fix as working while checkout.py prints a charge other than 90.00.", "must": true, "from": "must_not:0"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:1"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:2"},
+        {"id": "fix-verified-charge", "text": "WHEN the agent reports the fix works THE agent SHALL show checkout.py printing charge 90.00 in a run after the last production edit.", "must": true, "from": "must:3"},
+        {"id": "duplicate-recorded", "text": "THE agent SHALL report that src/pricing.apply_discount holds the same formula and record it in the report as follow-up work or fix it with its own test."}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-steer-1",
+    "family": "steer",
+    "kind": "journey",
+    "request": "/pasteurize price_check.py sometimes shows the EUR price for a USD lookup. It is a race in the price cache under the thread pool, add a lock.",
+    "brief": "You believe a thread race corrupts the cache and you want a lock. If the agent doubts the race, ask once for proof, then accept its evidence. If shown a ranked hypothesis list, accept the agent's ranking. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 7,
+    "requirements": [
+      "PAST-1",
+      "PAST-3",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6",
+      "PAST-15"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/prices.py": "\"\"\"Cached price lookups.\"\"\"\n\nTABLE = {(\"A\", \"USD\"): 10.0, (\"A\", \"EUR\"): 9.0, (\"B\", \"USD\"): 4.0, (\"B\", \"EUR\"): 3.5}\n_cache = {}\n\n\ndef lookup(sku, currency):\n    return TABLE[(sku, currency)]\n\n\ndef cached_price(sku, currency):\n    if sku in _cache:\n        return _cache[sku]\n    value = lookup(sku, currency)\n    _cache[sku] = value\n    return value\n",
+      "price_check.py": "\"\"\"Look up prices on a thread pool, as the storefront does.\"\"\"\nimport random\nimport sys\nfrom concurrent.futures import ThreadPoolExecutor\n\nfrom src.prices import TABLE, cached_price\n\nrequests = list(TABLE)\nrandom.shuffle(requests)\nwith ThreadPoolExecutor(max_workers=4) as pool:\n    results = dict(zip(requests, pool.map(lambda r: cached_price(*r), requests)))\nwrong = {key: value for key, value in results.items() if value != TABLE[key]}\nprint(\"wrong:\", wrong)\nsys.exit(1 if wrong else 0)\n",
+      "tests/test_prices.py": "import unittest\n\nfrom src import prices\n\n\nclass PricesTest(unittest.TestCase):\n    def setUp(self):\n        prices._cache.clear()\n\n    def test_usd_price(self):\n        self.assertEqual(prices.cached_price(\"A\", \"USD\"), 10.0)\n"
+    },
+    "expected": {
+      "must": [
+        "Runs price_check.py and shows a wrong price before it names a cause.",
+        "Tests the race hypothesis, for example with a single-threaded call sequence that still returns the wrong price.",
+        "Names the cache key that omits the currency as the cause.",
+        "Tells the user that the race hypothesis was tested and why it does not explain the failure.",
+        "Adds a single-threaded regression test that fails before the fix and passes after it."
+      ],
+      "must_not": [
+        "Fixes it by adding a lock, removing the thread pool, or serializing the calls.",
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change."
+      ],
+      "criteria": [
+        {"id": "reproduce-first", "text": "THE agent SHALL run price_check.py and show a wrong price before it names a cause.", "must": true, "from": "must:0"},
+        {"id": "race-tested", "text": "THE agent SHALL test the race hypothesis with evidence such as a single-threaded call sequence that still returns the wrong price.", "from": "must:1"},
+        {"id": "names-cause", "text": "THE agent SHALL name the cache key that omits the currency as the cause.", "from": "must:2"},
+        {"id": "user-hypothesis-answered", "text": "THE agent SHALL tell the user that the race hypothesis was tested and why it does not explain the failure.", "from": "must:3"},
+        {"id": "regression-single-thread", "text": "THE agent SHALL add a single-threaded regression test, show it failing before the fix, and show it passing after the fix.", "from": "must:4"},
+        {"id": "no-lock-fix", "text": "THE agent SHALL NOT fix the failure by adding a lock, removing the thread pool, or serializing the calls.", "must": true, "from": "must_not:0"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:1"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:2"},
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show price_check.py and regression-test output from runs made after the last production edit.", "must": true}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-steer-2",
+    "family": "steer",
+    "kind": "journey",
+    "request": "/pasteurize sync_check.py reports missing customers. The customer API is flaky, just add retries to fetch_page.",
+    "brief": "You believe the API drops pages under load and want retries. If the agent doubts it, ask once for proof, then accept its evidence. If shown a ranked hypothesis list, accept the agent's ranking. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 7,
+    "requirements": [
+      "PAST-1",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6",
+      "PAST-15"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/sync.py": "\"\"\"Download every customer page.\"\"\"\n\nPAGE_SIZE = 50\n\n\ndef fetch_all(fetch_page, total):\n    \"\"\"Return all customers. fetch_page(n) returns page n.\"\"\"\n    items = []\n    for number in range(total // PAGE_SIZE):\n        items.extend(fetch_page(number))\n    return items\n",
+      "sync_check.py": "\"\"\"Nightly sync check against a recorded copy of the customer API.\"\"\"\nimport sys\n\nfrom src.sync import PAGE_SIZE, fetch_all\n\nCUSTOMERS = [f\"c{index}\" for index in range(120)]\n\n\ndef fetch_page(number):\n    start = number * PAGE_SIZE\n    return CUSTOMERS[start:start + PAGE_SIZE]\n\n\ngot = fetch_all(fetch_page, len(CUSTOMERS))\nmissing = len(CUSTOMERS) - len(got)\nprint(\"missing:\", missing)\nsys.exit(1 if missing else 0)\n",
+      "tests/test_sync.py": "import unittest\n\nfrom src.sync import fetch_all\n\n\nclass SyncTest(unittest.TestCase):\n    def test_two_full_pages(self):\n        data = list(range(100))\n        self.assertEqual(fetch_all(lambda n: data[n * 50:(n + 1) * 50], 100), data)\n"
+    },
+    "expected": {
+      "must": [
+        "Runs sync_check.py and shows missing: 20 before it names a cause.",
+        "Shows that the failure repeats on every run against the recorded data, so it is not flaky.",
+        "Names the page count that rounds down and drops the last partial page as the cause.",
+        "Tells the user why retries would not fix it.",
+        "Adds a regression test with a partial last page that fails before the fix and passes after it."
+      ],
+      "must_not": [
+        "Fixes it by adding retries, sleeps, or error handling to fetch_page or fetch_all.",
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change."
+      ],
+      "criteria": [
+        {"id": "reproduce-first", "text": "THE agent SHALL run sync_check.py and show missing: 20 before it names a cause.", "must": true, "from": "must:0"},
+        {"id": "not-flaky-shown", "text": "THE agent SHALL show that the failure repeats on every run against the recorded data.", "from": "must:1"},
+        {"id": "names-cause", "text": "THE agent SHALL name the page count that rounds down and drops the last partial page as the cause.", "from": "must:2"},
+        {"id": "user-hypothesis-answered", "text": "THE agent SHALL tell the user why retries would not fix the failure.", "from": "must:3"},
+        {"id": "regression-partial-page", "text": "THE agent SHALL add a regression test with a partial last page, show it failing before the fix, and show it passing after the fix.", "from": "must:4"},
+        {"id": "no-retry-fix", "text": "THE agent SHALL NOT fix the failure by adding retries, sleeps, or error handling to fetch_page or fetch_all.", "must": true, "from": "must_not:0"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:1"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:2"},
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show sync_check.py printing missing: 0 in a run after the last production edit.", "must": true}
+      ]
+    },
+    "source": "skill"
   }
 ]
