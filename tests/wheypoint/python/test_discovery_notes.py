@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -82,6 +83,46 @@ def test_prunes_build_directories(isolated_roots: Path) -> None:
     assert scan.dirs == ((repo / ".cheese").resolve(),)
 
 
+@pytest.mark.skipif(not HAS_RG, reason="rg is not installed")
+@pytest.mark.parametrize("root_part", [".cache", ".cache/repo"])
+def test_explicit_root_beneath_pruned_ancestor_matches_walk(
+    isolated_roots: Path, monkeypatch: pytest.MonkeyPatch, root_part: str
+) -> None:
+    repo = isolated_roots / root_part
+    _ = _write(repo / ".cheese" / "notes" / "a.md")
+    _ = _write(repo / ".cache" / "hidden-repo" / ".cheese" / "notes" / "excluded.md")
+    expected = ((repo / ".cheese").resolve(),)
+
+    rg_scan = discovery_notes.find_cheese_dirs([repo])
+    assert rg_scan.backend == "rg"
+    assert rg_scan.dirs == expected
+
+    monkeypatch.setenv("PATH", "")
+    walk_scan = discovery_notes.find_cheese_dirs([repo])
+    assert walk_scan.backend == "walk"
+    assert walk_scan.dirs == expected
+
+
+@pytest.mark.skipif(not HAS_RG, reason="rg is not installed")
+@pytest.mark.parametrize("root_part", [".cheese", ".cheese/notes"])
+def test_explicit_root_inside_cheese_matches_walk(
+    isolated_roots: Path, monkeypatch: pytest.MonkeyPatch, root_part: str
+) -> None:
+    repo = isolated_roots / "repo"
+    cheese = repo / ".cheese"
+    _ = _write(cheese / "notes" / "a.md")
+    root = repo / root_part
+
+    rg_scan = discovery_notes.find_cheese_dirs([root])
+    assert rg_scan.backend == "rg"
+    assert rg_scan.dirs == (cheese.resolve(),)
+
+    monkeypatch.setenv("PATH", "")
+    walk_scan = discovery_notes.find_cheese_dirs([root])
+    assert walk_scan.backend == "walk"
+    assert walk_scan.dirs == rg_scan.dirs
+
+
 def test_uses_search_roots_env_by_default(
     isolated_roots: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -122,3 +163,29 @@ def test_walk_and_rg_backends_agree(
 
     assert rg_scan.backend == "rg"
     assert set(rg_scan.dirs) == expected
+
+
+def test_rg_uses_one_bounded_call_for_all_roots(
+    isolated_roots: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    roots = [isolated_roots / "first", isolated_roots / "second"]
+    for root in roots:
+        root.mkdir()
+    calls: list[list[str]] = []
+
+    def run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        assert kwargs["timeout"] == 20
+        calls.append(args)
+        raise subprocess.TimeoutExpired(args, 20)
+
+    def which(_name: str) -> str:
+        return "rg"
+
+    monkeypatch.setattr(shutil, "which", which)
+    monkeypatch.setattr(subprocess, "run", run)
+
+    scan = discovery_notes.find_cheese_dirs(roots)
+    assert scan.backend == "walk"
+    assert scan.errors == ("rg failed or timed out; fell back to a directory walk",)
+    assert len(calls) == 1
+    assert calls[0][-2:] == [str(root) for root in roots]

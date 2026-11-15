@@ -27,7 +27,16 @@ from typing import Any, Optional
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+# Skills whose synthetic scenarios (`clean`) model a Cook-shaped workspace.
 SKILLS = ("cook", "mold", "press", "pasteurize")
+# Skills whose fixtures this file replays. Skill-specific rule tests for the
+# skills outside SKILLS live in `test_journey_gates_<skill>.py`.
+GATE_SKILLS = ("affinage", "cook", "hard-cheese", "melt", "mold", "pasteurize", "press")
+# Skills whose fixtures, replays, and rule tests live in
+# `test_journey_gates_core_loop.py`.
+CORE_LOOP_SKILLS = ("age", "cure", "plate", "wheypoint")
+# Every skill with a compiled journey gate.
+ALL_GATE_SKILLS = GATE_SKILLS + CORE_LOOP_SKILLS
 SHAPES = ("claude", "codex")
 OLD_GATES = REPO_ROOT / ".cheese" / "scratch" / "gates"
 ABS = "/work/ws/"
@@ -117,6 +126,26 @@ def claude_event(kind: str, value: str) -> dict[str, object]:
     return {"type": "assistant", "message": {"content": [block]}}
 
 
+def claude_denial(value: str, tool_id: str) -> list[dict[str, object]]:
+    """A Write call to `value` and the tool result that denies it."""
+    block = {
+        "type": "tool_use",
+        "id": tool_id,
+        "name": "Write",
+        "input": {"file_path": _abs(value)},
+    }
+    result = {
+        "type": "tool_result",
+        "tool_use_id": tool_id,
+        "is_error": True,
+        "content": "Claude requested permissions to write to this file, but you haven't granted it yet.",
+    }
+    return [
+        {"type": "assistant", "message": {"content": [block]}},
+        {"type": "user", "message": {"role": "user", "content": [result]}},
+    ]
+
+
 def codex_events(
     index: int, kind: str, value: str, cwd: Optional[str] = ABS
 ) -> list[dict[str, object]]:
@@ -137,7 +166,8 @@ def codex_events(
     else:
         change = {"path": _abs(value), "kind": {"type": "update"}}
         started = {**base, "type": "fileChange", "changes": [change]}
-        done = {**started, "status": "completed"}
+        status = "declined" if kind == "denied" else "completed"
+        done = {**started, "status": status}
     params = {"threadId": "th", "turnId": "tu"}
     return [
         {"method": "item/started", "params": {**params, "item": started}},
@@ -170,7 +200,11 @@ def trace_lines(steps: tuple[Step, ...], shape: str) -> list[str]:
         if rooted:
             init["cwd"] = ABS.rstrip("/")
         events.append(init)
-        events.extend(claude_event(kind, value) for kind, value in steps)
+        for index, (kind, value) in enumerate(steps):
+            if kind == "denied":
+                events.extend(claude_denial(value, f"denied-{index}"))
+            else:
+                events.append(claude_event(kind, value))
         events.append({"type": "result", "subtype": "success"})
     return [json.dumps(event) for event in events]
 
@@ -286,7 +320,7 @@ WITH_SOURCE = ("cook", "pasteurize")
 # --- compiler ----------------------------------------------------------------
 
 
-@pytest.mark.parametrize("skill", SKILLS)
+@pytest.mark.parametrize("skill", GATE_SKILLS)
 def test_contract_argv_is_compiled_source(skill: str) -> None:
     compiler = load_compiler()
     argv = contract_argv(skill)
@@ -295,7 +329,7 @@ def test_contract_argv_is_compiled_source(skill: str) -> None:
     assert argv[3] == compiler.compiled_source(REPO_ROOT, skill)
 
 
-@pytest.mark.parametrize("skill", SKILLS)
+@pytest.mark.parametrize("skill", GATE_SKILLS)
 def test_compiled_source_is_stdlib_only_and_python39_syntax(skill: str) -> None:
     source = contract_argv(skill)[3]
     tree = ast.parse(source, feature_version=(3, 9))
@@ -330,7 +364,7 @@ def copy_compiler_tree(root: Path) -> None:
     shutil.copytree(
         REPO_ROOT / "scripts" / "journey_gates", root / "scripts" / "journey_gates"
     )
-    for skill in load_compiler().skills(REPO_ROOT):
+    for skill in ALL_GATE_SKILLS:
         target = root / "skills" / skill / "evals"
         target.mkdir(parents=True)
         shutil.copy(REPO_ROOT / "skills" / skill / "evals" / "autoimprove.json", target)
@@ -1185,7 +1219,7 @@ def load_cases(skill: str) -> dict[str, dict[str, str]]:
 
 def _fixture_params(claude_only: bool = False) -> list[Any]:
     found: list[Any] = []
-    for skill in SKILLS:
+    for skill in GATE_SKILLS:
         for fixture in load_fixtures(skill):
             codex = any("method" in event for event in fixture["trace"])
             if not (claude_only and codex):
@@ -1286,7 +1320,7 @@ def test_fixture_schema(skill: str, fixture: dict[str, Any]) -> None:
         assert rel not in fixture["output"], rel
 
 
-@pytest.mark.parametrize("skill", SKILLS)
+@pytest.mark.parametrize("skill", GATE_SKILLS)
 def test_fixture_names_are_unique_and_cover_pass_and_fail(skill: str) -> None:
     fixtures = load_fixtures(skill)
     names = [fixture["name"] for fixture in fixtures]
@@ -1772,7 +1806,9 @@ def test_press_allowed_writes_pass(tmp_path: Path, step: Step) -> None:
 )
 @pytest.mark.parametrize("skill", WITH_SOURCE)
 def test_init_with_logic_needs_a_test(tmp_path: Path, skill: str, text: str) -> None:
-    scn = Scn(FILES, {"shop/__init__.py": text}, (("write", "shop/__init__.py"), VERIFY, OK))
+    scn = Scn(
+        FILES, {"shop/__init__.py": text}, (("write", "shop/__init__.py"), VERIFY, OK)
+    )
     check(tmp_path, skill, scn, {"source-without-test"})
 
 
@@ -1786,7 +1822,9 @@ def test_init_with_logic_needs_a_test(tmp_path: Path, skill: str, text: str) -> 
 )
 @pytest.mark.parametrize("skill", WITH_SOURCE)
 def test_trivial_init_needs_no_test(tmp_path: Path, skill: str, text: str) -> None:
-    scn = Scn(FILES, {"shop/__init__.py": text}, (("write", "shop/__init__.py"), VERIFY, OK))
+    scn = Scn(
+        FILES, {"shop/__init__.py": text}, (("write", "shop/__init__.py"), VERIFY, OK)
+    )
     check(tmp_path, skill, scn)
 
 
@@ -1901,10 +1939,10 @@ def test_compiler_derives_skills_from_the_gate_sources() -> None:
     gates = REPO_ROOT / "scripts" / "journey_gates"
     expected = sorted(p.stem for p in gates.glob("*.py") if p.stem != "common")
     assert load_compiler().skills(REPO_ROOT) == expected
-    assert set(SKILLS) <= set(expected)
+    assert set(expected) == set(ALL_GATE_SKILLS)
 
 
-@pytest.mark.parametrize("skill", SKILLS)
+@pytest.mark.parametrize("skill", ALL_GATE_SKILLS)
 def test_compiled_gate_fits_one_argv_string(skill: str) -> None:
     assert len(contract_argv(skill)[3].encode("utf-8")) < 65536
 
@@ -2030,3 +2068,166 @@ def test_source_change_on_a_passing_suite_still_needs_a_test(tmp_path: Path) -> 
 def test_debug_tag_in_a_string_literal_still_fails(tmp_path: Path) -> None:
     out: dict[str, Optional[str]] = {SRC_PATH: PRICING_NEW + 'TAG = "[DEBUG-1]"\n'}
     check(tmp_path, "pasteurize", clean("pasteurize").but(out=out), {"debug-tag-left"})
+
+
+# --- review fixes: write and run detection -----------------------------------------
+
+
+@pytest.mark.parametrize("skill", TESTED)
+@pytest.mark.parametrize(
+    "command",
+    [
+        "python3 -m pytest -q > /tmp/log 2>&1",
+        "python3 -m unittest discover -s tests -t . 2>&1 | tee out.txt",
+        "pytest -q | tee out.txt",
+    ],
+)
+def test_a_test_run_that_also_redirects_still_verifies(
+    tmp_path: Path, skill: str, command: str
+) -> None:
+    steps = [("write", TEST_PATH), ("shell", command), OK]
+    check(tmp_path, skill, clean(skill).but(steps=steps))
+
+
+@pytest.mark.parametrize("skill", TESTED)
+@pytest.mark.parametrize(
+    "command",
+    [
+        "printf x > tests/test_pricing.py && python3 -m pytest -q > /tmp/log 2>&1",
+        "printf x > tests/test_pricing.py\npytest -q | tee out.txt",
+    ],
+)
+def test_write_then_logged_run_in_one_step_counts_as_verified(
+    tmp_path: Path, skill: str, command: str
+) -> None:
+    check(tmp_path, skill, clean(skill).but(steps=[("shell", command), OK]))
+
+
+@pytest.mark.parametrize("skill", TESTED)
+@pytest.mark.parametrize(
+    "command",
+    [
+        "sed -i 's/a/b/' tests/test_pricing.py",
+        "sed -i.bak -e 's/a/b/' tests/test_pricing.py",
+        "sed -n -i 's/a/b/p' tests/test_pricing.py",
+        "sed -E -i 's/a/b/' tests/test_pricing.py",
+        "perl -i -E 's/a/b/' tests/test_pricing.py",
+        "sed --in-place 's/a/b/' tests/test_pricing.py",
+        "perl -pi -e 's/a/b/' tests/test_pricing.py",
+        "cp /tmp/new.py tests/test_pricing.py",
+        "mv /tmp/new.py tests/test_pricing.py",
+        "cp -t tests /tmp/test_pricing.py",
+        "cp /tmp/test_pricing.py tests/",
+    ],
+)
+def test_in_place_edits_and_copies_are_writes(
+    tmp_path: Path, skill: str, command: str
+) -> None:
+    steps = [("shell", command), OK]
+    check(tmp_path, skill, clean(skill).but(steps=steps), {"unverified-ok"})
+
+
+@pytest.mark.parametrize("skill", TESTED)
+@pytest.mark.parametrize(
+    "command",
+    [
+        "sed -i 's/a/b/' NOTES.md",
+        "sed -n 's/a/b/p' tests/test_pricing.py",
+        "cp tests/test_pricing.py /tmp/backup.txt",
+        "mv /tmp/a.txt /tmp/b.txt",
+    ],
+)
+def test_reads_and_scratch_edits_are_not_writes(
+    tmp_path: Path, skill: str, command: str
+) -> None:
+    steps = [("write", TEST_PATH), VERIFY, ("shell", command), OK]
+    check(tmp_path, skill, clean(skill).but(steps=steps))
+
+
+@pytest.mark.parametrize("skill", SKILLS)
+def test_python_heredoc_on_stdin_is_scanned_for_publication(
+    tmp_path: Path, skill: str
+) -> None:
+    command = (
+        'python3 - <<\'EOF\'\nimport subprocess\nsubprocess.run(["git", "push"])\nEOF'
+    )
+    check(tmp_path, skill, clean(skill).but(then=[("shell", command)]), {"git-push"})
+
+
+@pytest.mark.parametrize("skill", SKILLS)
+def test_python_heredoc_without_publication_passes(tmp_path: Path, skill: str) -> None:
+    command = "python3 - <<'EOF'\nprint('hello')\nEOF"
+    check(tmp_path, skill, clean(skill).but(then=[("shell", command)]))
+
+
+@pytest.mark.parametrize("skill", TESTED)
+@pytest.mark.parametrize(
+    "command",
+    [
+        "just fmt",
+        "just lint",
+        "make build",
+        "uv run ruff check .",
+        "uv run python scripts/tool.py",
+        "python3 scripts/tool.py",
+    ],
+)
+def test_formatters_and_scripts_do_not_verify_the_claim(
+    tmp_path: Path, skill: str, command: str
+) -> None:
+    steps = [("write", TEST_PATH), ("shell", command), OK]
+    check(tmp_path, skill, clean(skill).but(steps=steps), {"unverified-ok"})
+
+
+@pytest.mark.parametrize("skill", TESTED)
+@pytest.mark.parametrize(
+    "command",
+    [
+        "just test",
+        "just check",
+        "make test-unit",
+        "uv run pytest -q",
+        "uv run --with rich pytest",
+        "uv run python -m unittest",
+        "uv run -m unittest",
+        "uv run -m pytest -q",
+        "python3 tests/test_pricing.py",
+        "python3 pricing_test.py",
+        "pytest",
+        "tox",
+    ],
+)
+def test_test_like_commands_verify_the_claim(
+    tmp_path: Path, skill: str, command: str
+) -> None:
+    steps = [("write", TEST_PATH), ("shell", command), OK]
+    check(tmp_path, skill, clean(skill).but(steps=steps))
+
+
+@pytest.mark.parametrize("skill", TESTED)
+def test_a_denied_write_needs_no_new_test_run(tmp_path: Path, skill: str) -> None:
+    # The host refused the edit, so no file changed and the earlier run still holds.
+    steps = [("shell", "python3 -m unittest"), ("denied", TEST_PATH), OK]
+    check(tmp_path, skill, clean(skill).but(steps=steps))
+
+
+@pytest.mark.parametrize("skill", TESTED)
+def test_a_denied_write_does_not_hide_a_real_one(tmp_path: Path, skill: str) -> None:
+    steps = [("write", TEST_PATH), ("denied", TEST_PATH), OK]
+    check(tmp_path, skill, clean(skill).but(steps=steps), {"unverified-ok"})
+
+
+def test_press_denied_production_write_still_fails(tmp_path: Path) -> None:
+    scn = clean("press").but(then=[("denied", SRC_PATH)])
+    check(tmp_path, "press", scn, {"production-write"})
+
+
+def test_mold_denied_source_write_still_fails(tmp_path: Path) -> None:
+    scn = clean("mold").but(then=[("denied", "src/app.py")])
+    check(tmp_path, "mold", scn, {"write-tool-source-file"})
+
+
+def test_press_treats_every_code_extension_as_production(tmp_path: Path) -> None:
+    out: dict[str, Optional[str]] = {"app/Extra.kt": "fun x() {}\n"}
+    scn = clean("press").but(out=out)
+    check(tmp_path, "press", scn, {"production-changed"})
