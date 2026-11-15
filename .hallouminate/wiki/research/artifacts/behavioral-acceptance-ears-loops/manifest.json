@@ -1,0 +1,374 @@
+{
+  "slug": "behavioral-acceptance-ears-loops",
+  "invocation": "top-level",
+  "budget": {
+    "search": 16,
+    "extract": 20,
+    "spawn": 3
+  },
+  "extensions": [
+    {
+      "gap": "unanswered-question",
+      "note": "One worker attempted inaccessible Google behavior/mocking posts. Parallel accounting reached 22 opens against planned 20 before the parent received the overrun report. This is a recorded budget breach, not retrospective authorization. Parent stopped further web calls."
+    }
+  ],
+  "calls": [
+    {
+      "kind": "search",
+      "provider": "tavily",
+      "tool": "tvly search",
+      "query": "EARS Easy Approach Requirements Syntax BDD requirements",
+      "status": "failed: read-only /home/paul/.tavily"
+    },
+    {
+      "kind": "spawn",
+      "provider": "researcher",
+      "tool": "collaboration.spawn_agent",
+      "status": "ok",
+      "query": "ears_bdd"
+    },
+    {
+      "kind": "spawn",
+      "provider": "researcher",
+      "tool": "collaboration.spawn_agent",
+      "status": "ok",
+      "query": "behavior_checks"
+    },
+    {
+      "kind": "spawn",
+      "provider": "researcher",
+      "tool": "collaboration.spawn_agent",
+      "status": "ok",
+      "query": "loops_quality"
+    },
+    {
+      "kind": "search",
+      "provider": "native-web",
+      "tool": "web.run search_query",
+      "query": "site.archunit.org user guide cycle dependencies layered architecture rules",
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "native-web",
+      "tool": "web.run open",
+      "url": "https://www.archunit.org/use-cases",
+      "url_digest": "9d1943ed362fb287a79ae5ba1beb9f219871d7e6dafdb28c2e3422d10a56f0bb",
+      "file": "raw/archunit.md",
+      "title": "ArchUnit use cases",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    },
+    {
+      "kind": "search",
+      "provider": "web",
+      "tool": "web__run.search_query",
+      "query": "Alistair Mavin EARS Easy Approach to Requirements Syntax 2009 five patterns ubiquitous event driven unwanted behavior state driven optional feature pdf",
+      "status": "ok"
+    },
+    {
+      "kind": "search",
+      "provider": "web",
+      "tool": "web__run.search_query",
+      "query": "site:cucumber.io/docs/gherkin/reference/ Given When Then observable outcome examples business rules",
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "web",
+      "tool": "web__run.open",
+      "url": "https://www.researchgate.net/profile/Alistair_Mavin/publication/224079416_Easy_approach_to_requirements_syntax_EARS/links/568ce3bf08aeb488ea311990/Easy-approach-to-requirements-syntax-EARS.pdf",
+      "url_digest": "c160fb6b94bea3243ebc2853254b9a15946392c5d5b9d8b0576d9b1be2eb6743",
+      "file": "raw/ears/mavin-2009.md",
+      "title": "Easy approach to requirements syntax (EARS)",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "web",
+      "tool": "web__run.open",
+      "url": "https://cucumber.io/docs/gherkin/reference/",
+      "url_digest": "155968ea9f078444c338577a24b5d107f02accfbae2b59b52680dbffa914671b",
+      "file": "raw/ears/cucumber-gherkin.md",
+      "title": "Reference | Cucumber",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    },
+    {
+      "kind": "search",
+      "provider": "web",
+      "tool": "web__run.search_query",
+      "query": "site:cucumber.io/docs/bdd/ discovery formulation automation examples BDD without Cucumber tool",
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "web",
+      "tool": "web__run.open",
+      "url": "https://cucumber.io/docs/bdd/",
+      "url_digest": "642e49ac2548ec6137c3f5bfc362404b2884fba704811d22b02f00c0a2fc3247",
+      "file": "raw/ears/cucumber-bdd.md",
+      "title": "Behaviour-Driven Development | Cucumber",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "web",
+      "tool": "web__run.open",
+      "url": "https://cucumber.io/docs/bdd/myths/",
+      "url_digest": "4e737870ce342d0006c850ec85c7a50abac787a8f0b1f7eaa953f92f6256e499",
+      "file": "raw/ears/cucumber-myths.md",
+      "title": "Myths about BDD | Cucumber",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    },
+    {
+      "kind": "search",
+      "provider": "web",
+      "tool": "web.run search_query",
+      "query": "site:testing.googleblog.com testing behavior not implementation details tests",
+      "status": "ok"
+    },
+    {
+      "kind": "search",
+      "provider": "web",
+      "tool": "web.run search_query",
+      "query": "Google industrial mutation testing paper equivalent mutants tests",
+      "status": "ok"
+    },
+    {
+      "kind": "search",
+      "provider": "web",
+      "tool": "web.run search_query",
+      "query": "site:hypothesis.readthedocs.io stateful testing invariant rule property based testing",
+      "status": "ok"
+    },
+    {
+      "kind": "search",
+      "provider": "web",
+      "tool": "web.run search_query",
+      "query": "site:testing.googleblog.com integration tests real system end to end test mocks boundaries",
+      "status": "ok"
+    },
+    {
+      "kind": "search",
+      "provider": "web",
+      "tool": "web.run search_query",
+      "query": "site:testing.googleblog.com \"behavior\" \"implementation\" tests Google testing blog change detector",
+      "status": "ok"
+    },
+    {
+      "kind": "search",
+      "provider": "web",
+      "tool": "web.run search_query",
+      "query": "site:testing.googleblog.com \"Testing on the Toilet\" \"behavior\" implementation details tests",
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "web",
+      "tool": "web.run open",
+      "url": "https://testing.googleblog.com/2013/08/testing-on-toilet-test-behavior-not.html",
+      "fetched": "2026-10-17",
+      "status": "failed"
+    },
+    {
+      "kind": "extract",
+      "provider": "web",
+      "tool": "web.run open",
+      "url": "https://testing.googleblog.com/2021/06/how-much-testing-is-enough.html",
+      "url_digest": "17e0169b5bc23b63c96b9bdab54da093a06d7fe2129d81baa670fc45c8a98966",
+      "file": "raw/checks/01-google-testing.md",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "web",
+      "tool": "web.run open",
+      "url": "https://research.google/pubs/an-industrial-application-of-mutation-testing-lessons-challenges-and-research-directions/",
+      "url_digest": "c260d3d5820b4875faadcfd7afff4868e0907ef2c43dda436d4295a22f203c96",
+      "file": "raw/checks/02-google-mutation.md",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "web",
+      "tool": "web.run open",
+      "url": "https://hypothesis.readthedocs.io/en/latest/stateful.html",
+      "url_digest": "203e6943d913a58e4b2be24e662a7f2bece719c6ab4088166c338d9334675063",
+      "file": "raw/checks/03-hypothesis-stateful.md",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "web",
+      "tool": "web.run open",
+      "url": "https://testing.googleblog.com/2015/01/testing-on-toilet-change-detector-tests.html",
+      "fetched": "2026-10-17",
+      "status": "failed"
+    },
+    {
+      "kind": "extract",
+      "provider": "web",
+      "tool": "web.run open",
+      "url": "https://testing.googleblog.com/2013/05/testing-on-toilet-dont-overuse-mocks.html",
+      "fetched": "2026-10-17",
+      "status": "failed"
+    },
+    {
+      "kind": "extract",
+      "provider": "web",
+      "tool": "web.run open",
+      "url": "https://testing.googleblog.com/2013/08/testing-on-toilet-test-behavior-not.html",
+      "fetched": "2026-10-17",
+      "status": "failed"
+    },
+    {
+      "kind": "extract",
+      "provider": "web",
+      "tool": "web.run open",
+      "url": "https://testing.googleblog.com/2015/01/testing-on-toilet-change-detector-tests.html",
+      "fetched": "2026-10-17",
+      "status": "failed"
+    },
+    {
+      "kind": "extract",
+      "provider": "web",
+      "tool": "web.run open",
+      "url": "https://testing.googleblog.com/2013/05/testing-on-toilet-dont-overuse-mocks.html",
+      "fetched": "2026-10-17",
+      "status": "failed"
+    },
+    {
+      "kind": "extract",
+      "provider": "web",
+      "tool": "web.run open",
+      "url": "https://research.google/pubs/an-industrial-application-of-mutation-testing-lessons-challenges-and-research-directions/",
+      "url_digest": "c260d3d5820b4875faadcfd7afff4868e0907ef2c43dda436d4295a22f203c96",
+      "file": "raw/checks/02-google-mutation.md",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "web",
+      "tool": "web.run open",
+      "url": "https://hypothesis.readthedocs.io/en/latest/stateful.html",
+      "url_digest": "203e6943d913a58e4b2be24e662a7f2bece719c6ab4088166c338d9334675063",
+      "file": "raw/checks/03-hypothesis-stateful.md",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    },
+    {
+      "kind": "search",
+      "provider": "native-web",
+      "tool": "web.run search_query",
+      "query": "site:anthropic.com/engineering demystifying evals for AI agents outcome transcript repeated trials grader pitfalls",
+      "filters": {},
+      "status": "ok"
+    },
+    {
+      "kind": "search",
+      "provider": "native-web",
+      "tool": "web.run search_query",
+      "query": "site:anthropic.com/research OR site:anthropic.com/engineering evaluator optimizer workflow agents",
+      "filters": {},
+      "status": "ok"
+    },
+    {
+      "kind": "search",
+      "provider": "native-web",
+      "tool": "web.run search_query",
+      "query": "Self-Refine Iterative Refinement with Self-Feedback paper external feedback limitations",
+      "filters": {},
+      "status": "ok"
+    },
+    {
+      "kind": "search",
+      "provider": "native-web",
+      "tool": "web.run search_query",
+      "query": "adaptive data analysis reusable holdout test set overfitting paper architecture fitness functions maintainability",
+      "filters": {},
+      "status": "ok"
+    },
+    {
+      "kind": "search",
+      "provider": "native-web",
+      "tool": "web.run search_query",
+      "query": "paper Large Language Models Cannot Self-Correct Reasoning Yet external feedback improves self correction ICLR 2024",
+      "filters": {},
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "native-web",
+      "tool": "web.run open",
+      "url": "https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents",
+      "url_digest": "6c790a16de0afd2b5fe6beb9576b591d428632f9eec4ffcb9153132bc51741c7",
+      "file": "raw/loops/01-anthropic-evals.md",
+      "title": "01-anthropic-evals.md",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "native-web",
+      "tool": "web.run open",
+      "url": "https://www.anthropic.com/engineering/building-effective-agents",
+      "url_digest": "ffc229d83891918f82064b92e6624a3de7bce686fc211cb123e4eb4a0cd488f1",
+      "file": "raw/loops/02-anthropic-agents.md",
+      "title": "02-anthropic-agents.md",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "native-web",
+      "tool": "web.run open",
+      "url": "https://arxiv.org/abs/2303.17651",
+      "url_digest": "5ef9bdcc0ba68615d547fe99e2b0383817a3a446140984d07f4e7fe2bfe109a5",
+      "file": "raw/loops/03-self-refine.md",
+      "title": "03-self-refine.md",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "native-web",
+      "tool": "web.run open",
+      "url": "https://papers.nips.cc/paper_files/paper/2015/hash/bad5f33780c42f2588878a9d07405083-Abstract.html",
+      "url_digest": "a79723fdf23feb34731f42d3f7f68b4dc4c2dde8694ce1b8738a692f6344e727",
+      "file": "raw/loops/04-adaptive-holdout.md",
+      "title": "04-adaptive-holdout.md",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "native-web",
+      "tool": "web.run open",
+      "url": "https://proceedings.iclr.cc/paper_files/paper/2024/hash/8b4add8b0aa8749d80a34ca5d941c355-Abstract-Conference.html",
+      "url_digest": "c36c449bbf916476c40670ca5e256513e3e5b50a5db0c588f038886f2a4d8ae9",
+      "file": "raw/loops/05-iclr-self-correction.md",
+      "title": "05-iclr-self-correction.md",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "native-web",
+      "tool": "web.run open",
+      "url": "https://aclanthology.org/2024.tacl-1.78/",
+      "url_digest": "32592259fba8a48658b9e848368565dd91c59e990a19d48df9c3db3bbaf3eb14",
+      "file": "raw/loops/06-acl-survey.md",
+      "title": "06-acl-survey.md",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    }
+  ]
+}

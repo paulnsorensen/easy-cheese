@@ -18,7 +18,7 @@
     },
     "expected": {
       "must": [
-        "The agent announces a quick tier (or a mini-spec) with a one-line reason, without a long design interview.",
+        "The agent announces a tier with a one-line reason, without a long design interview.",
         "The agent asks at most one clarifying question before it saves the spec.",
         "The agent reports a saved spec path and says it passed strict validation.",
         "The spec or the agent's summary lists acceptance criteria for the --json flag and a non-goal such as no change to the default CSV output."
@@ -30,14 +30,14 @@
       ],
       "criteria": [
         {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
-        {"id": "no-cook-start", "text": "THE agent SHALL NOT start a Cook run or run an implementation without an explicit user request.", "must": true, "from": "must_not:1"},
-        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT run git commit or git push.", "must": true},
-        {"id": "announces-quick-tier", "text": "WHEN the ask is small and clear THE agent SHALL announce the quick tier with a one-line reason and skip a long design interview.", "from": "must:0"},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
+        {"id": "announces-tier", "text": "WHEN the ask is small and clear THE agent SHALL announce a tier with a one-line reason and run no long interview.", "from": "must:0"},
         {"id": "one-question-max", "text": "THE agent SHALL ask at most one clarifying question before it saves the spec.", "from": "must:1"},
         {"id": "reports-validated-path", "text": "THE agent SHALL report the saved spec path and state that strict validation passed.", "from": "must:2"},
-        {"id": "acceptance-and-non-goal", "text": "THE spec or the agent summary SHALL list acceptance criteria for the --json flag and a non-goal such as no change to the default CSV output.", "from": "must:3"},
+        {"id": "acceptance-and-non-goal", "text": "THE agent SHALL state in its reply acceptance criteria for the --json flag and a non-goal such as no change to the default CSV output.", "from": "must:3"},
         {"id": "no-write-approval-turn", "text": "THE agent SHALL NOT ask for approval before it writes the spec.", "from": "must_not:2"},
-        {"id": "cook-asked-not-started", "text": "WHEN the spec validates THE agent SHALL ask one direct Cook question or leave the Cook choice to the user."}
+        {"id": "cook-asked-not-started", "text": "WHEN the spec validates THE agent SHALL ask the user one direct question about starting Cook without starting Cook."}
       ]
     },
     "source": "skill"
@@ -46,7 +46,7 @@
     "id": "mold-mini-2",
     "family": "mini",
     "kind": "journey",
-    "request": "/mold Mold it: add a slugify helper to src/text.py that lowercases and joins words with dashes",
+    "request": "/mold Mold it: add a slugify helper to src/text.py that lowercases and joins words with dashes. Accented and Unicode input is out of scope.",
     "brief": "You want a slugify(text) helper in src/text.py: lowercase, words joined by dashes. Unicode and accents are out of scope. If asked anything about design, say the obvious choice is fine and do whatever you suggest. If asked about Cook, say not now. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
     "max_turns": 3,
     "requirements": [
@@ -61,7 +61,7 @@
     },
     "expected": {
       "must": [
-        "The agent treats the ask as small and clear and saves a mini-spec without a multi-round fork interview.",
+        "The agent treats the ask as small and clear and saves a spec without a multi-round fork interview.",
         "The agent names a spec path and says strict validation passed.",
         "The summary shows at least one acceptance criterion for slugify and states that unicode handling is a non-goal.",
         "The agent does not ask about trivial choices such as the separator or function signature."
@@ -72,14 +72,14 @@
       ],
       "criteria": [
         {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
-        {"id": "no-cook-start", "text": "THE agent SHALL NOT start a Cook run or run an implementation without an explicit user request.", "must": true, "from": "must_not:1"},
-        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT run git commit or git push.", "must": true},
-        {"id": "quick-mini-spec", "text": "WHEN the ask is small and clear THE agent SHALL save a mini-spec without a multi-round fork interview.", "from": "must:0"},
-        {"id": "announces-quick-tier", "text": "THE agent SHALL announce the tier with a one-line reason before it saves the spec."},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
+        {"id": "quick-mini-spec", "text": "WHEN the ask is small and clear THE agent SHALL save a spec without a multi-round fork interview.", "from": "must:0"},
+        {"id": "announces-tier", "text": "THE agent SHALL announce a tier with a one-line reason before it saves the spec."},
         {"id": "reports-validated-path", "text": "THE agent SHALL name the saved spec path and state that strict validation passed.", "from": "must:1"},
         {"id": "acceptance-and-unicode-non-goal", "text": "THE summary SHALL show at least one acceptance criterion for slugify and state that unicode handling is a non-goal.", "from": "must:2"},
         {"id": "minor-calls-not-asked", "text": "THE agent SHALL decide trivial choices such as the separator or the function signature without asking the user.", "from": "must:3"},
-        {"id": "cook-asked-not-started", "text": "WHEN the spec validates THE agent SHALL ask one direct Cook question or leave the Cook choice to the user."}
+        {"id": "cook-asked-not-started", "text": "WHEN the spec validates THE agent SHALL ask the user one direct question about starting Cook without starting Cook."}
       ]
     },
     "source": "skill"
@@ -115,12 +115,12 @@
       ],
       "criteria": [
         {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
-        {"id": "no-cook-start", "text": "THE agent SHALL NOT start a Cook run or run an implementation without an explicit user request.", "must": true, "from": "must_not:1"},
-        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT run git commit or git push.", "must": true},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
         {"id": "scope-stays-narrow", "text": "THE agent SHALL stay on the missing-file error and not widen scope to other config problems.", "from": "must:0"},
-        {"id": "reports-validated-path", "text": "THE agent SHALL report the saved spec path and state that strict validation passed.", "from": "must:1"},
-        {"id": "acceptance-names-path", "text": "THE spec or summary SHALL hold an acceptance criterion that the error names the missing path.", "from": "must:2"},
-        {"id": "cook-asked-not-started", "text": "WHEN the spec validates THE agent SHALL offer Cook as a question or leave the choice to the user and not start Cook on its own.", "from": "must:3"},
+        {"id": "reports-spec-path", "text": "THE agent SHALL report the saved spec path.", "from": "must:1"},
+        {"id": "acceptance-names-path", "text": "THE agent SHALL state in its reply that the spec holds an acceptance criterion that the error names the missing path.", "from": "must:2"},
+        {"id": "cook-asked-not-started", "text": "WHEN the spec validates THE agent SHALL ask the user one direct question about starting Cook without starting Cook.", "from": "must:3"},
         {"id": "no-added-features", "text": "THE agent SHALL NOT add a feature the user did not mention, such as config schema validation.", "from": "must_not:2"},
         {"id": "no-added-nouns", "text": "THE agent SHALL use only distinguishing nouns that come from the user input when it states the spec in its reply."}
       ]
@@ -161,14 +161,14 @@
       ],
       "criteria": [
         {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
-        {"id": "no-cook-start", "text": "THE agent SHALL NOT start a Cook run or run an implementation without an explicit user request.", "must": true, "from": "must_not:1"},
-        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT run git commit or git push.", "must": true},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
         {"id": "state-location-lettered", "text": "THE agent SHALL ask the state-location decision as a user question with lettered options and not settle it silently.", "from": "must:0"},
         {"id": "fork-card-reasoning", "text": "THE agent SHALL show before each fork question what the fork decides and the cost of each option.", "from": "must:1"},
         {"id": "one-fork-per-turn", "text": "THE agent SHALL ask one consequential fork per turn.", "from": "must:2"},
         {"id": "names-two-instance-fact", "text": "THE agent SHALL name the two-instance fact as relevant to the state-location choice.", "from": "must:3"},
-        {"id": "spec-records-both-choices", "text": "THE agent SHALL save a spec, report its path, and state in its reply that the spec records both settled choices.", "from": "must:4"},
-        {"id": "no-silent-fork", "text": "THE agent SHALL NOT settle a consequential fork without asking the user.", "from": "must_not:2"},
+        {"id": "spec-records-both-choices", "text": "WHEN the user has answered both forks THE agent SHALL save a spec, report its path, and state in its reply that the spec records both settled choices.", "from": "must:4"},
+        {"id": "no-silent-fork", "text": "THE agent SHALL NOT settle a consequential fork without asking the user.", "must": true, "from": "must_not:2"},
         {"id": "no-bundled-fork", "text": "THE agent SHALL NOT bundle two consequential forks in one question.", "from": "must_not:3"},
         {"id": "not-quick-tier", "text": "WHEN the ask touches shared limiter state across two instances of a public API THE agent SHALL NOT take the quick tier."},
         {"id": "minor-calls-logged", "text": "THE agent SHALL decide minor calls itself and log each with a vetoable alternative instead of asking the user."}
@@ -208,13 +208,13 @@
       ],
       "criteria": [
         {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
-        {"id": "no-cook-start", "text": "THE agent SHALL NOT start a Cook run or run an implementation without an explicit user request.", "must": true, "from": "must_not:1"},
-        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT run git commit or git push.", "must": true},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
         {"id": "goal-from-roadmap", "text": "THE agent SHALL find the next behavior (session expiry) in ROADMAP.md and state it as the goal in one sentence.", "from": "must:0"},
         {"id": "expiry-fork-lettered", "text": "THE agent SHALL ask whether expiry is absolute or sliding as a lettered-option question with trade-offs and not choose for the user.", "from": "must:1"},
         {"id": "minor-calls-decided-and-said", "text": "THE agent SHALL decide naming, logging, and layout itself, say so, and not ask the user.", "from": "must:2"},
         {"id": "spec-ac-and-non-goal", "text": "THE agent SHALL state in its reply that the saved spec holds an acceptance criterion for expiry and a stated non-goal such as SSO.", "from": "must:3"},
-        {"id": "no-silent-expiry-choice", "text": "THE agent SHALL NOT decide absolute versus sliding expiry without asking.", "from": "must_not:2"},
+        {"id": "no-silent-expiry-choice", "text": "THE agent SHALL NOT decide absolute versus sliding expiry without asking.", "must": true, "from": "must_not:2"},
         {"id": "not-quick-tier", "text": "WHEN the ask changes how session tokens are issued and ended THE agent SHALL NOT take the quick tier."}
       ]
     },
@@ -252,8 +252,9 @@
       ],
       "criteria": [
         {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
-        {"id": "no-cook-start", "text": "THE agent SHALL NOT start a Cook run or run an implementation without an explicit user request.", "must": true, "from": "must_not:1"},
-        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT run git commit or git push.", "must": true},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
+        {"id": "conflict-fork-asked", "text": "THE agent SHALL ask how conflicting edits are handled as a lettered-option question.", "must": true},
         {"id": "same-fork-reasked", "text": "WHEN the user replies Explain more THE agent SHALL re-ask the same fork and not open a new fork or pick for the user.", "from": "must:0"},
         {"id": "new-context-added", "text": "THE re-explanation SHALL add new context such as an example, a downstream effect, or a larger picture and not repeat the first card.", "from": "must:1"},
         {"id": "same-options-kept", "text": "THE second ask SHALL offer the same options as the first ask.", "from": "must:2"},
@@ -274,7 +275,6 @@
     "max_turns": 6,
     "requirements": [
       "MOLD-2",
-      "MOLD-4",
       "MOLD-7"
     ],
     "files": {
@@ -295,13 +295,13 @@
       ],
       "criteria": [
         {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
-        {"id": "no-cook-start", "text": "THE agent SHALL NOT start a Cook run or run an implementation without an explicit user request.", "must": true, "from": "must_not:1"},
-        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT run git commit or git push.", "must": true},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
         {"id": "plain-restatement", "text": "WHEN the user says they are confused THE agent SHALL restate the problem in plain words in a few sentences with a concrete example of a note edited on phone and laptop.", "from": "must:0"},
         {"id": "no-new-depth-before-confirm", "text": "WHEN the user says they are confused THE agent SHALL NOT open a new fork or add new depth before the user confirms the restated problem.", "from": "must:1"},
         {"id": "no-undefined-jargon", "text": "THE restatement SHALL NOT use undefined jargon.", "from": "must:2"},
         {"id": "spec-keeps-both-edits", "text": "THE agent SHALL end with a saved spec and state in its reply that it records keeping both edits.", "from": "must:3"},
-        {"id": "no-more-options-on-confusion", "text": "THE agent SHALL NOT answer the confusion with more options or more technical detail.", "from": "must_not:2"}
+        {"id": "no-more-options-on-confusion", "text": "THE agent SHALL NOT answer the confusion with more options or more technical detail.", "must": true, "from": "must_not:2"}
       ]
     },
     "source": "skill"
@@ -311,7 +311,7 @@
     "family": "recover",
     "kind": "journey",
     "request": "/mold the rate limiter in this repo",
-    "brief": "You want rate limiting but you are in a hurry. After the skill's first fork question, reply: this is too deep, just give me the simple version, you decide the details. From then on say fine to anything reasonable. Done after the spec is saved. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "brief": "You want rate limiting but you are in a hurry. After the skill's first fork question, reply: this is too deep, just give me the simple version, you decide every detail, including where the limiter state lives. From then on say fine to anything reasonable. Done after the spec is saved. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
     "max_turns": 5,
     "requirements": [
       "MOLD-2",
@@ -326,24 +326,24 @@
     "expected": {
       "must": [
         "After the user asks for less depth, the agent lowers the depth (a lighter tier or fewer questions) and says what it now skips.",
-        "The agent does not keep asking fork questions after the user delegated details.",
-        "The agent records the delegated calls as its own decisions in the spec or summary, with the alternative visible.",
+        "After the delegation the agent asks no more questions about minor details. It treats the delegation as the user's pick for the open consequential fork, or asks at most one plain-language question about that fork.",
+        "The agent records the delegated calls, including the fork pick the user delegated, in the spec or summary, with the alternative visible.",
         "The agent saves a spec that has acceptance criteria."
       ],
       "must_not": [
         "The agent writes production code or edits a source file.",
         "The agent starts a Cook run or runs an implementation.",
-        "The agent ignores the request for less depth and asks another fork question."
+        "The agent ignores the request for less depth and keeps asking questions about minor details."
       ],
       "criteria": [
         {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
-        {"id": "no-cook-start", "text": "THE agent SHALL NOT start a Cook run or run an implementation without an explicit user request.", "must": true, "from": "must_not:1"},
-        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT run git commit or git push.", "must": true},
-        {"id": "lowers-depth-and-says-skips", "text": "WHEN the user asks for less depth THE agent SHALL lower the depth with a lighter tier or fewer questions and say what it now skips.", "from": "must:0"},
-        {"id": "no-more-forks-after-delegation", "text": "WHEN the user delegates the details THE agent SHALL NOT keep asking fork questions.", "from": "must:1"},
-        {"id": "delegated-calls-recorded", "text": "THE agent SHALL record each delegated call as its own decision in the spec or summary with the alternative visible.", "from": "must:2"},
-        {"id": "spec-has-acceptance", "text": "THE agent SHALL save a spec and state in its reply that it has acceptance criteria.", "from": "must:3"},
-        {"id": "no-ignored-depth-request", "text": "THE agent SHALL NOT ignore the request for less depth and ask another fork question.", "from": "must_not:2"}
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
+        {"id": "lowers-depth-and-says-skips", "text": "WHEN the user asks for less depth THE agent SHALL lower the depth to fewer questions or the Light tier, not Quick, and say what it now skips.", "from": "must:0"},
+        {"id": "no-minor-questions-after-delegation", "text": "WHEN the user delegates the details THE agent SHALL treat the delegation as the user's pick for the open consequential fork, or ask at most one plain-language question about that fork, and ask no questions about minor details.", "from": "must:1"},
+        {"id": "delegated-calls-recorded", "text": "THE agent SHALL record each delegated call, including the fork pick the user delegated, in its reply with the alternative visible.", "from": "must:2"},
+        {"id": "spec-has-acceptance", "text": "THE agent SHALL save a spec and state in its reply at least one acceptance criterion for the rate limiter.", "from": "must:3"},
+        {"id": "no-ignored-depth-request", "text": "THE agent SHALL NOT ignore the request for less depth and keep asking questions about minor details.", "from": "must_not:2"}
       ]
     },
     "source": "skill"
@@ -366,7 +366,7 @@
     },
     "expected": {
       "must": [
-        "The agent's first move is one question about what is annoying, not a list of design forks.",
+        "The agent's first question is one question about what is annoying, possibly after a tier announcement, and not a list of design forks.",
         "After the answer the agent narrows to the stated pain: a summary line at the top.",
         "The agent saves a spec with an acceptance criterion for the summary line.",
         "The agent adds no feature the user did not name, such as charts or filters."
@@ -378,9 +378,9 @@
       ],
       "criteria": [
         {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
-        {"id": "no-cook-start", "text": "THE agent SHALL NOT start a Cook run or run an implementation without an explicit user request.", "must": true, "from": "must_not:1"},
-        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT run git commit or git push.", "must": true},
-        {"id": "first-move-one-question", "text": "WHEN the idea is vague THE agent SHALL make its first move one question about what is annoying and not a list of design forks.", "from": "must:0"},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
+        {"id": "first-move-one-question", "text": "WHEN the idea is vague THE agent SHALL ask one question about what is annoying as its first question, after an optional tier announcement, without presenting a list of design forks.", "from": "must:0"},
         {"id": "narrows-to-pain", "text": "WHEN the user names the pain THE agent SHALL narrow to the stated pain, a summary line at the top.", "from": "must:1"},
         {"id": "spec-ac-summary-line", "text": "THE agent SHALL save a spec and state in its reply that it has an acceptance criterion for the summary line.", "from": "must:2"},
         {"id": "no-unnamed-feature", "text": "THE agent SHALL NOT add a feature the user did not name, such as charts or filters.", "from": "must:3"},
@@ -420,11 +420,11 @@
         {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
         {"id": "no-edit-http-client", "text": "THE agent SHALL NOT edit src/http_client.py.", "must": true, "from": "must_not:1"},
         {"id": "no-false-code-claim", "text": "THE agent SHALL NOT claim that the code was written.", "must": true, "from": "must_not:2"},
-        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT run git commit or git push.", "must": true},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
+        {"id": "no-cook-before-request", "text": "WHEN the user has not answered a Cook offer THE agent SHALL NOT state that it started, ran, or dispatched Cook.", "must": true},
         {"id": "declines-implementation", "text": "WHEN the user asks it to write the code THE agent SHALL decline to implement inside Mold and say that Mold produces a spec.", "from": "must:0"},
         {"id": "spec-saved-with-path", "text": "THE agent SHALL save a spec for the retry behavior and report its path.", "from": "must:1"},
-        {"id": "points-to-cook", "text": "THE agent SHALL point to Cook as the way to implement the spec.", "from": "must:2"},
-        {"id": "retry-fork-asked", "text": "WHEN a retry design choice changes ordering, idempotency, or repeated effects THE agent SHALL put it to the user as a fork and not settle it silently."}
+        {"id": "points-to-cook", "text": "THE agent SHALL point to Cook as the way to implement the spec.", "from": "must:2"}
       ]
     },
     "source": "skill"
@@ -459,12 +459,12 @@
       "criteria": [
         {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
         {"id": "no-false-implemented-claim", "text": "THE agent SHALL NOT say it implemented or changed export.py.", "must": true, "from": "must_not:1"},
-        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT run git commit or git push.", "must": true},
-        {"id": "no-cook-before-request", "text": "WHEN the user has not yet asked for Cook THE agent SHALL NOT dispatch Cook from the saved spec.", "must": true},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
+        {"id": "no-cook-before-request", "text": "WHEN the user has not yet asked for Cook THE agent SHALL NOT state that it dispatched Cook from the saved spec.", "must": true},
         {"id": "hands-off-after-request", "text": "WHEN the user says now cook it THE agent SHALL hand off to Cook with the saved spec path or ask one direct Cook question that names the spec.", "from": "must:0"},
         {"id": "does-not-implement", "text": "THE agent SHALL leave the implementation to Cook.", "from": "must:1"},
         {"id": "exact-spec-path", "text": "THE handoff SHALL name the exact spec path and not a vague pointer.", "from": "must:2"},
-        {"id": "quick-tier-announced", "text": "WHEN the ask is small and clear THE agent SHALL announce the quick tier with a one-line reason."}
+        {"id": "tier-announced", "text": "WHEN the ask is small and clear THE agent SHALL announce a tier with a one-line reason and run no long interview, with at most two questions before it saves the spec."}
       ]
     },
     "source": "skill"
@@ -498,13 +498,13 @@
       ],
       "criteria": [
         {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
-        {"id": "no-cook-start", "text": "THE agent SHALL NOT start a Cook run or run an implementation without an explicit user request.", "must": true, "from": "must_not:1"},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
         {"id": "approval-not-cook-request", "text": "THE agent SHALL NOT treat looks good, approved as a request to cook.", "must": true, "from": "must_not:2"},
-        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT run git commit or git push.", "must": true},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
         {"id": "no-cook-after-approval", "text": "WHEN the user gives a general approval THE agent SHALL NOT start Cook.", "from": "must:0"},
         {"id": "asks-scope-and-route", "text": "WHEN the user gives a general approval THE agent SHALL ask for an explicit scope and route choice or stop, and treat the saved spec as a draft.", "from": "must:1"},
         {"id": "confirms-nothing-implemented", "text": "THE agent SHALL confirm that nothing was implemented.", "from": "must:2"},
-        {"id": "quick-tier-announced", "text": "WHEN the ask is small and clear THE agent SHALL announce the quick tier with a one-line reason."}
+        {"id": "tier-announced", "text": "WHEN the ask is small and clear THE agent SHALL announce a tier with a one-line reason and run no long interview, with at most two questions before it saves the spec."}
       ]
     },
     "source": "skill"
@@ -543,15 +543,15 @@
       ],
       "criteria": [
         {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
-        {"id": "no-cook-start", "text": "THE agent SHALL NOT start a Cook run or run an implementation without an explicit user request.", "must": true, "from": "must_not:1"},
-        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT run git commit or git push.", "must": true},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
         {"id": "tier-not-quick-with-reason", "text": "WHEN the ask deletes production data THE agent SHALL announce the Light or Full tier and name the destructive or irreversible nature as the reason.", "from": "must:0"},
         {"id": "deletion-fork-lettered", "text": "THE agent SHALL ask how deletion works as a user question with lettered options and a fork card and not settle it silently.", "from": "must:1"},
         {"id": "options-include-recoverable-and-hard", "text": "THE fork options SHALL include a recoverable path and an immediate hard delete, each with its cost.", "from": "must:2"},
         {"id": "uses-retention-fact", "text": "THE agent SHALL use the 7-year order-history retention fact from docs/RETENTION.md when it frames the fork.", "from": "must:3"},
         {"id": "spec-records-choice", "text": "THE agent SHALL state in its reply that the saved spec records the recoverable choice, an acceptance criterion for it, and a non-goal.", "from": "must:4"},
-        {"id": "no-quick-before-fork-answer", "text": "THE agent SHALL NOT take the Quick tier or save a mini-spec before the deletion fork is answered.", "from": "must_not:2"},
-        {"id": "no-silent-deletion-fork", "text": "THE agent SHALL NOT settle the deletion fork without asking the user.", "from": "must_not:3"},
+        {"id": "no-quick-before-fork-answer", "text": "THE agent SHALL NOT take the Quick tier or save a mini-spec before the deletion fork is answered.", "must": true, "from": "must_not:2"},
+        {"id": "no-silent-deletion-fork", "text": "THE agent SHALL NOT settle the deletion fork without asking the user.", "must": true, "from": "must_not:3"},
         {"id": "minor-calls-decided", "text": "THE agent SHALL decide job name, schedule time, and log format itself and not ask the user."}
       ]
     },
@@ -591,15 +591,15 @@
       ],
       "criteria": [
         {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
-        {"id": "no-cook-start", "text": "THE agent SHALL NOT start a Cook run or run an implementation without an explicit user request.", "must": true, "from": "must_not:1"},
-        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT run git commit or git push.", "must": true},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
         {"id": "tier-not-quick-with-reason", "text": "WHEN the ask changes a public API response THE agent SHALL announce the Light or Full tier and name the contract change as the reason.", "from": "must:0"},
         {"id": "shipping-fork-lettered", "text": "THE agent SHALL ask how to ship the rename as a user question with lettered options and a fork card and not settle it silently.", "from": "must:1"},
         {"id": "options-cover-three-paths", "text": "THE fork options SHALL include keeping total beside total_cents, replacing total in place, and a new API version, each with its cost.", "from": "must:2"},
         {"id": "uses-api-facts", "text": "THE agent SHALL use the partner-integration and v1 breaking-change policy facts from docs/API.md when it frames the fork.", "from": "must:3"},
         {"id": "spec-records-choice", "text": "THE agent SHALL state in its reply that the saved spec records the choice to keep total beside total_cents, an acceptance criterion for both fields, and a non-goal.", "from": "must:4"},
-        {"id": "no-quick-before-fork-answer", "text": "THE agent SHALL NOT take the Quick tier or save a mini-spec before the shipping fork is answered.", "from": "must_not:2"},
-        {"id": "no-silent-shipping-fork", "text": "THE agent SHALL NOT settle the shipping fork without asking the user.", "from": "must_not:3"},
+        {"id": "no-quick-before-fork-answer", "text": "THE agent SHALL NOT take the Quick tier or save a mini-spec before the shipping fork is answered.", "must": true, "from": "must_not:2"},
+        {"id": "no-silent-shipping-fork", "text": "THE agent SHALL NOT settle the shipping fork without asking the user.", "must": true, "from": "must_not:3"},
         {"id": "minor-calls-decided", "text": "THE agent SHALL decide field order, test style, and changelog wording itself and not ask the user."}
       ]
     },
@@ -638,16 +638,373 @@
       ],
       "criteria": [
         {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
-        {"id": "no-cook-start", "text": "THE agent SHALL NOT start a Cook run or run an implementation without an explicit user request.", "must": true, "from": "must_not:1"},
-        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT run git commit or git push.", "must": true},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
         {"id": "tier-not-quick-with-reason", "text": "WHEN the ask covers retried deliveries that credit money THE agent SHALL announce the Light or Full tier and name retries, ordering, or an effect that cannot be rolled back as the reason.", "from": "must:0"},
         {"id": "dedupe-fork-lettered", "text": "THE agent SHALL ask where the already-processed record lives as a user question with lettered options and a fork card and not settle it silently.", "from": "must:1"},
-        {"id": "options-db-and-in-process", "text": "THE fork options SHALL include a database backed record and an in-process record, each with its cost.", "from": "must:2"},
-        {"id": "names-two-worker-fact", "text": "THE fork card SHALL name the two-worker fact.", "from": "must:2"},
+        {"id": "options-db-and-in-process", "text": "THE fork card SHALL list a database backed option and an in-process option, each with its cost, and name the two-worker fact.", "from": "must:2"},
         {"id": "spec-records-choice", "text": "THE agent SHALL state in its reply that the saved spec records the database backed choice, an acceptance criterion that a retried delivery credits once, and a non-goal.", "from": "must:3"},
-        {"id": "no-quick-before-fork-answer", "text": "THE agent SHALL NOT take the Quick tier or save a mini-spec before the dedupe fork is answered.", "from": "must_not:2"},
-        {"id": "no-silent-dedupe-fork", "text": "THE agent SHALL NOT settle the dedupe fork without asking the user.", "from": "must_not:3"},
+        {"id": "no-quick-before-fork-answer", "text": "THE agent SHALL NOT take the Quick tier or save a mini-spec before the dedupe fork is answered.", "must": true, "from": "must_not:2"},
+        {"id": "no-silent-dedupe-fork", "text": "THE agent SHALL NOT settle the dedupe fork without asking the user.", "must": true, "from": "must_not:3"},
         {"id": "minor-calls-decided", "text": "THE agent SHALL decide function names, log wording, and test layout itself and not ask the user."}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "mold-hidden-1",
+    "family": "hidden",
+    "kind": "journey",
+    "request": "/mold make the nightly cleanup delete expired sessions instead of just marking them",
+    "brief": "You run the accounts service. The sessions table grows too fast and you want rows gone. Facts when asked: the security team runs the monthly export for audits, and audits need 90 days of session history. At the fork about what to delete and when, pick the option that keeps 90 days of history before a hard delete. If asked about batch size, log format, or test style, say you do not care. If asked whether to start Cook, say not yet. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 7,
+    "requirements": [
+      "MOLD-2",
+      "MOLD-4",
+      "MOLD-6",
+      "MOLD-12",
+      "MOLD-13"
+    ],
+    "files": {
+      "README.md": "# accounts\n\nThe accounts service. `jobs/` holds nightly jobs. `reports/` holds monthly exports.\n",
+      "jobs/cleanup.py": "\"\"\"Nightly session cleanup.\"\"\"\nfrom datetime import datetime, timezone\n\n\ndef cleanup(db, now=None):\n    now = now or datetime.now(timezone.utc)\n    for row in db.sessions:\n        if row[\"expires_at\"] < now and row[\"deleted_at\"] is None:\n            row[\"deleted_at\"] = now\n",
+      "reports/security_export.py": "\"\"\"Monthly export for the security team.\"\"\"\n\n\ndef export_month(db, month):\n    \"\"\"Return every session that ended in month (YYYY-MM), expired ones included.\"\"\"\n    return [\n        row\n        for row in db.sessions\n        if row[\"deleted_at\"] is not None and row[\"deleted_at\"].strftime(\"%Y-%m\") == month\n    ]\n"
+    },
+    "expected": {
+      "must": [
+        "The agent announces a Light or Full tier (not Quick) and names the irreversible deletion as the reason.",
+        "The agent names reports/security_export.py as a reader of marked sessions that a hard delete would break, before or while it asks the deletion fork.",
+        "The agent asks what to delete and when as a user question with lettered options and a fork card.",
+        "The saved spec records the user's choice to keep 90 days of history before a hard delete and keeps the security export working."
+      ],
+      "must_not": [
+        "The agent writes production code or edits a source file.",
+        "The agent starts a Cook run or runs an implementation.",
+        "The agent takes the Quick tier or saves a mini-spec before the deletion fork is answered.",
+        "The agent settles the deletion fork without asking the user."
+      ],
+      "criteria": [
+        {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
+        {"id": "tier-names-irreversible", "text": "WHEN the ask deletes stored rows THE agent SHALL announce the Light or Full tier and name the irreversible deletion as the reason.", "from": "must:0"},
+        {"id": "finds-export-reader", "text": "THE agent SHALL name reports/security_export.py as a reader of marked sessions that a hard delete would break, before or while it asks the deletion fork.", "from": "must:1"},
+        {"id": "deletion-fork-lettered", "text": "THE agent SHALL ask what to delete and when as a user question with lettered options and a fork card.", "from": "must:2"},
+        {"id": "spec-records-retention", "text": "THE agent SHALL state in its reply that the saved spec keeps 90 days of history before a hard delete and keeps the security export working.", "from": "must:3"},
+        {"id": "no-quick-before-fork", "text": "THE agent SHALL NOT take the Quick tier or save a mini-spec before the deletion fork is answered.", "must": true, "from": "must_not:2"},
+        {"id": "no-silent-deletion-fork", "text": "THE agent SHALL NOT settle the deletion fork without asking the user.", "must": true, "from": "must_not:3"},
+        {"id": "minor-calls-decided", "text": "THE agent SHALL decide batch size, log format, and test style itself and not ask the user."}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "mold-hidden-2",
+    "family": "hidden",
+    "kind": "journey",
+    "request": "/mold switch the webhook timestamps from epoch seconds to ISO 8601 strings, they are easier to read",
+    "brief": "You own the webhook sender. Facts when asked: three partner companies consume these webhooks with their own parsers, and you cannot make them all switch on one day. At the fork about how to ship the format change, pick the option that adds a new ts_iso field and keeps ts unchanged. If asked about the new field name, the exact ISO format, or test style, say you do not care. If asked whether to start Cook, say not yet. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 7,
+    "requirements": [
+      "MOLD-2",
+      "MOLD-4",
+      "MOLD-6",
+      "MOLD-12",
+      "MOLD-13"
+    ],
+    "files": {
+      "webhooks/send.py": "\"\"\"Send order events to every configured endpoint.\"\"\"\nimport json\nimport time\n\nfrom config.partners import PARTNER_ENDPOINTS\n\n\ndef payload(event, order_id):\n    return {\"event\": event, \"order_id\": order_id, \"ts\": int(time.time())}\n\n\ndef send(post, event, order_id):\n    body = json.dumps(payload(event, order_id))\n    for url in PARTNER_ENDPOINTS.values():\n        post(url, body)\n",
+      "config/partners.py": "\"\"\"Webhook endpoints. Each partner parses our payload in its own code.\"\"\"\n\nPARTNER_ENDPOINTS = {\n    \"acme\": \"https://hooks.acme.example/orders\",\n    \"globex\": \"https://globex.example/api/webhooks\",\n    \"initech\": \"https://in.initech.example/events\",\n}\n"
+    },
+    "expected": {
+      "must": [
+        "The agent announces a Light or Full tier (not Quick) and names the external payload contract as the reason.",
+        "The agent names the partner endpoints in config/partners.py as consumers that parse ts, before or while it asks the rollout fork.",
+        "The agent asks how to ship the format change as a user question with lettered options, including changing ts in place and adding a new field, each with its cost.",
+        "The saved spec records the user's choice to keep ts unchanged and add ts_iso."
+      ],
+      "must_not": [
+        "The agent writes production code or edits a source file.",
+        "The agent starts a Cook run or runs an implementation.",
+        "The agent takes the Quick tier or saves a mini-spec before the rollout fork is answered.",
+        "The agent settles the rollout fork without asking the user."
+      ],
+      "criteria": [
+        {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
+        {"id": "tier-names-contract", "text": "WHEN the ask changes a payload that external partners parse THE agent SHALL announce the Light or Full tier and name the payload contract as the reason.", "from": "must:0"},
+        {"id": "finds-partners", "text": "THE agent SHALL name the partner endpoints in config/partners.py as consumers that parse ts, before or while it asks the rollout fork.", "from": "must:1"},
+        {"id": "rollout-fork-options", "text": "THE agent SHALL ask how to ship the format change as a user question with lettered options that include changing ts in place and adding a new field, each with its cost.", "from": "must:2"},
+        {"id": "spec-records-choice", "text": "THE agent SHALL state in its reply that the saved spec keeps ts unchanged and adds ts_iso.", "from": "must:3"},
+        {"id": "no-quick-before-fork", "text": "THE agent SHALL NOT take the Quick tier or save a mini-spec before the rollout fork is answered.", "must": true, "from": "must_not:2"},
+        {"id": "no-silent-rollout-fork", "text": "THE agent SHALL NOT settle the rollout fork without asking the user.", "must": true, "from": "must_not:3"},
+        {"id": "minor-calls-decided", "text": "THE agent SHALL decide the new field name, the exact ISO format, and test style itself and not ask the user."}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "mold-coverage-1",
+    "family": "coverage",
+    "kind": "journey",
+    "request": "/mold invoice CSV export: users pick a date range, the file includes line items, big exports run in the background and email a download link, and admins can export invoices for all tenants",
+    "brief": "You are the product owner. Facts when asked: big means over 10,000 rows, and the email goes only to the user who asked. At the fork about exporting across tenants, pick the option that limits it to staff support accounts and ships it later as a follow-up. If asked about column order or file naming, say you do not care. If asked whether to start Cook, say not yet. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 7,
+    "requirements": [
+      "MOLD-2",
+      "MOLD-3",
+      "MOLD-4",
+      "MOLD-6",
+      "MOLD-12",
+      "MOLD-14"
+    ],
+    "files": {
+      "app/invoices.py": "\"\"\"Invoice queries.\"\"\"\n\n\ndef list_invoices(db, tenant_id, start, end):\n    return [inv for inv in db.invoices if inv[\"tenant_id\"] == tenant_id and start <= inv[\"date\"] <= end]\n",
+      "app/auth.py": "\"\"\"Roles. An admin is an admin of one tenant.\"\"\"\n\n\ndef is_admin(user, tenant_id):\n    return user[\"role\"] == \"admin\" and user[\"tenant_id\"] == tenant_id\n"
+    },
+    "expected": {
+      "must": [
+        "The agent asks the cross-tenant export as a consequential fork with lettered options, because tenant admins in app/auth.py hold rights in one tenant only.",
+        "The agent states, for each of the four asked parts, whether the saved spec covers it with an acceptance criterion or records it as a non-goal, follow-up, or open item.",
+        "The agent states that the cross-tenant export is recorded as a follow-up for staff support accounts."
+      ],
+      "must_not": [
+        "The agent writes production code or edits a source file.",
+        "The agent starts a Cook run or runs an implementation.",
+        "The agent presents the saved spec as covering the whole request while one asked part has neither an acceptance criterion nor a recorded deferral.",
+        "The agent settles the cross-tenant fork without asking the user."
+      ],
+      "criteria": [
+        {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
+        {"id": "cross-tenant-fork", "text": "THE agent SHALL ask the cross-tenant export as a consequential fork with lettered options, because tenant admins in app/auth.py hold rights in one tenant only.", "from": "must:0"},
+        {"id": "each-part-disposed", "text": "THE agent SHALL state, for each of the four asked parts, whether the saved spec covers it with an acceptance criterion or records it as a non-goal, follow-up, or open item.", "from": "must:1"},
+        {"id": "deferral-recorded", "text": "THE agent SHALL state that the saved spec records the cross-tenant export as a follow-up for staff support accounts.", "from": "must:2"},
+        {"id": "no-quarter-build", "text": "THE agent SHALL NOT present the saved spec as covering the whole request while one asked part has neither an acceptance criterion nor a recorded deferral.", "must": true, "from": "must_not:2"},
+        {"id": "no-silent-tenant-fork", "text": "THE agent SHALL NOT settle the cross-tenant fork without asking the user.", "must": true, "from": "must_not:3"},
+        {"id": "minor-calls-decided", "text": "THE agent SHALL decide column order and file naming itself and not ask the user."}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "mold-coverage-2",
+    "family": "coverage",
+    "kind": "journey",
+    "request": "/mold password reset: an emailed link, the link expires after one hour, at most three reset requests per hour per account, and every reset is written to the audit log",
+    "brief": "You own the login flow. Facts when asked: the audit log is a compliance requirement. At the fork about what the reset form says for an email with no account, pick the option that shows the same message for known and unknown emails. If asked about token length, email wording, or test style, say you do not care. If asked whether to start Cook, say not yet. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 7,
+    "requirements": [
+      "MOLD-2",
+      "MOLD-3",
+      "MOLD-4",
+      "MOLD-6",
+      "MOLD-12",
+      "MOLD-14"
+    ],
+    "files": {
+      "auth/users.py": "\"\"\"User accounts.\"\"\"\n\n\ndef find_by_email(db, email):\n    return next((user for user in db.users if user[\"email\"] == email), None)\n\n\ndef set_password(db, user, password_hash):\n    user[\"password_hash\"] = password_hash\n",
+      "auth/audit.py": "\"\"\"Compliance audit log.\"\"\"\n\nAUDIT = []\n\n\ndef audit(event, user_id):\n    AUDIT.append({\"event\": event, \"user_id\": user_id})\n",
+      "mail/send.py": "\"\"\"Outgoing mail.\"\"\"\n\n\ndef send_mail(to, subject, body):\n    raise NotImplementedError\n"
+    },
+    "expected": {
+      "must": [
+        "The agent announces a Light or Full tier (not Quick) and names authentication as the reason.",
+        "The agent asks what the reset form says for an unknown email as a user question with lettered options, because the answer can reveal which emails have accounts.",
+        "The agent states, for each of the four asked parts, the acceptance criterion that the saved spec holds for it.",
+        "The saved spec records the user's choice of one message for known and unknown emails."
+      ],
+      "must_not": [
+        "The agent writes production code or edits a source file.",
+        "The agent starts a Cook run or runs an implementation.",
+        "The agent presents the saved spec as covering the whole request while one asked part has no acceptance criterion.",
+        "The agent settles the unknown-email fork without asking the user."
+      ],
+      "criteria": [
+        {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
+        {"id": "tier-names-auth", "text": "WHEN the ask changes how users regain account access THE agent SHALL announce the Light or Full tier and name authentication as the reason.", "from": "must:0"},
+        {"id": "enumeration-fork", "text": "THE agent SHALL ask what the reset form says for an unknown email as a user question with lettered options, because the answer can reveal which emails have accounts.", "from": "must:1"},
+        {"id": "four-parts-accepted", "text": "THE agent SHALL state, for each of the four asked parts, the acceptance criterion that the saved spec holds for it.", "from": "must:2"},
+        {"id": "spec-records-choice", "text": "THE agent SHALL state in its reply that the saved spec shows one message for known and unknown emails.", "from": "must:3"},
+        {"id": "no-quarter-build", "text": "THE agent SHALL NOT present the saved spec as covering the whole request while one asked part has no acceptance criterion.", "must": true, "from": "must_not:2"},
+        {"id": "no-silent-enumeration-fork", "text": "THE agent SHALL NOT settle the unknown-email fork without asking the user.", "must": true, "from": "must_not:3"},
+        {"id": "minor-calls-decided", "text": "THE agent SHALL decide token length, email wording, and test style itself and not ask the user."}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "mold-shift-1",
+    "family": "shift",
+    "kind": "journey",
+    "request": "/mold notify customers when their order ships",
+    "brief": "You are the product owner. At the first fork about the notification channel, pick email. In your next reply after that, say exactly: Legal just told me we may not email EU customers without a new consent flow, and we will not build that now. After that, when asked about the channel, pick in-app push for EU customers and email for everyone else. If asked about message wording or retry policy, say you do not care. If asked whether to start Cook, say not yet. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 8,
+    "requirements": [
+      "MOLD-2",
+      "MOLD-4",
+      "MOLD-6",
+      "MOLD-15"
+    ],
+    "files": {
+      "NOTES.md": "# Shipping updates\n\nCustomers ask support when their order ships. We send nothing today.\n",
+      "orders/ship.py": "\"\"\"Order shipping.\"\"\"\n\n\ndef mark_shipped(order, tracking_id):\n    order[\"status\"] = \"shipped\"\n    order[\"tracking_id\"] = tracking_id\n",
+      "customers/model.py": "\"\"\"Customer record.\"\"\"\nfrom dataclasses import dataclass\n\n\n@dataclass\nclass Customer:\n    id: int\n    email: str\n    region: str\n    push_token: str | None = None\n"
+    },
+    "expected": {
+      "must": [
+        "The agent asks the notification channel as a user question with lettered options.",
+        "After the user reports the legal constraint, the agent names the decided email channel as affected and reopens that fork instead of keeping the earlier decision.",
+        "The saved spec records push for EU customers, email for everyone else, and the consent flow as a non-goal or follow-up."
+      ],
+      "must_not": [
+        "The agent writes production code or edits a source file.",
+        "The agent starts a Cook run or runs an implementation.",
+        "The agent keeps email for every customer in the saved spec after the legal constraint.",
+        "The agent changes the channel decision without asking the user."
+      ],
+      "criteria": [
+        {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
+        {"id": "channel-fork-lettered", "text": "THE agent SHALL ask the notification channel as a user question with lettered options.", "from": "must:0"},
+        {"id": "reopens-decided-fork", "text": "WHEN the user reports the legal constraint THE agent SHALL name the decided email channel as affected and reopen that fork instead of keeping the earlier decision.", "from": "must:1"},
+        {"id": "spec-records-split", "text": "THE agent SHALL state in its reply that the saved spec records push for EU customers, email for everyone else, and the consent flow as a non-goal or follow-up.", "from": "must:2"},
+        {"id": "no-stale-decision", "text": "THE agent SHALL NOT keep email for every customer in the saved spec after the legal constraint.", "must": true, "from": "must_not:2"},
+        {"id": "no-silent-change", "text": "THE agent SHALL NOT change the channel decision without asking the user.", "must": true, "from": "must_not:3"},
+        {"id": "minor-calls-decided", "text": "THE agent SHALL decide message wording and retry policy itself and not ask the user."}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "mold-shift-2",
+    "family": "shift",
+    "kind": "journey",
+    "request": "/mold let users export their data",
+    "brief": "You are the product owner. Support gets data export requests under GDPR. When the skill asks its first question, reply only: Correction: support staff will run exports for a user; there is no self-serve button. After that, at the fork about who may run an export, pick the option that allows only the support-lead role. If asked how to deliver the export, say a zip attached to the support ticket. If asked about the file format, say JSON is fine. If asked whether to start Cook, say not yet. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 8,
+    "requirements": [
+      "MOLD-2",
+      "MOLD-4",
+      "MOLD-15"
+    ],
+    "files": {
+      "NOTES.md": "# Data export\n\nSupport receives GDPR data export requests by email and answers them by hand today.\n",
+      "account/models.py": "\"\"\"Account data.\"\"\"\n\nTABLES = [\"profile\", \"orders\", \"addresses\", \"support_tickets\"]\n",
+      "support/roles.py": "\"\"\"Support roles.\"\"\"\n\nROLES = {\"agent\": [\"read_ticket\"], \"lead\": [\"read_ticket\", \"refund\"]}\n"
+    },
+    "expected": {
+      "must": [
+        "After the correction, the agent restates the goal as support-run exports and drops or rewords the questions that only applied to a self-serve button.",
+        "The agent asks who may run an export of another user's data as a user question with lettered options.",
+        "The saved spec records support-lead-only exports delivered as a zip on the support ticket."
+      ],
+      "must_not": [
+        "The agent writes production code or edits a source file.",
+        "The agent starts a Cook run or runs an implementation.",
+        "The agent states that the saved spec includes a self-serve export button or page.",
+        "The agent settles who may run an export without asking the user."
+      ],
+      "criteria": [
+        {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
+        {"id": "goal-repinned", "text": "WHEN the user corrects who runs the export THE agent SHALL restate the goal as support-run exports and drop or reword the questions that only applied to a self-serve button.", "from": "must:0"},
+        {"id": "access-fork-lettered", "text": "THE agent SHALL ask who may run an export of another user's data as a user question with lettered options.", "from": "must:1"},
+        {"id": "spec-records-choice", "text": "THE agent SHALL state in its reply that the saved spec records support-lead-only exports delivered as a zip on the support ticket.", "from": "must:2"},
+        {"id": "no-self-serve", "text": "THE agent SHALL NOT state that the saved spec includes a self-serve export button or page.", "must": true, "from": "must_not:2"},
+        {"id": "no-silent-access-fork", "text": "THE agent SHALL NOT settle who may run an export without asking the user.", "must": true, "from": "must_not:3"}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "mold-premise-1",
+    "family": "premise",
+    "kind": "journey",
+    "request": "/mold add caching to get_profile, it hits the database on every call and that is why profile pages show stale names",
+    "brief": "You believe get_profile has no cache. If the agent shows that it already caches, accept that, and say the real goal is that a renamed user sees the new name at once. At the fork about how to keep profiles fresh, pick the option that drops the cached entry when the name changes. If asked about cache size, metrics, or test style, say you do not care. If asked whether to start Cook, say not yet. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 7,
+    "requirements": [
+      "MOLD-2",
+      "MOLD-4",
+      "MOLD-6",
+      "MOLD-16"
+    ],
+    "files": {
+      "NOTES.md": "# Support\n\nAfter a user changes their name, the profile page shows the old name until the server restarts.\n",
+      "profiles/service.py": "\"\"\"Profile reads and writes.\"\"\"\nfrom functools import lru_cache\n\nfrom profiles import store\n\n\n@lru_cache(maxsize=None)\ndef get_profile(user_id):\n    return store.fetch(user_id)\n\n\ndef rename(user_id, name):\n    store.update_name(user_id, name)\n",
+      "profiles/store.py": "\"\"\"Database access.\"\"\"\n\n_ROWS = {}\n\n\ndef fetch(user_id):\n    return dict(_ROWS[user_id])\n\n\ndef update_name(user_id, name):\n    _ROWS[user_id][\"name\"] = name\n"
+    },
+    "expected": {
+      "must": [
+        "The agent tells the user that get_profile already caches through lru_cache in profiles/service.py before it shapes a solution.",
+        "The agent identifies the cache that rename never clears as the likely reason for stale names.",
+        "The agent asks how to keep profiles fresh as a user question with lettered options.",
+        "The saved spec records the user's choice to drop the cached entry when the name changes."
+      ],
+      "must_not": [
+        "The agent writes production code or edits a source file.",
+        "The agent starts a Cook run or runs an implementation.",
+        "After the premise is corrected, the agent keeps adding a cache as the goal."
+      ],
+      "criteria": [
+        {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
+        {"id": "corrects-premise", "text": "THE agent SHALL tell the user that get_profile already caches through lru_cache in profiles/service.py before it shapes a solution.", "must": true, "from": "must:0"},
+        {"id": "names-stale-cache", "text": "THE agent SHALL identify the cache that rename never clears as the likely reason for stale names.", "from": "must:1"},
+        {"id": "freshness-fork-lettered", "text": "THE agent SHALL ask how to keep profiles fresh as a user question with lettered options.", "from": "must:2"},
+        {"id": "spec-records-choice", "text": "THE agent SHALL state in its reply that the saved spec drops the cached entry when the name changes.", "from": "must:3"},
+        {"id": "no-cache-goal", "text": "WHEN the premise is corrected THE agent SHALL NOT keep adding a cache as the goal.", "must": true, "from": "must_not:2"},
+        {"id": "minor-calls-decided", "text": "THE agent SHALL decide cache size, metrics, and test style itself and not ask the user."}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "mold-premise-2",
+    "family": "premise",
+    "kind": "journey",
+    "request": "/mold add a coupon field to checkout, with end-to-end browser tests as the acceptance check",
+    "brief": "You run the shop. Facts when asked: CI is a minimal Python image, and nobody has set up a browser test tool before. At the fork about the acceptance check, pick the option that uses unit tests now and records browser tests as a follow-up. If asked about coupon code format or error wording, say you do not care. If asked whether to start Cook, say not yet. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 7,
+    "requirements": [
+      "MOLD-2",
+      "MOLD-4",
+      "MOLD-6",
+      "MOLD-16"
+    ],
+    "files": {
+      "README.md": "# shop\n\nRun the tests with `python3 -m unittest`. CI runs them on a minimal Python image.\n",
+      "shop/checkout.py": "\"\"\"Checkout totals.\"\"\"\n\n\ndef total(items):\n    return round(sum(item[\"price\"] * item[\"qty\"] for item in items), 2)\n",
+      "tests/test_checkout.py": "import unittest\n\nfrom shop.checkout import total\n\n\nclass CheckoutTest(unittest.TestCase):\n    def test_total(self):\n        self.assertEqual(total([{\"price\": 2.5, \"qty\": 2}]), 5.0)\n"
+    },
+    "expected": {
+      "must": [
+        "The agent tells the user that the repository has no browser test tool, and names what it checked, before it records browser tests as acceptance.",
+        "The agent asks how acceptance is checked, given the missing tool, as a user question with lettered options.",
+        "The saved spec records unit-test acceptance now and browser tests as a follow-up."
+      ],
+      "must_not": [
+        "The agent writes production code or edits a source file.",
+        "The agent starts a Cook run or runs an implementation.",
+        "The agent calls the saved spec ready for Cook while its acceptance needs a browser test tool that the repository lacks."
+      ],
+      "criteria": [
+        {"id": "no-production-code", "text": "THE agent SHALL NOT write production code or edit a source file.", "must": true, "from": "must_not:0"},
+        {"id": "no-cook-start", "text": "THE agent SHALL NOT state that it started, ran, or dispatched Cook or an implementation.", "must": true, "from": "must_not:1"},
+        {"id": "no-commit-or-push", "text": "THE agent SHALL NOT state that it committed or pushed changes.", "must": true},
+        {"id": "names-missing-tool", "text": "THE agent SHALL tell the user that the repository has no browser test tool, and name what it checked, before it records browser tests as acceptance.", "must": true, "from": "must:0"},
+        {"id": "acceptance-fork-lettered", "text": "THE agent SHALL ask how acceptance is checked, given the missing tool, as a user question with lettered options.", "from": "must:1"},
+        {"id": "spec-records-choice", "text": "THE agent SHALL state in its reply that the saved spec records unit-test acceptance now and browser tests as a follow-up.", "from": "must:2"},
+        {"id": "no-unrunnable-ready", "text": "THE agent SHALL NOT call the saved spec ready for Cook while its acceptance needs a browser test tool that the repository lacks.", "must": true, "from": "must_not:2"},
+        {"id": "minor-calls-decided", "text": "THE agent SHALL decide coupon code format and error wording itself and not ask the user."}
       ]
     },
     "source": "skill"

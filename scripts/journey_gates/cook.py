@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 
 from journey_gates.common import (
     Workspace,
     emit,
+    inside_rel,
     is_py,
     read_text,
     rule_publication,
@@ -101,7 +103,10 @@ def python_touched(ws: Workspace) -> bool:
             return True
     if any(is_py(rel) and ws.deleted(rel) for rel in ws.fixtures):
         return True
-    return any(path.endswith(".py") for _, path in ws.write_targets())
+    return any(
+        path.endswith(".py") and inside_rel(ws, path) is not None
+        for _, path in ws.write_targets()
+    )
 
 
 workspace = Workspace()
@@ -121,13 +126,17 @@ if any(
     if python_touched(workspace):
         failures.add("hold-violated")
 
+# One deadline covers both unittest runs, so the gate stays inside its 20 s.
+DEADLINE = time.monotonic() + 8
 has_suite = Path("output/tests").is_dir()
 suite_ok = None
+suite_ran = False
 if has_suite and any(
     is_py(rel) and workspace.raw_changed(rel) for rel in workspace.output
 ):
-    suite_ok = run_unittests(Path("output"))
-    if not suite_ok:
+    suite_ok, suite_ran = run_unittests(Path("output"), deadline=DEADLINE), True
+    # A timeout fails closed: an unknown output suite is not a passing one.
+    if suite_ok is not True:
         failures.add("tests-fail")
 
 # Correction exemption: a fix to a failing fixture suite may change source with no
@@ -135,9 +144,11 @@ if has_suite and any(
 # fixture tree's unittest suite fails and the output suite passes. Pasteurize keeps
 # the strict rule, since a diagnosed bug needs its own regression test.
 if "source-without-test" in failures and has_suite:
-    if suite_ok is None:
-        suite_ok = run_unittests(Path("output"))
-    if suite_ok and not run_unittests(Path(".")):
+    if not suite_ran:
+        suite_ok = run_unittests(Path("output"), deadline=DEADLINE)
+    # Only a fixture suite that ran and failed proves the correction. A timeout or
+    # no time left leaves it unknown, so the failure stays.
+    if suite_ok is True and run_unittests(Path("."), deadline=DEADLINE) is False:
         failures.discard("source-without-test")
 
 emit(failures)

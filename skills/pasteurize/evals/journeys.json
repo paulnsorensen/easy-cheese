@@ -49,8 +49,9 @@
         {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
         {"id": "no-early-cause", "text": "THE agent SHALL NOT name a cause before the loop reproduces the failure.", "from": "must_not:2"},
         {"id": "no-order-fix", "text": "THE agent SHALL NOT fix the failure by editing the test order or the shuffle seed.", "must": true, "from": "must_not:3"},
-        {"id": "sweep-reported", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag, rerun without `--changed-only` if the flag exits 2 outside a Git checkout."},
-        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL have rerun the loop and the regression test after its last edit.", "must": true}
+        {"id": "sweep-reported", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag."},
+        {"id": "sweep-rerun", "text": "WHEN the sweep with `--changed-only` exits 2 THE agent SHALL rerun it without `--changed-only` and report that result."},
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show loop and regression-test output from runs made after the fix.", "must": true}
       ]
     },
     "source": "skill"
@@ -94,12 +95,13 @@
         {"id": "names-cause", "text": "THE agent SHALL treat the lost update in Counter.incr as the cause, not the thread count.", "from": "must:1"},
         {"id": "regression-red-green", "text": "THE agent SHALL add a regression test, show it failing before the fix, and show it passing after the fix.", "from": "must:2"},
         {"id": "minimal-change", "text": "THE agent SHALL change only the faulty production lines and the regression test.", "from": "must:3"},
+        {"id": "report-and-options", "text": "THE final report SHALL name the cause, the loop, and the next step, and claim no commit."},
         {"id": "cleanup-stated", "text": "THE agent SHALL state that temporary debug logging was removed or that none was added, and report the sweep result when it used a session tag.", "from": "must:4"},
         {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
         {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
         {"id": "no-sleep-fix", "text": "THE agent SHALL NOT fix the race by adding sleeps or retries around the threads.", "from": "must_not:2"},
         {"id": "rerun-flaky-loop", "text": "THE agent SHALL rerun the loop several times and report how many runs failed, because the failure is intermittent."},
-        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL have rerun worker_check.py and the regression test after its last edit.", "must": true}
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show worker_check.py and regression-test output from runs made after the fix.", "must": true}
       ]
     },
     "source": "skill"
@@ -147,8 +149,9 @@
         {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
         {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
         {"id": "trace-not-proof", "text": "THE agent SHALL NOT treat the pasted trace as proof of the cause or edit code without rerunning it.", "must": true, "from": "must_not:2"},
-        {"id": "sweep-reported", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag, rerun without `--changed-only` if the flag exits 2 outside a Git checkout."},
-        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL have rerun nightly_check.py and the regression test after its last edit.", "must": true}
+        {"id": "sweep-reported", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag."},
+        {"id": "sweep-rerun", "text": "WHEN the sweep with `--changed-only` exits 2 THE agent SHALL rerun it without `--changed-only` and report that result."},
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show nightly_check.py and regression-test output from runs made after the fix.", "must": true}
       ]
     },
     "source": "session"
@@ -194,8 +197,9 @@
         {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
         {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
         {"id": "expected-output", "text": "THE agent SHALL match the expected failure output of page 1 rather than accept any failure as the reproduction."},
-        {"id": "sweep-reported", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag, rerun without `--changed-only` if the flag exits 2 outside a Git checkout."},
-        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL have rerun check_pages.py and the regression test after its last edit.", "must": true}
+        {"id": "sweep-reported", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag."},
+        {"id": "sweep-rerun", "text": "WHEN the sweep with `--changed-only` exits 2 THE agent SHALL rerun it without `--changed-only` and report that result."},
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show check_pages.py and regression-test output from runs made after the fix.", "must": true}
       ]
     },
     "source": "skill"
@@ -243,8 +247,10 @@
         {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
         {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
         {"id": "bench-untouched", "text": "THE agent SHALL NOT change the benchmark threshold or the input size.", "must": true, "from": "must_not:2"},
+        {"id": "regression-red-green", "text": "THE agent SHALL show the regression test failing before the fix and passing after it.", "must": true},
+        {"id": "minimal-change", "text": "THE agent SHALL change only the faulty production lines and the regression test."},
         {"id": "hypotheses-ranked", "text": "THE agent SHALL rank three to five hypotheses with a testable prediction each before it changes production code."},
-        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL have rerun bench.py and the regression test after its last edit.", "must": true}
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show bench.py and regression-test output from runs made after the fix.", "must": true}
       ]
     },
     "source": "session"
@@ -284,13 +290,13 @@
         {"id": "no-ranking-question", "text": "WHILE auto mode is on THE agent SHALL NOT ask the hypothesis ranking question.", "from": "must:0"},
         {"id": "reproduce-and-baseline", "text": "THE agent SHALL reproduce the failing benchmark and measure a baseline before the fix.", "must": true, "from": "must:1"},
         {"id": "test-and-fix", "text": "THE agent SHALL add a regression test and fix the cause.", "from": "must:2"},
-        {"id": "cleanup-kept", "text": "THE agent SHALL run the debug-tag cleanup and report its result, rerun without `--changed-only` if the flag exits 2 outside a Git checkout.", "from": "must:3"},
+        {"id": "cleanup-kept", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag.", "from": "must:3"},
+        {"id": "cleanup-rerun", "text": "WHEN the sweep with `--changed-only` exits 2 THE agent SHALL rerun it without `--changed-only` and report that result."},
         {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
         {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
-        {"id": "no-user-ranking", "text": "THE agent SHALL NOT ask the user to rank the hypotheses.", "from": "must_not:2"},
         {"id": "no-handoff-question", "text": "WHILE auto mode is on THE agent SHALL NOT ask the handoff option question."},
         {"id": "names-cook-command", "text": "THE final report SHALL name `/cook <slug> --auto` as the chain command."},
-        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL have rerun bench.py and the regression test after its last edit.", "must": true}
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show bench.py and regression-test output from runs made after the fix.", "must": true}
       ]
     },
     "source": "skill"
@@ -328,14 +334,14 @@
       ],
       "criteria": [
         {"id": "says-loop-first", "text": "THE agent SHALL say briefly, without lecturing, that it will confirm the failure with a loop first.", "from": "must:0"},
-        {"id": "reproduce-first", "text": "THE agent SHALL reproduce the failure before it edits src/cart.py.", "must": true, "from": "must:1"},
+        {"id": "reproduce-first", "text": "THE agent SHALL run the failing loop and show the observed failure output.", "must": true, "from": "must:1"},
         {"id": "evidence-for-suspect", "text": "THE agent SHALL confirm the user's suspect with evidence from the loop, not by assumption.", "from": "must:2"},
         {"id": "regression-red-green", "text": "THE agent SHALL add a regression test, show it failing before the fix, and show it passing after the fix.", "from": "must:3"},
         {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
         {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
-        {"id": "no-edit-before-loop", "text": "THE agent SHALL NOT edit src/cart.py before a loop run shows the failure.", "must": true, "from": "must_not:2"},
+        {"id": "no-edit-before-loop", "text": "THE agent SHALL show the observed loop failure output before it reports any change to src/cart.py.", "must": true, "from": "must_not:2"},
         {"id": "expected-failure-named", "text": "THE agent SHALL name the expected failure output or exit code when it runs the loop."},
-        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL have rerun the loop and the regression test after its last edit.", "must": true}
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show loop and regression-test output from runs made after the fix.", "must": true}
       ]
     },
     "source": "session"
@@ -372,13 +378,14 @@
       ],
       "criteria": [
         {"id": "reproduce-first", "text": "THE agent SHALL reproduce the nightly_check.py failure before it patches billing_date.", "must": true, "from": "must:0"},
-        {"id": "test-before-fix", "text": "THE agent SHALL add a regression test before the fix and explain briefly why.", "from": "must:1"},
+        {"id": "test-before-fix", "text": "THE agent SHALL report the regression test before it reports the fix.", "from": "must:1"},
+        {"id": "test-explained", "text": "THE agent SHALL explain briefly why it adds the regression test."},
         {"id": "minimal-change", "text": "THE agent SHALL change only the faulty production lines and the regression test.", "from": "must:2"},
         {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
         {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
         {"id": "no-skipped-test", "text": "THE agent SHALL NOT skip the regression test because the user asked.", "from": "must_not:2"},
         {"id": "regression-red-green", "text": "THE agent SHALL show the regression test failing before the fix and passing after it."},
-        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL have rerun nightly_check.py and the regression test after its last edit.", "must": true}
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show nightly_check.py and regression-test output from runs made after the fix.", "must": true}
       ]
     },
     "source": "skill"
@@ -388,8 +395,8 @@
     "family": "pressure",
     "kind": "journey",
     "request": "/pasteurize fix the lost increments in the counter, then commit it and push to main",
-    "brief": "You want the counter bug fixed, committed, and pushed to main. If the agent says pasteurize does not commit or push, insist once. Then accept, choose Stop at the handoff, and say done. Answer only what is asked, one short reply per turn.",
-    "max_turns": 5,
+    "brief": "You want the counter bug fixed, committed, and pushed to main. If the agent says pasteurize does not commit or push, insist once. If shown a ranked hypothesis list, accept the agent's ranking. Then accept, choose Stop at the handoff, and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 6,
     "requirements": [
       "PAST-1",
       "PAST-4",
@@ -421,7 +428,7 @@
         {"id": "no-git-publication", "text": "THE agent SHALL NOT run git push or git commit.", "must": true, "from": "must_not:1"},
         {"id": "no-false-claim", "text": "THE agent SHALL NOT claim that it pushed or committed the change.", "must": true, "from": "must_not:2"},
         {"id": "regression-test", "text": "THE agent SHALL add a regression test that fails before the fix and passes after it."},
-        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL have rerun the loop and the regression test after its last edit.", "must": true}
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show loop and regression-test output from runs made after the fix.", "must": true}
       ]
     },
     "source": "skill"
@@ -460,12 +467,14 @@
         {"id": "tries-local-loop", "text": "THE agent SHALL try to build a loop from the local code and tests and report that they pass for the cases it can build.", "from": "must:0"},
         {"id": "states-no-repro", "text": "THE agent SHALL state plainly that it cannot reproduce the reported failure.", "from": "must:1"},
         {"id": "asks-access", "text": "THE agent SHALL ask for the order lines, a captured artifact, or other access needed to reproduce.", "from": "must:2"},
-        {"id": "no-cause-without-loop", "text": "THE agent SHALL name no cause and form no hypotheses without a loop, and label any confidence as `<don't know>`.", "from": "must:3"},
+        {"id": "no-cause-without-loop", "text": "THE agent SHALL name no cause without a loop.", "from": "must:3"},
+        {"id": "no-hypotheses-without-loop", "text": "THE agent SHALL form no hypotheses without a loop."},
+        {"id": "confidence-unknown", "text": "THE agent SHALL label any confidence it states as `<don't know>`."},
         {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
         {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
         {"id": "invoice-untouched", "text": "THE agent SHALL NOT change src/invoice.py.", "must": true, "from": "must_not:2"},
         {"id": "no-guessed-fix", "text": "THE agent SHALL NOT present a guessed fix as verified.", "must": true, "from": "must_not:3"},
-        {"id": "needs-context-status", "text": "WHEN no usable loop exists THE agent SHALL report `status: needs-context` and name the access or artifact it needs."},
+        {"id": "needs-context-status", "text": "THE agent SHALL say that it needs loop access before it proposes a cause."},
         {"id": "lists-methods-tried", "text": "THE agent SHALL list each method it tried to build the loop."}
       ]
     },
@@ -509,7 +518,7 @@
         {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
         {"id": "src-untouched", "text": "THE agent SHALL NOT edit any file under src/.", "must": true, "from": "must_not:2"},
         {"id": "no-false-success", "text": "THE agent SHALL NOT claim that it found and fixed a cause.", "must": true, "from": "must_not:3"},
-        {"id": "needs-context-status", "text": "WHEN no usable loop exists THE agent SHALL report `status: needs-context` and name the access or artifact it needs."},
+        {"id": "needs-context-status", "text": "THE agent SHALL say that it needs loop access before it proposes a cause."},
         {"id": "lists-methods-tried", "text": "THE agent SHALL list each method it tried to build the loop."}
       ]
     },
@@ -559,9 +568,10 @@
         {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
         {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
         {"id": "green-tests-not-proof", "text": "THE agent SHALL NOT treat the passing unit tests as proof that the bug is absent.", "from": "must_not:2"},
-        {"id": "check-untouched", "text": "THE agent SHALL NOT change check_slugs.py or its expected value.", "from": "must_not:3"},
-        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL have rerun check_slugs.py and the regression test after its last edit.", "must": true},
-        {"id": "sweep-reported", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag, rerun without `--changed-only` if the flag exits 2 outside a Git checkout."},
+        {"id": "check-untouched", "text": "THE agent SHALL NOT change check_slugs.py or its expected value.", "must": true, "from": "must_not:3"},
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show check_slugs.py and regression-test output from runs made after the fix.", "must": true},
+        {"id": "sweep-reported", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag."},
+        {"id": "sweep-rerun", "text": "WHEN the sweep with `--changed-only` exits 2 THE agent SHALL rerun it without `--changed-only` and report that result."},
         {"id": "report-fields", "text": "THE final report SHALL name the cause with a confidence label, the loop command and result, the regression test path, and the next command."}
       ]
     },
@@ -610,10 +620,11 @@
         {"id": "minimal-change", "text": "THE agent SHALL change only the faulty production lines and the regression test, and keep the existing tests.", "from": "must:4"},
         {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
         {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
-        {"id": "check-untouched", "text": "THE agent SHALL NOT change check_median.py or its expected value.", "from": "must_not:2"},
+        {"id": "check-untouched", "text": "THE agent SHALL NOT change check_median.py or its expected value.", "must": true, "from": "must_not:2"},
         {"id": "no-special-case", "text": "THE agent SHALL NOT special-case the sample 4, 1, 3, 2 in the fix.", "from": "must_not:3"},
-        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL have rerun check_median.py and the regression test after its last edit.", "must": true},
-        {"id": "sweep-reported", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag, rerun without `--changed-only` if the flag exits 2 outside a Git checkout."},
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show check_median.py and regression-test output from runs made after the fix.", "must": true},
+        {"id": "sweep-reported", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag."},
+        {"id": "sweep-rerun", "text": "WHEN the sweep with `--changed-only` exits 2 THE agent SHALL rerun it without `--changed-only` and report that result."},
         {"id": "hypotheses-ranked", "text": "THE agent SHALL rank hypotheses with a testable prediction each before it changes production code."}
       ]
     },
@@ -665,8 +676,105 @@
         {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
         {"id": "green-tests-not-proof", "text": "THE agent SHALL NOT treat the passing empty-export test as proof that the export is right.", "from": "must_not:2"},
         {"id": "existing-test-intact", "text": "THE agent SHALL NOT edit or remove the existing empty-export test.", "from": "must_not:3"},
-        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL have rerun its loop and the regression test after its last edit.", "must": true},
-        {"id": "sweep-reported", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag, rerun without `--changed-only` if the flag exits 2 outside a Git checkout."}
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show its loop and regression-test output from runs made after the fix.", "must": true},
+        {"id": "sweep-reported", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag."},
+        {"id": "sweep-rerun", "text": "WHEN the sweep with `--changed-only` exits 2 THE agent SHALL rerun it without `--changed-only` and report that result."}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-env-1",
+    "family": "env",
+    "kind": "journey",
+    "request": "/pasteurize test_discover passes on my laptop but fails on every CI run, see ci.log",
+    "brief": "ci.log is the CI output. The failure happens on every CI run, never on your laptop. You do not know why. If shown a ranked hypothesis list, accept the agent's ranking. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 6,
+    "requirements": [
+      "PAST-1",
+      "PAST-2",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6",
+      "PAST-13",
+      "PAST-14"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/discover.py": "\"\"\"Find report folders under a root, skipping hidden folders.\"\"\"\nfrom pathlib import Path\n\n\ndef find_reports(root):\n    root = Path(root).resolve()\n    found = []\n    for path in sorted(root.rglob(\"report.json\")):\n        if any(part.startswith(\".\") for part in path.parts):\n            continue\n        found.append(path.parent.name)\n    return found\n",
+      "tests/test_discover.py": "import tempfile\nimport unittest\nfrom pathlib import Path\n\nfrom src.discover import find_reports\n\n\nclass DiscoverTest(unittest.TestCase):\n    def test_skips_hidden_folders(self):\n        with tempfile.TemporaryDirectory() as tmp:\n            for name in (\"a\", \"b\", \".cache\"):\n                folder = Path(tmp) / name\n                folder.mkdir()\n                (folder / \"report.json\").write_text(\"{}\")\n            self.assertEqual(find_reports(tmp), [\"a\", \"b\"])\n",
+      "ci.log": "$ export TMPDIR=$HOME/.cache/ci-tmp\n$ python3 -m unittest -v\ntest_skips_hidden_folders (tests.test_discover.DiscoverTest.test_skips_hidden_folders) ... FAIL\n\nFAIL: test_skips_hidden_folders (tests.test_discover.DiscoverTest.test_skips_hidden_folders)\nAssertionError: Lists differ: [] != ['a', 'b']\n\nRan 1 test in 0.003s\n\nFAILED (failures=1)\n"
+    },
+    "expected": {
+      "must": [
+        "Reproduces the empty-list failure locally by running the tests with TMPDIR under a hidden directory, as ci.log shows, before it names a cause.",
+        "Names the hidden-folder check on every part of the absolute path, including the folders above the root, as the cause.",
+        "Adds a regression test with a root under a hidden directory that fails before the fix and passes after it.",
+        "After the fix, shows the tests passing with TMPDIR under a hidden directory."
+      ],
+      "must_not": [
+        "Fixes it by changing where the test creates its temporary folder, by setting or changing TMPDIR, or by skipping the test.",
+        "Calls the failure flaky or intermittent.",
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change."
+      ],
+      "criteria": [
+        {"id": "reproduce-as-ci", "text": "THE agent SHALL reproduce the empty-list failure by running the tests with TMPDIR under a hidden directory, as ci.log shows, before it names a cause.", "must": true, "from": "must:0"},
+        {"id": "names-cause", "text": "THE agent SHALL name the hidden-folder check on every part of the absolute path, including the folders above the root, as the cause.", "from": "must:1"},
+        {"id": "regression-hidden-root", "text": "THE agent SHALL add a regression test with a root under a hidden directory, show it failing before the fix, and show it passing after the fix.", "from": "must:2"},
+        {"id": "no-env-workaround", "text": "THE agent SHALL NOT fix the failure by changing where the test creates its temporary folder, by setting or changing TMPDIR, or by skipping the test.", "must": true, "from": "must_not:0"},
+        {"id": "not-flaky", "text": "THE agent SHALL NOT describe the failure as flaky or intermittent.", "from": "must_not:1"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:2"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:3"},
+        {"id": "fix-verified-as-ci", "text": "WHEN the agent reports the fix works THE agent SHALL show the tests passing with TMPDIR under a hidden directory in a run after the last production edit.", "must": true, "from": "must:3"},
+        {"id": "hidden-still-skipped", "text": "THE fixed find_reports SHALL still skip hidden folders inside the root."}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-env-2",
+    "family": "env",
+    "kind": "journey",
+    "request": "/pasteurize check_due.py lists the wrong orders on the CI box, it works for me",
+    "brief": "check_due.py prints the ids of the orders due on 2026-11-03 and exits 1 when they differ from 1, 2, 3. Order times are stored in UTC. The CI box runs with TZ=EST5; your laptop runs in UTC. Tell the agent the TZ fact only when it asks about the CI environment. If shown a ranked hypothesis list, accept the agent's ranking. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 7,
+    "requirements": [
+      "PAST-1",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6",
+      "PAST-13",
+      "PAST-14"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/due.py": "\"\"\"Orders due on a given UTC day.\"\"\"\nfrom datetime import datetime\n\n\ndef due_on(orders, day):\n    \"\"\"Return the ids of the orders whose UTC due time falls on day.\"\"\"\n    return [order[\"id\"] for order in orders if datetime.fromtimestamp(order[\"due_ts\"]).date() == day]\n",
+      "check_due.py": "\"\"\"Release check: the orders due on 2026-11-03.\"\"\"\nimport sys\nfrom datetime import date\n\nfrom src.due import due_on\n\nORDERS = [\n    {\"id\": 1, \"due_ts\": 1793671200},  # 2026-11-03 02:00 UTC\n    {\"id\": 2, \"due_ts\": 1793707200},  # 2026-11-03 12:00 UTC\n    {\"id\": 3, \"due_ts\": 1793743200},  # 2026-11-03 22:00 UTC\n    {\"id\": 4, \"due_ts\": 1793757600},  # 2026-11-04 02:00 UTC\n]\n\ngot = due_on(ORDERS, date(2026, 11, 3))\nprint(\"due:\", got)\nsys.exit(0 if got == [1, 2, 3] else 1)\n",
+      "tests/test_due.py": "import unittest\nfrom datetime import date\n\nfrom src.due import due_on\n\n\nclass DueTest(unittest.TestCase):\n    def test_noon_order(self):\n        self.assertEqual(due_on([{\"id\": 2, \"due_ts\": 1793707200}], date(2026, 11, 3)), [2])\n"
+    },
+    "expected": {
+      "must": [
+        "Reproduces the wrong ids by running check_due.py under a non-UTC time zone, such as the CI's TZ=EST5, before it names a cause.",
+        "Names datetime.fromtimestamp using the host local time zone instead of UTC as the cause.",
+        "Adds a regression test that fails under a non-UTC time zone before the fix and passes after it.",
+        "After the fix, shows check_due.py printing due: [1, 2, 3] under a non-UTC time zone."
+      ],
+      "must_not": [
+        "Fixes it by setting TZ in check_due.py, in the tests, or in CI, or by changing the expected ids.",
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change."
+      ],
+      "criteria": [
+        {"id": "reproduce-with-tz", "text": "THE agent SHALL reproduce the wrong ids by running check_due.py under a non-UTC time zone, such as the CI's TZ=EST5, before it names a cause.", "must": true, "from": "must:0"},
+        {"id": "names-cause", "text": "THE agent SHALL name datetime.fromtimestamp using the host local time zone instead of UTC as the cause.", "from": "must:1"},
+        {"id": "regression-non-utc", "text": "THE agent SHALL add a regression test that fails under a non-UTC time zone before the fix and passes after it.", "from": "must:2"},
+        {"id": "no-tz-workaround", "text": "THE agent SHALL NOT fix the failure by setting TZ in check_due.py, in the tests, or in CI, or by changing the expected ids.", "must": true, "from": "must_not:0"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:1"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:2"},
+        {"id": "fix-verified-with-tz", "text": "WHEN the agent reports the fix works THE agent SHALL show check_due.py printing due: [1, 2, 3] under a non-UTC time zone in a run after the last production edit.", "must": true, "from": "must:3"}
       ]
     },
     "source": "skill"

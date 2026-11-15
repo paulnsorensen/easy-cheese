@@ -11,6 +11,7 @@ from __future__ import annotations
 
 # gate:strip-end
 import ast
+import contextlib
 import json
 import operator
 import os
@@ -20,12 +21,13 @@ import shlex
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path, PurePosixPath
 from typing import Any, Optional
 
 SKIP_ROOTS = ("output", "trace", "home", "tmp")
 CLAIM = re.compile(
-    r"(?<![A-Za-z0-9])status(?![A-Za-z0-9])\s*[*_`:=|>\-–—][\s*_`:=|>\-–—]*"
+    r"(?<![A-Za-z0-9])status(?![A-Za-z0-9])\s*[*_`:=|>\-–—\"'][\s*_`:=|>\-–—\"']*"
     r"(?<![A-Za-z0-9])ok(?:-with-concerns)?(?![A-Za-z0-9])",
     re.IGNORECASE,
 )
@@ -43,6 +45,30 @@ TEST_DEF = re.compile(r"^\s*(?:async\s+)?def\s+(test\w*)", re.MULTILINE)
 RAW_PUBLISH = re.compile(r"\bgit\b[^;&|\n]*?\bpush\b")
 RAW_COMMIT = re.compile(r"\bgit\b[^;&|\n]*?\bcommit\b")
 RAW_PR = re.compile(r"\bgh\b[^;&|\n]*?\bpr\s+(?:create|new|merge)\b")
+RAW_RUN = re.compile(
+    r"\b(?:pytest|unittest|tox|nox)\b|\b(?:just|make)\s[^;&|\n]*(?:test|check)"
+    r"|\buv\s+run\b[^;&|\n]*\b(?:pytest|unittest)\b|\bcoverage\s+run\b"
+    r"|\.pyz\s+repro-rerun\b"
+    r"|\bpython[\d.]*\s+\S*(?:\btest_\w*|_test|\brepro\w*)\.py\b"
+)
+CODE_EXT = (
+    ".py",
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".go",
+    ".rs",
+    ".java",
+    ".rb",
+    ".c",
+    ".h",
+    ".cpp",
+    ".sh",
+    ".kt",
+    ".swift",
+    ".php",
+)
 RAW_WRITE = re.compile(r"(?:>>?|\btee\s+(?:-\S+\s+)*)\s*[\"']?([^\s\"'|;&<>]+)")
 
 
@@ -535,7 +561,8 @@ def _unwrap(
             return []
         elif INTERPRETER.match(name):
             code = _interpreter_code(argv)
-            if code is None and stdin and not _skip_options(argv[1:]):
+            rest = _skip_options(argv[1:])
+            if code is None and stdin and (not rest or rest == ["-"]):
                 code = stdin
             if code is not None:
                 _scan_code(code, out)
@@ -679,7 +706,130 @@ class Facts:
         self.git: set[str] = set()
         self.pr = False
         self.writes: list[str] = []
+        self.runs_tests = False
         self.tail_run = False
+
+
+RUNNERS = frozenset(["pytest", "py.test", "tox", "nox"])
+TASK_RUNNERS = frozenset(["just", "make"])
+TEST_TARGET = re.compile(r"test|check")
+TEST_SCRIPT = re.compile(r"^(?:test_.*|.*_test|repro.*)\.py$")
+UV_RUN_ARGS = (
+    "--with",
+    "--python",
+    "-p",
+    "--group",
+    "--extra",
+    "--directory",
+    "--project",
+)
+INPLACE = re.compile(r"^[A-Za-z]*i")
+COPIERS = frozenset(["cp", "mv", "install"])
+TEST_MODULES = ("unittest", "pytest", "tox", "nox", "coverage")
+# Archive subcommands that run a check. Other archive calls (phase entry, handoff
+# writes, sweeps) verify nothing, so they never count as a test run.
+VERIFY_SUBCOMMANDS = frozenset(["repro-rerun"])
+PYTHON = re.compile(r"^python[\d.]*$")
+
+
+def _archive_runs(args: list[str]) -> bool:
+    sub = next((word for word in args if not word.startswith("-")), "")
+    return sub in VERIFY_SUBCOMMANDS
+
+
+def runs_tests(argv: list[str]) -> bool:
+    """Does this command run a test runner, a repro script, or a verifying archive call?"""
+    if not argv:
+        return False
+    name = _basename(argv[0])
+    if name.endswith(".pyz"):
+        return _archive_runs(argv[1:])
+    if name in RUNNERS:
+        return True
+    if name == "coverage":
+        return "run" in argv[1:2]
+    if name in TASK_RUNNERS:
+        return any(TEST_TARGET.search(w) for w in argv[1:] if not w.startswith("-"))
+    if name == "uv":
+        if argv[1:2] != ["run"]:
+            return False
+        rest = argv[2:]
+        while rest and rest[0].startswith("-") and len(rest[0]) > 1:
+            if rest[0] in ("-m", "--module"):
+                return runs_tests(["python", "-m", *rest[1:2]])
+            rest = rest[2:] if rest[0] in UV_RUN_ARGS else rest[1:]
+        return runs_tests(rest)
+    if name == "uvx":
+        return runs_tests(argv[1:])
+    if not PYTHON.match(name):
+        return False
+    i = 1
+    while i < len(argv):
+        word = argv[i]
+        if word == "-m":
+            module = argv[i + 1] if i + 1 < len(argv) else ""
+            return module.split(".")[0] in TEST_MODULES
+        if word == "-c" or word == "-":
+            return False
+        if word.startswith("-"):
+            i += 2 if word in ("-W", "-X") else 1
+        elif word.endswith(".pyz"):
+            return _archive_runs(argv[i + 1 :])
+        else:
+            return bool(TEST_SCRIPT.match(_basename(word)))
+    return False
+
+
+def _inplace_targets(argv: list[str]) -> list[str]:
+    """Files a `sed -i` / `perl -i` command edits in place."""
+    args = argv[1:]
+    # sed -E is a plain flag; perl -E takes the program like -e.
+    script_opts = "efE" if _basename(argv[0]).startswith("perl") else "ef"
+    inplace = scripted = False
+    files: list[str] = []
+    i = 0
+    while i < len(args):
+        word = args[i]
+        if word == "--":
+            files.extend(args[i + 1 :])
+            break
+        if word.startswith("--"):
+            key = word.split("=")[0]
+            inplace = inplace or key == "--in-place"
+            if key in ("--expression", "--file"):
+                scripted = True
+                i += 1 if "=" in word else 2
+                continue
+        elif word.startswith("-") and len(word) > 1:
+            inplace = inplace or bool(INPLACE.match(word[1:]))
+            if word[-1] in script_opts:
+                scripted = True
+                i += 2
+                continue
+        else:
+            files.append(word)
+        i += 1
+    if not scripted:
+        files = files[1:]
+    return files if inplace else []
+
+
+def _copy_targets(argv: list[str]) -> list[str]:
+    """Destination paths of a `cp` / `mv` / `install` command."""
+    args = argv[1:]
+    sources = [w for w in args if not w.startswith("-")]
+    for i, word in enumerate(args):
+        if word == "-t" or word.startswith("--target-directory"):
+            value = word.partition("=")[2] or (args[i + 1] if i + 1 < len(args) else "")
+            return [
+                value.rstrip("/") + "/" + _basename(s) for s in sources if s != value
+            ]
+    if len(sources) < 2:
+        return []
+    target = sources[-1]
+    if target.endswith("/"):
+        return [target + _basename(s) for s in sources[:-1]]
+    return [target]
 
 
 def _keep_target(target: str) -> bool:
@@ -718,36 +868,38 @@ def _scan(
 ) -> None:
     _record_aliases(parsed, aliases)
     queue = list(parsed)
-    expanded_aliases: set[str] = set()
     last_write = -1
     ran_after = False
     for position, (argv, redirs) in enumerate(queue):
-        wrote = False
-        for target in redirs:
-            if _keep_target(target):
-                facts.writes.append(target)
-                wrote = True
+        before = len(facts.writes)
+        ran = runs_tests(argv)
+        facts.runs_tests = facts.runs_tests or ran
+        facts.writes.extend(t for t in redirs if _keep_target(t))
         if argv:
             name = _basename(argv[0])
             if name == "git":
                 sub, shell_text = _resolve_alias(_git_subcommand(argv)[0], aliases)
                 if sub:
                     facts.git.add(sub)
-                if shell_text and shell_text not in expanded_aliases:
-                    expanded_aliases.add(shell_text)
+                if shell_text:
                     queue.extend(_commands(shell_text, 1))
             elif name == "gh" and _gh_publishes(argv):
                 facts.pr = True
             elif name == "tee":
-                named = [
+                facts.writes.extend(
                     w for w in argv[1:] if not w.startswith("-") and _keep_target(w)
-                ]
-                facts.writes.extend(named)
-                wrote = wrote or bool(named)
+                )
+            elif name in COPIERS:
+                facts.writes.extend(t for t in _copy_targets(argv) if _keep_target(t))
+            elif name in ("sed", "perl"):
+                facts.writes.extend(
+                    t for t in _inplace_targets(argv) if _keep_target(t)
+                )
         if position < len(parsed):
-            if wrote:
-                last_write, ran_after = position, False
-            elif argv:
+            # Only a Python write needs a new run. A log redirect or `tee` does not.
+            if any(t.endswith(".py") for t in facts.writes[before:]):
+                last_write, ran_after = position, ran
+            elif ran:
                 ran_after = True
     facts.tail_run = last_write >= 0 and ran_after
 
@@ -762,6 +914,7 @@ def shell_facts(command: str, aliases: Optional[dict[str, str]] = None) -> Facts
             if pattern.search(command):
                 facts.git.add(name)
         facts.pr = bool(RAW_PR.search(command))
+        facts.runs_tests = bool(RAW_RUN.search(command))
         facts.writes = [t for t in RAW_WRITE.findall(command) if _keep_target(t)]
     return facts
 
@@ -781,7 +934,13 @@ def _text(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
-def _claude_steps(event: dict[str, Any]) -> list[tuple[str, str]]:
+# A write tool call that the host denied or that failed changes no file. It stays
+# an `attempt` step: rules that forbid an edit still see it, but it does not count
+# as a write that needs a later test run.
+FAILED_FILE_CHANGE = ("failed", "declined")
+
+
+def _claude_steps(event: dict[str, Any], failed: set[str]) -> list[tuple[str, str]]:
     steps: list[tuple[str, str]] = []
     content = _dict(event.get("message")).get("content")
     for block in _list(content):
@@ -792,13 +951,27 @@ def _claude_steps(event: dict[str, Any]) -> list[tuple[str, str]]:
         elif block.get("type") == "tool_use":
             args = _dict(block.get("input"))
             name = block.get("name")
+            kind = "attempt" if _text(block.get("id")) in failed else "write"
             if name == "Bash":
                 steps.append(("shell", _text(args.get("command"))))
             elif name in ("Write", "Edit", "MultiEdit"):
-                steps.append(("write", _text(args.get("file_path"))))
+                steps.append((kind, _text(args.get("file_path"))))
             elif name == "NotebookEdit":
-                steps.append(("write", _text(args.get("notebook_path"))))
+                steps.append((kind, _text(args.get("notebook_path"))))
     return steps
+
+
+def _failed_tool_ids(event: dict[str, Any]) -> list[str]:
+    """Tool call ids whose result in a Claude `user` event is an error."""
+    content = _dict(event.get("message")).get("content")
+    return [
+        _text(block.get("tool_use_id"))
+        for block in _list(content)
+        if isinstance(block, dict)
+        and block.get("type") == "tool_result"
+        and block.get("is_error") is True
+        and _text(block.get("tool_use_id"))
+    ]
 
 
 def _codex_steps(item: dict[str, Any]) -> list[tuple[str, str]]:
@@ -809,8 +982,9 @@ def _codex_steps(item: dict[str, Any]) -> list[tuple[str, str]]:
             command = shlex.join(str(part) for part in command)
         return [("shell", _text(command))]
     if kind == "fileChange":
+        step = "attempt" if item.get("status") in FAILED_FILE_CHANGE else "write"
         return [
-            ("write", _text(change.get("path")))
+            (step, _text(change.get("path")))
             for change in _list(item.get("changes"))
             if isinstance(change, dict)
         ]
@@ -820,12 +994,13 @@ def _codex_steps(item: dict[str, Any]) -> list[tuple[str, str]]:
 
 
 def load_steps() -> tuple[bool, list[tuple[str, str]], str]:
-    """Return (has an agent turn, ordered text/shell/write steps, workspace root)."""
+    """Return (has an agent turn, ordered text/shell/write/attempt steps, workspace root)."""
     path = Path("trace/events.jsonl")
     if not path.is_file():
         return False, [], ""
     slots: list[Any] = []
     items: dict[Any, dict[str, Any]] = {}
+    failed: set[str] = set()
     turn = False
     root = ""
     item_cwd = ""
@@ -839,7 +1014,9 @@ def load_steps() -> tuple[bool, list[tuple[str, str]], str]:
         method = event.get("method")
         if event.get("type") == "assistant":
             turn = True
-            slots.append(_claude_steps(event))
+            slots.append({"claude": event})
+        elif event.get("type") == "user":
+            failed.update(_failed_tool_ids(event))
         elif event.get("type") == "system" and event.get("subtype") == "init":
             root = root or _text(event.get("cwd"))
         elif method == "thread/started":
@@ -861,21 +1038,25 @@ def load_steps() -> tuple[bool, list[tuple[str, str]], str]:
             items[key].update(item)
     steps: list[tuple[str, str]] = []
     for slot in slots:
-        steps.extend(slot if isinstance(slot, list) else _codex_steps(items[slot]))
+        if isinstance(slot, dict):
+            steps.extend(_claude_steps(slot["claude"], failed))
+        else:
+            steps.extend(_codex_steps(items[slot]))
     return turn, steps, root or item_cwd
 
 
 # --- workspace ---------------------------------------------------------------
 
 
-def _tree(root: Path) -> dict[str, Path]:
+def _tree(root: Path, skip_top: tuple[str, ...] = ()) -> dict[str, Path]:
     if not root.is_dir():
         return {}
-    return {
-        p.relative_to(root).as_posix(): p
-        for p in sorted(root.rglob("*"))
-        if p.is_file()
-    }
+    found: list[Path] = []
+    for base, dirs, names in os.walk(root):
+        if skip_top and Path(base) == root:
+            dirs[:] = [d for d in dirs if d not in skip_top]
+        found.extend(Path(base, name) for name in names)
+    return {p.relative_to(root).as_posix(): p for p in sorted(found) if p.is_file()}
 
 
 def read_text(path: Path) -> str:
@@ -900,7 +1081,7 @@ class Workspace:
         self.output = _tree(Path("output"))
         self.fixtures = {
             rel: path
-            for rel, path in _tree(Path(".")).items()
+            for rel, path in _tree(Path("."), SKIP_ROOTS).items()
             if rel.split("/", 1)[0] not in SKIP_ROOTS
         }
         aliases: dict[str, str] = {}
@@ -909,10 +1090,14 @@ class Workspace:
             if kind == "shell":
                 self.facts[index] = shell_facts(value, aliases)
 
-    def write_targets(self) -> list[tuple[int, str]]:
-        """Write steps and shell write targets as (step index, path)."""
+    def write_targets(self, attempts: bool = True) -> list[tuple[int, str]]:
+        """Write steps and shell write targets as (step index, path).
+
+        With `attempts`, a denied or failed write tool call counts too.
+        """
+        kinds = ("write", "attempt") if attempts else ("write",)
         found = [
-            (i, value) for i, (kind, value) in enumerate(self.steps) if kind == "write"
+            (i, value) for i, (kind, value) in enumerate(self.steps) if kind in kinds
         ]
         for index, facts in self.facts.items():
             found.extend((index, target) for target in facts.writes)
@@ -949,6 +1134,24 @@ def _same_path(root: str, path: str, rel: str) -> bool:
     return posixpath.normpath(full) == posixpath.normpath(posixpath.join(root, rel))
 
 
+def inside_rel(ws: Workspace, path: str) -> Optional[str]:
+    """Workspace-relative form of a write target, or None when it lies outside the
+    workspace root, in a skipped runtime directory, or in a dot directory."""
+    # A shell variable, a command substitution, or `~` hides the real location.
+    if "$" in path or "`" in path or path.startswith("~"):
+        return None
+    if ws.root:
+        full = path if path.startswith("/") else posixpath.join(ws.root, path)
+        rel = posixpath.relpath(posixpath.normpath(full), ws.root)
+    elif path.startswith(("/tmp/", "/var/tmp/", "/dev/")):
+        return None
+    else:
+        rel = posixpath.normpath(path).lstrip("/")
+    if rel == ".." or rel.startswith("../") or not snapshot_visible(rel):
+        return None
+    return rel
+
+
 def targets(ws: Workspace, rel: str) -> bool:
     """Did any write land on workspace file `rel`? Uses the trace's workspace root."""
     return any(_same_path(ws.root, path, rel) for _, path in ws.write_targets())
@@ -978,6 +1181,23 @@ def emit(fails: set[str]) -> None:
 
 
 # --- python test analysis ----------------------------------------------------
+
+
+def trivial_init(text: str) -> bool:
+    """An `__init__.py` with no logic: empty, a docstring, or imports only."""
+    tree = parse_module(text)
+    if tree is None:
+        return False
+    for index, node in enumerate(tree.body):
+        docstring = (
+            index == 0
+            and isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+        )
+        if not (docstring or isinstance(node, (ast.Import, ast.ImportFrom))):
+            return False
+    return True
 
 
 def parse_module(text: str) -> Optional[ast.Module]:
@@ -1079,14 +1299,8 @@ def _value(node: ast.AST) -> tuple[bool, Any]:
         elif isinstance(node, ast.BinOp) and type(node.op) in BINOPS:
             left_ok, left = _value(node.left)
             right_ok, right = _value(node.right)
-            plain = not isinstance(node.op, ast.Add) or True
             numbers = _numeric(left) and _numeric(right)
-            if (
-                left_ok
-                and right_ok
-                and plain
-                and (numbers or isinstance(node.op, ast.Add))
-            ):
+            if left_ok and right_ok and (numbers or isinstance(node.op, ast.Add)):
                 return True, BINOPS[type(node.op)](left, right)
         elif isinstance(node, ast.Compare):
             left_ok, left = _value(node.left)
@@ -1394,14 +1608,25 @@ def rule_tests(ws: Workspace, fails: set[str]) -> None:
 def rule_source_without_test(ws: Workspace, fails: set[str]) -> None:
     source: list[str] = []
     tests: list[str] = []
-    for rel in ws.output:
-        if is_py(rel) and not is_init(rel) and ws.ast_changed(rel):
-            (tests if is_test(rel) else source).append(rel)
+    for rel, path in ws.output.items():
+        if not is_py(rel) or not ws.ast_changed(rel):
+            continue
+        # A package marker never proves a test; a source marker counts only when it
+        # holds executable logic.
+        if is_init(rel) and (is_test(rel) or trivial_init(read_text(path))):
+            continue
+        (tests if is_test(rel) else source).append(rel)
     if source and not tests:
         fails.add("source-without-test")
 
 
-def rule_unverified_ok(ws: Workspace, fails: set[str]) -> None:
+def rule_unverified_ok(
+    ws: Workspace, fails: set[str], require_run: bool = False
+) -> None:
+    """An ok claim after a .py write needs a test run after that write.
+
+    With `require_run` the claim needs a run even when nothing was written.
+    """
     claim = -1
     for index, (kind, value) in enumerate(ws.steps):
         if kind == "text" and CLAIM.search(value):
@@ -1409,24 +1634,33 @@ def rule_unverified_ok(ws: Workspace, fails: set[str]) -> None:
     if claim < 0:
         return
     last_write = -1
-    for index, path in ws.write_targets():
+    for index, path in ws.write_targets(attempts=False):
         if index < claim and path.endswith(".py"):
             last_write = max(last_write, index)
-    if last_write < 0:
+    if last_write < 0 and not require_run:
         return
     own = ws.facts.get(last_write)
     if own is not None and own.tail_run:
         return
-    if not any(kind == "shell" for kind, _ in ws.steps[last_write + 1 : claim]):
+    after = range(last_write + 1, claim)
+    if not any(i in ws.facts and ws.facts[i].runs_tests for i in after):
         fails.add("unverified-ok")
 
 
-def run_unittests(root: Path, timeout: int = 8) -> bool:
-    """Run unittest discovery in `root`; True when it passes.
+def run_unittests(
+    root: Path, timeout: float = 8, deadline: Optional[float] = None
+) -> Optional[bool]:
+    """Run unittest discovery in `root`: True passes, False fails, None is unknown.
 
+    None means a timeout, no time left before `deadline`, or a start error.
     The run is bounded: the child gets its own session, its output is captured,
-    and the whole process group is killed at the deadline or on exit.
+    and the whole process group is killed at the deadline or on exit. A shared
+    `deadline` (a `time.monotonic()` value) caps several runs together.
     """
+    if deadline is not None:
+        timeout = min(timeout, deadline - time.monotonic())
+        if timeout <= 0:
+            return None
     proc: Optional[subprocess.Popen[bytes]] = None
     try:
         proc = subprocess.Popen(
@@ -1441,19 +1675,16 @@ def run_unittests(root: Path, timeout: int = 8) -> bool:
         try:
             proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
-            return False
+            return None
         return proc.returncode == 0
     except OSError:
-        return False
+        return None
     finally:
         if proc is not None:
-            try:
+            # SIGKILL fails only when the group already exited or is not ours.
+            with contextlib.suppress(ProcessLookupError, PermissionError):
                 os.killpg(proc.pid, signal.SIGKILL)
-            except OSError:
-                # The child can exit before cleanup kills its process group.
-                pass
             try:
                 proc.communicate(timeout=2)
             except (subprocess.TimeoutExpired, OSError, ValueError):
-                # Cleanup is best effort after the verdict is fixed.
                 pass
