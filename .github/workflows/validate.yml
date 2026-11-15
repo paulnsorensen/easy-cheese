@@ -183,6 +183,11 @@ jobs:
       - name: Install Playwright Chromium
         run: pnpm --dir frontend/mold-review exec playwright install --with-deps chromium
 
+      # The tracked assets must equal a fresh build; a dependency bump that
+      # changes the bundle fails here until someone commits the rebuild.
+      - name: Check the tracked Mold assets match a fresh build
+        run: just mold-review-assets-check
+
       # `just test-mold-review` builds the Mold assets and the skill archives
       # (the specs spawn skills/mold/scripts/mold.pyz) before the suite runs.
       - name: Run mold-review Playwright suite
