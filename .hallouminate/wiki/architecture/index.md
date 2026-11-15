@@ -4,6 +4,7 @@
 - [age-fanout-router](./age-fanout-router.md) — Age fan-out router
 - [briesearch-mold-research-seam](./briesearch-mold-research-seam.md) — Briesearch and Mold research seam
 - [bundle-command-dispatch](./bundle-command-dispatch.md) — Bundle command dispatch
+- [fanout-artifact-format-question](./fanout-artifact-format-question.md) — Fan-out artifact format: the standing shared-store re-evaluation
 - [handoff-preamble-grammar](./handoff-preamble-grammar.md) — Handoff preamble grammar
 - [hard-cheese-gate-contract](./hard-cheese-gate-contract.md) — Hard-cheese gate contract
 - [journey-eval-gates](./journey-eval-gates.md) — Journey eval gates
