@@ -1,4 +1,4 @@
-"""Journey-gate tests for the /age, /cure, and /wheypoint suites.
+"""Journey-gate tests for the /age, /cure, /plate, and /wheypoint suites.
 
 Each recorded fixture in `skills/<skill>/evals/journey-gates.json` runs the
 shipped `kinds.journey.argv` program the way skillz does: case files at the
@@ -24,7 +24,7 @@ from typing import Any, Optional
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SKILLS = ("age", "cure", "wheypoint")
+SKILLS = ("age", "cure", "plate", "wheypoint")
 FIXTURE_KEYS = {"name", "case", "output", "output_deleted", "trace", "score", "fails"}
 REQUIRED_KEYS = FIXTURE_KEYS - {"output_deleted"}
 SANDBOX_SECONDS = 20  # skillz runs the whole gate under this limit.
