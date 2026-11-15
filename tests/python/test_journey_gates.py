@@ -47,7 +47,7 @@ GATE_SKILLS = (
 )
 # Skills whose fixtures, replays, and rule tests live in
 # `test_journey_gates_core_loop.py`.
-CORE_LOOP_SKILLS = ("age", "cure", "wheypoint")
+CORE_LOOP_SKILLS = ("age", "cure", "plate", "wheypoint")
 # Every skill with a compiled journey gate.
 ALL_GATE_SKILLS = GATE_SKILLS + CORE_LOOP_SKILLS
 SHAPES = ("claude", "codex")
