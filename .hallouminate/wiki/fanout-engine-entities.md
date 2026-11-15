@@ -62,7 +62,7 @@ The schema-backed decomposition path uses `easy_cheese_schemas.manifest.reject_s
 
 The Wiring node graph algorithm is shared in the same way.
 `src/easy_cheese_schemas/wiring_graph.py` holds `cycle_errors` and `compute_waves`.
-Four callers use it: `fanout/wiring.py`, `fanout/wiring_topo_sort.py`, `manifest.py`, and `skills/mold/review.py`.
+Four callers use it: `src/easy_cheese/shared/fanout/wiring.py:17`, `src/easy_cheese/shared/fanout/wiring_topo_sort.py:17`, `src/easy_cheese_schemas/manifest.py:25`, and `src/easy_cheese/skills/mold/review.py:25`.
 Before PR #414, three separate graph codes had drifted in behavior and in cycle-message wording.
 Only the algorithm moved. Each caller keeps its own invariant surface and error translation.
 No active caller depends on the removed Curd-block parser.
