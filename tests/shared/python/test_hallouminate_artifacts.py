@@ -414,11 +414,12 @@ def test_control_path_apply_state_and_idempotency(
     if not use_rg:
         monkeypatch.setenv("PATH", "")
 
-    repo = tmp_path / "control\nrepo\t\r\x01"
+    repo = tmp_path / ".cache" / "control\nrepo\t\r\x01"
     cheese = _write_cheese_md(repo)
 
     first = artifacts_mod.apply_artifacts(config_path, apply=True, roots=[repo])
     assert first.action == "create"
+    assert f"backend={'rg' if use_rg else 'walk'}" in first.detail
     state = artifacts_mod.detect_artifacts_state(config_path)
     assert state.listed == (str(cheese.resolve()),)
 

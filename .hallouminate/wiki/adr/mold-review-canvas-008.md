@@ -1,6 +1,7 @@
 # ADR: Replace subject layouts with Mold shape views and pins
 
 Status: accepted (2026-09-27); implemented in PR #731. Supersedes [mold-review-canvas-004](./mold-review-canvas-004.md).
+Amended by [mold-review-canvas-010](./mold-review-canvas-010.md): requirements pane, fork settlement, and phone panes.
 
 ## Context
 

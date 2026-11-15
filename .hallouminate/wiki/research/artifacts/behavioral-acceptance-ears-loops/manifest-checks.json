@@ -1,0 +1,152 @@
+{
+  "slug": "behavioral-acceptance-ears-loops-checks",
+  "invocation": "sidechain",
+  "budget": {
+    "search": 5,
+    "extract": 6,
+    "spawn": 0
+  },
+  "extensions": [{"gap": "unanswered-question", "note": "Earlier Google behavior posts blocked by redirect; extra queries and open attempts sought a retrievable primary source. Budget exceeded; Google 2021 article provided sufficient behavior and boundary evidence."}],
+  "calls": [
+  {
+    "kind": "search",
+    "provider": "web",
+    "tool": "web.run search_query",
+    "query": "site:testing.googleblog.com testing behavior not implementation details tests",
+    "status": "ok"
+  },
+  {
+    "kind": "search",
+    "provider": "web",
+    "tool": "web.run search_query",
+    "query": "Google industrial mutation testing paper equivalent mutants tests",
+    "status": "ok"
+  },
+  {
+    "kind": "search",
+    "provider": "web",
+    "tool": "web.run search_query",
+    "query": "site:hypothesis.readthedocs.io stateful testing invariant rule property based testing",
+    "status": "ok"
+  },
+  {
+    "kind": "search",
+    "provider": "web",
+    "tool": "web.run search_query",
+    "query": "site:testing.googleblog.com integration tests real system end to end test mocks boundaries",
+    "status": "ok"
+  },
+  {
+    "kind": "search",
+    "provider": "web",
+    "tool": "web.run search_query",
+    "query": "site:testing.googleblog.com \"behavior\" \"implementation\" tests Google testing blog change detector",
+    "status": "ok"
+  },
+  {
+    "kind": "search",
+    "provider": "web",
+    "tool": "web.run search_query",
+    "query": "site:testing.googleblog.com \"Testing on the Toilet\" \"behavior\" implementation details tests",
+    "status": "ok"
+  },
+  {
+    "kind": "extract",
+    "provider": "web",
+    "tool": "web.run open",
+    "url": "https://testing.googleblog.com/2013/08/testing-on-toilet-test-behavior-not.html",
+    "fetched": "2026-10-17",
+    "status": "failed"
+  },
+  {
+    "kind": "extract",
+    "provider": "web",
+    "tool": "web.run open",
+    "url": "https://testing.googleblog.com/2021/06/how-much-testing-is-enough.html",
+    "url_digest": "17e0169b5bc23b63c96b9bdab54da093a06d7fe2129d81baa670fc45c8a98966",
+    "file": "raw/01-google-testing.md",
+    "fetched": "2026-10-17",
+    "status": "ok"
+  },
+  {
+    "kind": "extract",
+    "provider": "web",
+    "tool": "web.run open",
+    "url": "https://research.google/pubs/an-industrial-application-of-mutation-testing-lessons-challenges-and-research-directions/",
+    "url_digest": "c260d3d5820b4875faadcfd7afff4868e0907ef2c43dda436d4295a22f203c96",
+    "file": "raw/02-google-mutation.md",
+    "fetched": "2026-10-17",
+    "status": "ok"
+  },
+  {
+    "kind": "extract",
+    "provider": "web",
+    "tool": "web.run open",
+    "url": "https://hypothesis.readthedocs.io/en/latest/stateful.html",
+    "url_digest": "203e6943d913a58e4b2be24e662a7f2bece719c6ab4088166c338d9334675063",
+    "file": "raw/03-hypothesis-stateful.md",
+    "fetched": "2026-10-17",
+    "status": "ok"
+  },
+  {
+    "kind": "extract",
+    "provider": "web",
+    "tool": "web.run open",
+    "url": "https://testing.googleblog.com/2015/01/testing-on-toilet-change-detector-tests.html",
+    "fetched": "2026-10-17",
+    "status": "failed"
+  },
+  {
+    "kind": "extract",
+    "provider": "web",
+    "tool": "web.run open",
+    "url": "https://testing.googleblog.com/2013/05/testing-on-toilet-dont-overuse-mocks.html",
+    "fetched": "2026-10-17",
+    "status": "failed"
+  },
+  {
+    "kind": "extract",
+    "provider": "web",
+    "tool": "web.run open",
+    "url": "https://testing.googleblog.com/2013/08/testing-on-toilet-test-behavior-not.html",
+    "fetched": "2026-10-17",
+    "status": "failed"
+  },
+  {
+    "kind": "extract",
+    "provider": "web",
+    "tool": "web.run open",
+    "url": "https://testing.googleblog.com/2015/01/testing-on-toilet-change-detector-tests.html",
+    "fetched": "2026-10-17",
+    "status": "failed"
+  },
+  {
+    "kind": "extract",
+    "provider": "web",
+    "tool": "web.run open",
+    "url": "https://testing.googleblog.com/2013/05/testing-on-toilet-dont-overuse-mocks.html",
+    "fetched": "2026-10-17",
+    "status": "failed"
+  },
+  {
+    "kind": "extract",
+    "provider": "web",
+    "tool": "web.run open",
+    "url": "https://research.google/pubs/an-industrial-application-of-mutation-testing-lessons-challenges-and-research-directions/",
+    "url_digest": "c260d3d5820b4875faadcfd7afff4868e0907ef2c43dda436d4295a22f203c96",
+    "file": "raw/02-google-mutation.md",
+    "fetched": "2026-10-17",
+    "status": "ok"
+  },
+  {
+    "kind": "extract",
+    "provider": "web",
+    "tool": "web.run open",
+    "url": "https://hypothesis.readthedocs.io/en/latest/stateful.html",
+    "url_digest": "203e6943d913a58e4b2be24e662a7f2bece719c6ab4088166c338d9334675063",
+    "file": "raw/03-hypothesis-stateful.md",
+    "fetched": "2026-10-17",
+    "status": "ok"
+  }
+]
+}

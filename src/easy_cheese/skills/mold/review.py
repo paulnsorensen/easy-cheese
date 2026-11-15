@@ -22,6 +22,7 @@ from urllib.parse import parse_qs, quote, urlparse
 
 from easy_cheese.shared.advisory_lock import advisory_lock
 from easy_cheese.shared.publication import atomic_write
+from easy_cheese_schemas.wiring_graph import cycle_errors
 
 JSONValue: TypeAlias = Union[
     str, int, float, bool, None, list["JSONValue"], dict[str, "JSONValue"]
@@ -501,6 +502,69 @@ def serve_main(argv: list[str] | None = None) -> int:
     return app.run(argv)
 
 
+def _as_list(value: JSONValue | None) -> list[JSONValue]:
+    return value if isinstance(value, list) else []
+
+
+def _string_ids(value: JSONValue | None) -> list[str]:
+    """Return the string ``id`` of each object in a list, in order, without repeats."""
+    ids = (item.get("id") for item in _as_list(value) if isinstance(item, dict))
+    return list(dict.fromkeys(item for item in ids if isinstance(item, str)))
+
+
+def _dependency_warnings(document: JSONObject) -> list[str]:
+    """Apply the canvas ``questionStates`` rules and name each fork that cannot unlock."""
+    questions = _as_list(document.get("questions"))
+    open_ids = set(_string_ids(questions))
+    settled = {item for item in _as_list(document.get("settled_fork_ids")) if isinstance(item, str)}
+    warnings: list[str] = []
+    graph: list[tuple[str, list[str]]] = []
+    for index, question in enumerate(questions):
+        if not isinstance(question, dict) or "depends_on" not in question:
+            continue
+        question_id = question.get("id")
+        named = isinstance(question_id, str) and bool(question_id)
+        label = f"question {question_id}" if named else f"questions[{index}]"
+        dependencies = question["depends_on"]
+        if not isinstance(dependencies, list):
+            warnings.append(f"{label}: depends_on is not a list of question IDs")
+            continue
+        for position, dependency in enumerate(dependencies):
+            if not isinstance(dependency, str) or not dependency:
+                warnings.append(f"{label}: depends_on[{position}] is not a non-empty string")
+            elif dependency not in open_ids and dependency not in settled:
+                warnings.append(
+                    f"{label}: depends_on names {dependency}, which is not an open question or in settled_fork_ids"
+                )
+            elif dependency in open_ids and dependency in settled:
+                warnings.append(
+                    f"{label}: depends_on names {dependency}, which is open and also in settled_fork_ids;"
+                    + f" the question waits until {dependency} leaves questions"
+                )
+        if isinstance(question_id, str):
+            graph.append((question_id, [item for item in dependencies if isinstance(item, str)]))
+    warnings.extend(
+        f"depends_on cycle among open questions: {error}; these questions wait forever"
+        for error in cycle_errors(graph)
+    )
+    return warnings
+
+
+def _publish_warnings(document: JSONObject, previous: ReviewRevision | None) -> list[str]:
+    """Return non-blocking warnings; publish still stores any JSON object."""
+    warnings = _dependency_warnings(document)
+    if previous is not None:
+        current = set(_string_ids(document.get("requirements")))
+        earlier = _string_ids(previous.document.get("requirements"))
+        dropped = [item for item in earlier if item not in current]
+        if dropped:
+            warnings.append(
+                f"requirements from revision {previous.number} are missing: {', '.join(dropped)};"
+                + " republish the full requirement list"
+            )
+    return warnings
+
+
 def _publish(
     *,
     state_dir: str,
@@ -508,6 +572,9 @@ def _publish(
     base_revision: int | None = None,
 ) -> JSONObject:
     """Publish a new revision from an input JSON document.
+
+    The output adds ``warnings`` for fork-dependency problems and dropped
+    requirement IDs. Warnings never block the publish.
 
     Parameters
     ----------
@@ -527,11 +594,13 @@ def _publish(
             document = json.loads(Path(input_path).read_text(encoding="utf-8"))
             if not isinstance(document, dict):
                 raise TypeError("input JSON must be an object")
+            previous = review.revisions[-1] if review.revisions else None
             revision = review.publish(cast(JSONObject, document), base_revision)
             review.save(path)
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise fromargs.CliError(str(exc), exit_code=2) from exc
-    return cast(JSONObject, revision.__dict__)
+    warnings = _publish_warnings(revision.document, previous)
+    return cast(JSONObject, {**revision.__dict__, "warnings": warnings})
 
 
 def publish_main(argv: list[str] | None = None) -> int:

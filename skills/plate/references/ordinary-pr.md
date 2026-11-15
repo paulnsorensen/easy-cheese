@@ -117,18 +117,14 @@ Claims:
 
 ### Diagram
 
-Add one Mermaid diagram only when the structure is the point of the review:
+Add one Mermaid diagram at most, and only when the structure is the point of the review.
+Pick it with the checklist and the smallest-set rules in [`diagrams.md`](../../cheese/references/diagrams.md).
+When several items apply, draw the one that shows the riskiest change.
 
-| Change | Diagram |
-| --- | --- |
-| A data or control flow that crosses three or more modules | `flowchart` of that flow |
-| A changed message order between components or agents | `sequenceDiagram` |
-| A stack of PRs | `flowchart` of the stack order, with this PR marked |
-
-Add no diagram to a small fix, a docs-only change, or an independent PR.
-Derive the diagram from the diff. Show only components that the diff changes, plus their direct callers.
-Keep it to 15 nodes or fewer. Quote a label that holds punctuation, for example `R["router.select()"]`.
-Never use `end` as a node id. Use `<br>` for a line break. Do not add theme or style directives.
+Add no diagram to a small fix, a docs-only pull request, or an independent PR.
+A stack layer keeps a `flowchart` of the stack order, with this PR marked.
+Derive the diagram from the diff. Show only the elements that the diff changes, plus their neighbors.
+Draw it by the notation and Mermaid rules in `diagrams.md`.
 
 ## Push verification
 
