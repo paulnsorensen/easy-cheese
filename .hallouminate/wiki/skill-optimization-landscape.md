@@ -37,7 +37,7 @@ promote if needed.
 | --- | --- | --- | --- |
 | tilth `benchmark/` | `/home/paul/Dev/tilth/benchmark/` (`run.py`, `paired.py`, `stats.py`, `pricing.yaml`, `graduation/evaluate.py`, `tasks/*.py`) | Working. 26+ tasks, 11 `capability = "fix"`, pinned gin/express/fastapi/ripgrep; `claude -p`, `codex exec`, `opencode run`; `--setting-sources ""`, `--mcp-config`, `--max-budget-usd`; paired-bootstrap cost-per-correct; 243-row $30 runs on record | **Fitness function.** A candidate skill is one more mode. Needs a `skills_dir` overlay (~20 lines). |
 | tilth ADR-006 (`tilth-list-orient-view`) | `/home/paul/Dev/tilth-jahala/.cheese/notes/tilth-list-orient-view.md` | A prototype branch failed the benchmark merge gate (14/18 vs 11/18) and was parked | Precedent: no benchmark win, no merge. |
-| `tilth-sonnet5-cost-attribution` | `/home/paul/Dev/tilth/.cheese/notes/` | Cost is the fixed MCP prefix (~5k tokens/cell, cache-written per fresh session), not per-call output | Run candidates at Haiku, validate winners at Sonnet/Opus/Fable. |
+| `tilth-sonnet5-cost-attribution` | `/home/paul/Dev/tilth/.cheese/notes/` | Cost is the fixed MCP prefix (~5k tokens/cell, cache-written per fresh session), not per-call output | Cost lesson only. The model choice for autoimprove runs is the owner rule in [Owner rulings for autoimprove runs](#owner-rulings-for-autoimprove-runs). |
 | PR #722 `agent_lab.py` / `prompt_lab.py` | branch `paulnsorensen/dspy-prompt-tests` (CI green, open) | 3 synthetic `calc.py` tasks; candidate appended to system prompt; settings, hooks, MCP dropped | Keep the GEPA loop, export rule, holdout split, budget caps. Replace the runner. |
 | /age seeded-defect benchmark | XDG corpus `benchmark/age/<run>/results/age/*.json` (20 runs, CR-Bench fields `hits/noise/precision/recall/snr`) | Harness removed in PR #669; results format survives | Reuse the result schema for the /age grader. |
 | hallouminate agent-bench | remote branches `paulnsorensen/agent-bench-tier0`, `-pilot` | Paired-arm wiki-vs-baseline; never run live | Pattern only. |
@@ -128,12 +128,47 @@ consequences:
   [skill-size-budget](./skill-size-budget.md).
 - Do not drop MCP wholesale: tilth is part of the skill contract. The tilth
   harness already handles `--mcp-config`.
-- Models: run candidates at Haiku for volume; validate the winner at Sonnet,
-  and at Opus or Fable when the user wants the promoted skill measured on
-  the models that actually run it. Budget per optimize: ~30 tasks × 8 metric
-  calls ≈ 240 runs.
+- Models: the owner rule in
+  [Owner rulings for autoimprove runs](#owner-rulings-for-autoimprove-runs)
+  replaces the 2026-09-26 intent to run candidates at Haiku for volume. Budget
+  per optimize: ~30 tasks × 8 metric calls ≈ 240 runs.
 - Promotion rule: the graduation gate decides, not the optimizer. Same as
   tilth ADR-006.
+
+## Owner rulings for autoimprove runs
+
+The owner gave three rules for `/skillz autoimprove` runs on easy-cheese skills.
+Before this page, the rules lived only in Wheypoint handoffs.
+Each rule applies to autoimprove runs only. It does not set models or policy for the workflow skills.
+
+### Powerful tier thinks, default tier implements
+
+> Owner rule: Opus for thinking, Sonnet for implementation.[^tiers]
+
+In tier terms (`cheap | default | powerful`, see [codex-omp-portability-002](./adr/codex-omp-portability-002.md)):
+
+- The `powerful` tier runs the reflection role and the judge role. Reflection reads the run results and proposes the candidate skill edit. The judge grades each case.
+- The `default` tier runs the task role. The task role is the agent that executes the skill on each case.
+- The rule puts no role at the `cheap` tier. It replaces the earlier "Haiku for volume" intent in [Harness gaps](#harness-gaps-to-close-before-optimizing-anything-real).
+
+On the Claude harness, the owner named `--harness claude --model sonnet --judge-model opus`, with reflection also at Opus.
+`skillz run` has no reflection-model flag, so the PR #852 and #871 runs pinned each role in a skillz role file: task Sonnet, reflection Opus, judge Opus.[^rolefile]
+On another harness, map each role to that harness's model for the same tier.
+
+### No improvement, no PR
+
+> If autoimprove produces no improvement for a skill, record that and open no PR.[^nopr]
+
+An inconclusive holdout verdict, or a winner equal to the baseline, is no improvement.
+Record the result in the handoff or the PR thread.
+The four PR #852 runs (cook, mold, press, pasteurize) and the PR #871 Cook run ended this way, so no autoimprove PR exists for them.[^rolefile]
+
+### File skillz bugs upstream
+
+> file one GitHub issue per bug on `paulnsorensen/skillz-that-grillz` with the label `bug`, the title prefix `skillz:`, and a reproduction. First search the open issues to avoid duplicates. Do not fix skillz here.[^skillz]
+
+This rule applies tenet 10 of the [manifesto](./easy-cheese-manifesto.md): easy-cheese uses skillz-that-grillz and does not rebuild it.
+A skillz defect that blocks a run waits on the upstream fix. For example, the PR #871 Cook rerun waited on skillz #702.
 
 ## Related redesign threads (found by the same sweep)
 
@@ -167,4 +202,9 @@ Sep 23 summary cites. Locate it by date if needed.
    manual and budgeted.
 7. `/mold` and routing last.
 
-_Source: deployment reference correction for [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729) · Updated: 2026-09-28 · Supersedes: extensionless launcher references from the initial Wedge proposal._
+[^tiers]: Owner directive `v-057419ef60c7`, recorded in Wheypoint `pr-871-autoimprove@rev-34d74edb6e06` (2026-11-08). The same rule is the rationale of decision `d-f419dc118c99` in Wheypoint `pr-852-affinage-autoimprove@rev-1486456a928b`.
+[^rolefile]: Decisions `d-f419dc118c99` and `d-cbdb7a4962fc` in Wheypoint `pr-852-affinage-autoimprove@rev-1486456a928b`; decision `d-6ed38157c6bc` in Wheypoint `pr-871-autoimprove@rev-34d74edb6e06`.
+[^nopr]: Owner directive `v-c519893399a8`, recorded in Wheypoint `affinage-pr-825-journeys@rev-664e09d24d80` (2026-11-11).
+[^skillz]: Owner directive `v-d463ad241184`, recorded in Wheypoint `affinage-pr-825-journeys@rev-664e09d24d80` (2026-11-11). The same directive is `v-dc69483b5124` in Wheypoint `pr-871-autoimprove@rev-34d74edb6e06`.
+
+_Source: deployment reference correction for [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729); owner autoimprove rulings from Wheypoint handoffs · Updated: 2026-11-15 · Supersedes: extensionless launcher references from the initial Wedge proposal; the Haiku-for-volume model intent._
