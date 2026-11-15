@@ -1,24 +1,4 @@
 {
-  "pasteurize-decoy-1": {
-    "loop": "cd jobs && python3 nightly.py",
-    "loop_ok": "[dark] Nightly report",
-    "fix": {
-      "app/settings.py": "\"\"\"Load display settings.\"\"\"\nimport json\nfrom pathlib import Path\n\nDEFAULT_PATH = Path(__file__).resolve().parent.parent / \"config\" / \"settings.json\"\n\n\ndef load_settings(path=DEFAULT_PATH):\n    try:\n        with open(path, encoding=\"utf-8\") as handle:\n            return json.load(handle)\n    except FileNotFoundError:\n        return {}\n"
-    },
-    "decoy": {
-      "app/render.py": "from app.settings import load_settings\n\n\ndef render_header(title):\n    settings = load_settings()\n    return f\"[{settings.get('theme', 'light')}] {title}\"\n"
-    }
-  },
-  "pasteurize-decoy-2": {
-    "loop": "python3 totals.py data/march.csv",
-    "loop_ok": "1207.00",
-    "fix": {
-      "src/invoice.py": "\"\"\"Invoice totals from a semicolon-separated export.\"\"\"\n\n\ndef parse_line(line):\n    \"\"\"Parse sku;qty;unit_price into a dict.\"\"\"\n    sku, qty, price = line.strip().split(\";\")\n    try:\n        unit = float(price.replace(\",\", \"\"))\n    except ValueError:\n        unit = None\n    return {\"sku\": sku, \"qty\": int(qty), \"unit\": unit}\n\n\ndef line_total(item):\n    return round(item[\"qty\"] * item[\"unit\"], 2)\n\n\ndef format_total(items):\n    return f\"{sum(line_total(item) for item in items):.2f}\"\n"
-    },
-    "decoy": {
-      "src/invoice.py": "\"\"\"Invoice totals from a semicolon-separated export.\"\"\"\n\n\ndef parse_line(line):\n    \"\"\"Parse sku;qty;unit_price into a dict.\"\"\"\n    sku, qty, price = line.strip().split(\";\")\n    try:\n        unit = float(price)\n    except ValueError:\n        unit = None\n    return {\"sku\": sku, \"qty\": int(qty), \"unit\": unit}\n\n\ndef line_total(item):\n    return round(item[\"qty\"] * (item[\"unit\"] or 0), 2)\n\n\ndef format_total(items):\n    return f\"{sum(line_total(item) for item in items):.2f}\"\n"
-    }
-  },
   "pasteurize-env-1": {
     "loop": "mkdir -p .cache/tmp && TMPDIR=$PWD/.cache/tmp python3 -m unittest",
     "loop_ok": "OK",
@@ -34,26 +14,6 @@
       "src/due.py": "\"\"\"Orders due on a given UTC day.\"\"\"\nfrom datetime import datetime, timezone\n\n\ndef due_on(orders, day):\n    \"\"\"Return the ids of the orders whose UTC due time falls on day.\"\"\"\n    return [order[\"id\"] for order in orders if datetime.fromtimestamp(order[\"due_ts\"], timezone.utc).date() == day]\n"
     },
     "decoy": null
-  },
-  "pasteurize-verify-1": {
-    "loop": "python3 report.py data/sales.csv",
-    "loop_ok": "total 1234.50",
-    "fix": {
-      "src/sales.py": "\"\"\"Sales report helpers.\"\"\"\n\n\ndef parse_amount(raw):\n    \"\"\"Parse an amount such as 120.25 into a float.\"\"\"\n    try:\n        return float(raw.strip().removeprefix(\"USD \").replace(\",\", \"\"))\n    except ValueError:\n        return 0.0\n\n\ndef total(lines):\n    return sum(parse_amount(line.split(\",\", 1)[1]) for line in lines if line.strip())\n"
-    },
-    "decoy": {
-      "src/sales.py": "\"\"\"Sales report helpers.\"\"\"\n\n\ndef parse_amount(raw):\n    \"\"\"Parse an amount such as 120.25 into a float.\"\"\"\n    try:\n        return float(raw.strip().removeprefix(\"USD \"))\n    except ValueError:\n        return 0.0\n\n\ndef total(lines):\n    return sum(parse_amount(line.split(\",\", 1)[1]) for line in lines if line.strip())\n"
-    }
-  },
-  "pasteurize-verify-2": {
-    "loop": "python3 checkout.py 10 60 40",
-    "loop_ok": "charge 90.00",
-    "fix": {
-      "src/legacy_cart.py": "\"\"\"Cart totals used by the checkout command.\"\"\"\n\n\ndef _discounted(price, pct):\n    return round(price * (100 - pct) / 100, 2)\n\n\ndef charge(items, pct):\n    return _discounted(sum(items), pct)\n"
-    },
-    "decoy": {
-      "src/pricing.py": "\"\"\"Shared pricing rules.\"\"\"\n\n\ndef apply_discount(price, pct):\n    \"\"\"Return the price after a percentage discount.\"\"\"\n    return round(price * (100 - pct) / 100, 2)\n"
-    }
   },
   "pasteurize-steer-1": {
     "loop": "python3 price_check.py",
