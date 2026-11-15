@@ -1,0 +1,15 @@
+Repository: easy-cheese. Trunk: main. Branch: fix/backlog-sweep. No PR exists for this branch.
+Quality gate: `just check` passed at HEAD (exit 0).
+The spec .cheese/specs/backlog-sweep.md says: "Ship each issue as its own independent PR."
+PR template: .github/PULL_REQUEST_TEMPLATE.md with sections What changed / Why / How to verify / Non-obvious changes / Risk / rollout notes / Checklist.
+
+$ git log --oneline --reverse main..HEAD
+c101 fix(affinage): resolve outdated threads (closes #701)       files: skills/affinage/SKILL.md, src/easy_cheese/skills/affinage/threads.py
+c102 fix(affinage): skip bot-only threads (closes #702)          files: src/easy_cheese/skills/affinage/threads.py, tests/python/test_affinage_threads.py
+c103 fix(affinage): keep reply order stable (closes #703)        files: src/easy_cheese/skills/affinage/threads.py, tests/python/test_affinage_threads.py
+c104 docs(age): fix the severity table anchor (closes #704)       files: skills/age/SKILL.md
+c105 fix(press): drop the duplicate gate run (closes #705)        files: src/easy_cheese/skills/press/gate.py, tests/python/test_press_gate.py
+c106 chore(ci): cache uv downloads (closes #706)                  files: .github/workflows/validate.yml
+
+Commits c101-c103 all edit threads.py in overlapping hunks; c102 and c103 do not apply without c101.
+Commits c104, c105, c106 each touch files no other commit touches.

@@ -1,0 +1,14 @@
+---
+import Default from '@astrojs/starlight/components/Sidebar.astro';
+import { injectToc } from './sidebar-toc.mjs';
+
+// Default reads Astro.locals.starlightRoute.sidebar internally.
+// Update the sidebar before <Default /> renders.
+// The stock SidebarPersister and SidebarSublist components receive the updated tree.
+const { starlightRoute } = Astro.locals;
+const { sidebar, toc } = starlightRoute;
+
+starlightRoute.sidebar = injectToc(sidebar, toc?.items);
+---
+
+<Default />

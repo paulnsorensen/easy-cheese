@@ -1,171 +1,147 @@
 ---
 name: melt
-description: Resolve git merge, rebase, or cherry-pick conflicts via a structural-merge cascade — mergiraf (AST-aware auto-resolve) → git rerere (replay remembered fixes) → kdiff3 (manual fallback). Use when conflicts exist and the user wants them resolved — phrases like "melt the conflicts", "fix the merge conflicts", "resolve the rebase conflicts", "what's conflicting after the merge", "/melt", "fix the cherry-pick", or any prompt that surfaces `<<<<<<<` markers, `CONFLICT (...)` git output, or a half-finished merge state. Use even when only one file is conflicting if the user wants the structural pass attempted before manual editing. Do NOT use for general git operations without conflicts. After `/cook` or `/cure` if a merge step blocked them; before retrying the gate that surfaced the conflict.
+description: >-
+  Resolve content conflicts during Git merge, rebase, cherry-pick, pull, or branch integration.
+  Use for CONFLICT, unmerged paths, or Git's "needs merge" diagnostic for an unmerged path.
+  Trigger on fix merge conflicts, resolve rebase conflicts, cherry-pick conflict, and similar requests.
+  Do not use for clean Git operations or review-only questions.
 license: MIT
 ---
 
 # /melt
 
-Use this skill to resolve git merge, rebase, or cherry-pick conflicts using the structural cascade: **mergiraf → rerere → kdiff3**. Each tool handles what the previous could not.
+Resolve the current conflict without rewriting a published branch.
+Use the safe cascade: squash repair → summary → mergiraf → rerere → manual resolution → continuation.
+Keep the original branch for recovery. Never push, reset, or force-push here.
 
-## File IO routing
+Use the selected source-code backend for searches, bounded reads, and manual edits.
+Follow [code-intelligence routing](../cheese/references/code-intelligence-routing.md): search, fresh read, stale-safe write.
 
-For conflict-marker or symbol search, bounded inspection, and manual edits, call the selected source-code backend directly according to [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md). Preserve search → fresh bounded read → stale-safe write when applying a manual resolution.
+## 1. Repair squash residue
 
-## Cascade
-
-| Stage | Tool | What it does | When it runs |
-| --- | --- | --- | --- |
-| 1 | `mergiraf` | Tree-sitter structural merge of base / ours / theirs. Independent additions merge cleanly even when text merge would conflict. Falls back to text merge on parse failure. | Automatically as a git merge driver, or via `python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz batch-resolve`. |
-| 2 | `git rerere` | Replays a previously recorded human resolution for the same conflict signature. | After mergiraf, especially during long rebases where conflicts recur. |
-| 3 | `kdiff3` | Manual 3-way diff for what mergiraf and rerere could not resolve. | Launched via `git mergetool`. |
-
-## Protocol
-
-### 0. Squash-residue check
-
-Run this before the conflict summary. If the branch was squash-merged into base, mergiraf cannot help — see the two remedies below.
+Run this before resolving file conflicts:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz detect-squash-residue
+python3 skills/melt/scripts/melt.pyz detect-squash-residue --apply
 ```
 
-If the verdict is `SQUASH-MERGED`, surface both printed remedies to the user verbatim and stop the cascade. Neither remedy is auto-applied — the user picks one and copy-pastes. Flags:
+Use `--base <ref>` when the base is not `origin/main`.
+Use `--branch <name>` when Git cannot identify the original branch.
+The command previews by default without `--apply`.
+It creates `<original-branch>-clean` and replays verified commits in order when safe.
+Otherwise it merges the base into the original branch.
+It preflights branch collisions before aborting an interrupted operation.
+It never pushes or rewrites either branch.
 
-- `--base` — base ref to compare against (default: `origin/main`).
-- `--branch` — branch to check (default: current).
-- `--json` — structured output for scripting.
+If `application.state` is `confirmation-required`, keep the active operation intact.
+Ask once whether to discard its staged resolution and abort it.
+After explicit confirmation, rerun with `--apply --abort-operation`.
+If confirmation is refused, continue the existing operation instead.
+If `application.state` is `failed`, report `failed_step`, `error`, and `recovery_branch`; stop.
+If it is `needs-resolution`, continue the cascade.
+If it is `applied` without conflicts, check the operation state and proceed to handoff.
+If it is `not-applied`, continue the existing conflict.
 
-Detection cascade (strongest first; later signals run only when needed):
-
-- `tree-match` — walks commits on base looking for one whose tree equals the tree at some point on the branch. That commit is a squash-equivalent of branch commits up to that point. Works offline, through fork PRs and renames, and handles branches with commits past the squash (the case `local-synth` misses). Always runs first.
-- `gh-api` — runs in parallel with tree-match. Enriches a tree-match verdict with PR metadata (number, URL, merge commit) when its SHAs correlate with the squash; supplies the verdict on its own when tree-match found nothing.
-- `local-synth` — synthesizes a would-be squash commit from HEAD's tree and asks `git cherry` whether base contains an equivalent. Last-resort fallback that only runs when neither tree-match nor gh-api produced a verdict; cannot enumerate squashed vs unique commits.
-
-Verdict semantics:
-
-- `SQUASH-MERGED` (`method=tree-match` or `tree-match+gh`) — strongest signal; unique-commit list is the slice of branch commits after the matched squash point.
-- `SQUASH-MERGED` (`method=gh-api`) — fallback when tree-match found nothing but the gh PR's SHAs overlap with branch commits.
-- `SQUASH-MERGED` (`method=local-synth`) — detected offline only; cherry-pick list must be reviewed by hand.
-- `not-detected` — proceed to the cascade.
-- `not-applicable` — on the base branch.
-
-The detector prints two remedies in order:
-
-- **[A] merge** (non-destructive) — `git merge <base>`. Preserves all branch history; squashed commits collapse to a no-op merge, so only real conflicts surface. Prefer this when the branch has unique work or the unique-commit list is uncertain.
-- **[B] reset-and-cherry-pick** (destructive) — `git reset --hard <base>` + `git cherry-pick <unique-shas>`. Rewrites the branch and requires force-push. Use when a clean linear history is wanted and the unique-commit list looks complete.
-
-Default to suggesting [A] first; only suggest [B] when the user has stated a preference for a linear-history workflow or the unique-commit count is small and verified.
-
-### 1. Diagnose
-
-Run the summary script next.
+## 2. Diagnose and inspect
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz conflict-summary
+python3 skills/melt/scripts/melt.pyz conflict-summary
+python3 skills/melt/scripts/melt.pyz operation
 ```
 
-Default output is terse: one metadata line per file plus minimally framed hunks. Flags:
+Read each summary hunk and the operation's `unmerged_paths` and `conflict_marker_files`.
+Use `git log --merge --oneline` only when commit intent is unclear.
+Do not accept a structural merge only because it has no markers.
 
-- `--json` — structured output for scripting.
-- `--verbose` — markdown view for humans.
-- `--context N` — context lines around each hunk (default 3).
+## 3. Resolve structures
 
-For raw git context:
+Preview mergiraf, then inspect its semantic result before applying it:
 
 ```bash
-git log --merge --oneline    # commits involved in the merge
-git status                    # conflict / staging state
+python3 skills/melt/scripts/melt.pyz batch-resolve
+python3 skills/melt/scripts/melt.pyz batch-resolve --debug <path>
 ```
 
-### 2. Structural resolution
-
-For every file mergiraf supports, attempt structural merge:
+The debug command gives the merged output path, log path, and marker count.
+Read that output with the selected backend. Confirm that both sides' intended edits remain.
+Then apply clean resolutions and stage them:
 
 ```bash
-# Preview (dry-run is the default)
-python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz batch-resolve
-
-# Apply clean resolutions and stage them
-python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz batch-resolve --apply
-
-# Markdown output and mergiraf debug logs
-python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz batch-resolve --verbose
+python3 skills/melt/scripts/melt.pyz batch-resolve --apply
 ```
 
-To inspect what mergiraf would produce for a single file without touching the working copy, use `--debug`:
+Melt text tools refuse binary files. Select a side for ordinary binaries and stage it.
+For generated archives, resolve source files and rebuild the archive instead.
+
+## 4. Resolve what remains
+
+Run `operation` again. Its `rerere_enabled`, `configured_merge_tool`, and
+`selected_manual_tool` fields define the available fallback.
+When rerere is enabled, inspect `git rerere status` and `git rerere diff`.
+If it is disabled, report the setting and skip that stage.
+Do not change global Git configuration during this invocation.
+
+For unresolved text, use the selected manual tool or edit after semantic inspection.
+Prefer `git mergetool --tool=kdiff3 <path>` when `selected_manual_tool` is `kdiff3`.
+Otherwise use the configured tool and report the substitution.
+Stage each resolved path. Resolve lockfiles from their manifests, not their conflict text.
+
+Read [conditional cascade stages](references/cascade-stages.md) only when selecting sides,
+regenerating lockfiles, debugging mergiraf, or maintaining rerere data.
+Its side-selection and lockfile commands require a judgment about intended content.
+
+## 5. Continue once
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz batch-resolve --debug <path>
+python3 skills/melt/scripts/melt.pyz operation
+python3 skills/melt/scripts/melt.pyz operation --continue
 ```
 
-It prints paths to the merged output, the log, and the conflict-marker count. Inspect with `cat`/`diff` against the printed paths; if the merged output is clean, apply it:
-
-```bash
-cp <merged_path> <path>
-git add <path>
-```
-
-### 3. Remaining conflicts
-
-After the structural pass, check rerere first:
-
-```bash
-git rerere status      # files with recorded resolutions
-git rerere diff        # show what rerere would apply
-```
-
-If rerere already applied, the conflict is resolved. Otherwise drop into the manual tool:
-
-```bash
-git mergetool          # opens kdiff3 for each conflicted file
-git mergetool <path>   # or just one file
-```
-
-After manual resolution, finish the interrupted operation:
-
-```bash
-git add <resolved-files>
-git merge --continue        # or
-git rebase --continue       # or
-git cherry-pick --continue
-```
-
-Done = `git status` shows no `Unmerged paths` AND zero `<<<<<<<` markers remain.
-
-For ours/theirs picks, lockfiles, mergiraf debugging, and maintenance, see [references/cascade-stages.md](references/cascade-stages.md).
-
-## Scripts
-
-| Script | Purpose | When |
-| --- | --- | --- |
-| `python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz detect-squash-residue` | Detect that the branch was squash-merged and emit both the merge and reset+cherry-pick remedies | **Run first** — short-circuits the cascade |
-| `python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz conflict-summary` | Structured summary with line numbers and context | After residue check |
-| `python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz batch-resolve` | Run `mergiraf merge` over every conflicted file | Supported languages |
-| `python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz conflict-pick` | Choose ours / theirs per hunk | Shell, SQL, formats mergiraf does not parse |
-| `python3 ${CLAUDE_SKILL_DIR}/scripts/melt.pyz lockfile-resolve` | Take one side and regenerate the lockfile | `Cargo.lock`, `package-lock.json`, etc. |
-
-## What this skill does NOT do
-
-- Push or open PRs — hand off to a `gh` skill.
-- Run builds or tests — re-enter `/cook` or run project gates.
-- Commit resolved files outside `git add` staging — use a `commit` skill.
-- Architectural review of merge results — use `/age`.
-
-## Gotchas
-
-- `mergiraf solve` flag confusion: use `--stdout` / `-p` for preview, NOT `--output`.
-- Markdown is supported by mergiraf but may need `.gitattributes` registration.
-- Lockfile structural merge is not the same as a valid lockfile — always regenerate after taking a side.
-- zdiff3 base markers (`|||||||`) are handled by every script in this skill.
-- If you see conflicts in a supported file type, mergiraf-as-driver already ran — you are looking at the residue.
+Run `--continue` only when status is `ready`.
+It refuses unmerged paths and conflict markers, then continues without an interactive editor.
+If it returns `blocked`, resolve the next conflict and repeat steps 2–5.
+If it returns `failure`, report `failed_step` and stop.
+Handoff only when status is `complete`.
+Do not run a separate raw Git continuation command.
 
 ## Handoff
 
-After resolution finishes, prompt the next step via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Include the detected interrupted operation and upstream invocation in the context packet before asking. Default options:
+After completion, use the [shared handoff gate](../cheese/references/handoff-gate.md).
+Fill the placeholders from the upstream invocation and propagated flags.
 
-- **Resume** — dispatch the exact continuation command for the current operation (`git merge --continue`, `git rebase --continue`, or `git cherry-pick --continue`). If the triggering skill invocation is known, return to that skill with the original context after the git operation succeeds; otherwise stop with the resumed git status.
-- **Re-run gates** — dispatch the upstream skill invocation that originally surfaced the conflict so its quality gates run on the merged state.
-- **Stop** — dispatch none; leave the working tree staged for the user to inspect.
+```yaml
+handoff_gate:
+  source_skill: /melt
+  id: post-melt-next-step
+  prompt: The Git operation is complete. What should happen next?
+  recommended: rerun-upstream
+  multi: false
+  options:
+    - id: rerun-upstream
+      label: Re-run the upstream gate
+      description: Run the invocation that found the conflict.
+      dispatch: <upstream_invocation>
+      context:
+        upstream_invocation: <command>
+        flags: [<propagated flags>]
+    - id: plate-it
+      label: Plate it
+      description: Publish completed work through /plate.
+      dispatch: /plate
+      context:
+        flags: [<propagated --hard, --open-pr>]
+    - id: checkpoint-and-stop
+      label: Checkpoint & stop
+      description: Write a durable checkpoint, then pause the pipeline.
+      dispatch: /wheypoint
+    - id: stop
+      label: Stop
+      description: Leave the completed operation for inspection.
+      dispatch: none
+```
 
-`/melt` never resumes before the user selects. After a non-stop selection, run the selected continuation immediately.
+Omit `rerun-upstream` and recommend `stop` when its invocation is unknown.
+Wait for the user's selection. Run a selected non-stop action immediately.
+Melt never commits or pushes. `/plate` owns publication.
+
+See the [generated command inventory](references/commands.md) for all Melt commands.

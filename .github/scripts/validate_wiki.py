@@ -18,11 +18,11 @@ import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-SHARED_SCRIPTS = SCRIPT_DIR.parents[1] / "shared" / "scripts"
-if str(SHARED_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(SHARED_SCRIPTS))
+SOURCE_ROOT = SCRIPT_DIR.parents[1] / "src"
+if str(SOURCE_ROOT) not in sys.path:
+    sys.path.insert(0, str(SOURCE_ROOT))
 
-from paths import KEBAB_SLUG  # noqa: E402
+from easy_cheese.shared.paths import KEBAB_SLUG  # noqa: E402
 
 WIKI_ROOT = Path(".hallouminate/wiki")
 INDEX_START = "<!-- HALLOUMINATE:INDEX-START -->"
@@ -45,8 +45,23 @@ def validate_page(path: Path) -> list[str]:
     except UnicodeDecodeError as exc:
         errors.append(f"{path}: page is not valid UTF-8 ({exc.reason} at byte {exc.start})")
         return errors
+    lines = text.splitlines()
+    # A page may open with a closed YAML frontmatter block (Mold-handshook
+    # specs carry gate metadata there); the H1 requirement applies to the
+    # first line after it. Frontmatter content itself is a separate seam.
+    if lines and lines[0].strip() == "---":
+        close = next(
+            (
+                index
+                for index, line in enumerate(lines[1:], start=1)
+                if line.strip() == "---"
+            ),
+            None,
+        )
+        if close is not None:
+            lines = lines[close + 1 :]
     first_line = next(
-        (line for line in text.splitlines() if line.strip()),
+        (line for line in lines if line.strip()),
         None,
     )
     if first_line is None:

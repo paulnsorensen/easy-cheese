@@ -1,0 +1,18 @@
+# research
+
+Research reports promoted from the XDG project corpus into the tracked wiki
+because a human asked to review them in a PR. The default home for a
+research report is still `$XDG_DATA_HOME/cheese/<project>/research/`
+(see [wiki-conventions](../wiki-conventions.md)); a page lands here only
+when its evidence should ground repository decisions across sessions.
+
+<!-- HALLOUMINATE:INDEX-START -->
+- [behavioral-acceptance-ears-loops](./behavioral-acceptance-ears-loops.md) — Behavioral acceptance: EARS, BDD, tests, and bounded loops
+- [behavioral-acceptance-easy-cheese-suggestions](./behavioral-acceptance-easy-cheese-suggestions.md) — Applying behavioral acceptance research to easy-cheese
+- [c4-model-evaluation](./c4-model-evaluation.md) — C4 model evaluation and alternatives
+- [c4-models-as-code-tools](./c4-models-as-code-tools.md) — C4 models-as-code tools comparison
+- [language-reviewability-evidence](./language-reviewability-evidence.md) — Language readability and reviewability evidence (AI-review era)
+- [review-dimensions-prompt-comparison](./review-dimensions-prompt-comparison.md) — Review dimensions side by side: default angles versus /age rubrics
+- [review-fanout-policy-comparison](./review-fanout-policy-comparison.md) — Review fan-out policy: default /simplify and /code-review versus /age
+- [subagent-model-selection-portability](./subagent-model-selection-portability.md) — Sub-agent model selection across harnesses
+<!-- HALLOUMINATE:INDEX-END -->

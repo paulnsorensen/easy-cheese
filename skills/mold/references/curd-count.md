@@ -1,41 +1,42 @@
 # Curd count — recommendation driver
 
-Runs after Curdle writes the spec, before the Handoff menu renders. Pushes the
-parse-and-count work into a Python script so the recommendation is deterministic
-and stays out of the conversation's token budget.
+Runs after Curdle writes the spec, before finalization. Pushes the parse-and-count
+work into a Python script so the sizing signal is deterministic and stays out
+of the conversation's token budget.
 
 ## What it answers
 
-Whether to recommend `/cook` for the *(recommended)* slot in the Handoff
-menu, and which internal wave-plan **mode** to signal alongside it: parallel
-curd fan-out or the linear chain. `/cook` is the uniform recommendation —
-`/ultracook` is retired as a top-level skill choice.
+Curd-count reports candidate sizing and the recommended downstream skill. The
+digest includes goal, quality-gate, and decision signals; landing metadata; and
+an advisory Cook wave-plan mode. It has no handoff field and does not construct
+an execution command. Finalization alone evaluates all required evidence and
+publishes a canonical Cook handoff when the result is ready.
 
-`/cook --auto` is a user-opt-in alternative the menu always offers in the
-non-decomposable low/medium branch, but it is never a *recommended* pick: per
-existing mold rules, "Never pre-select; auto mode is opt-in" — so the script
-does not consider it.
+The recommendation names the skill only. The count is advisory sizing: it never
+authorizes Cook, bypasses finalization, or turns a saved non-ready result into a
+runnable handoff.
 
 A decomposition of `PARALLEL_THRESHOLD` (2) or more curds signals a parallel
-wave-plan; below that, the choice between plain `/cook` and a linear-mode
-`/cook` is driven by the shape-check's blast-radius verdict. The decomposer
-stays authoritative — the count is a pre-dispatch hint, not the mode gate.
+Cook wave-plan; below that, high blast radius signals a linear chain. The
+decomposer stays authoritative—the count is a pre-dispatch hint, not the mode
+gate. `/ultracook` is retired as a top-level skill choice.
 
 ## Procedure
 
-After `curdle.md` writes the spec to disk, run the script and read the JSON
-digest into context:
+After `curdle.md` writes the spec to disk, resolve its path, then run the
+script and read the JSON digest into context. `<path>` is the `path` field of
+the `artifact-path` reply:
 
 ```bash
-SPEC=$(python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz artifact-path specs <slug>)
-python3 ${CLAUDE_SKILL_DIR}/scripts/mold.pyz curd-count "$SPEC" \
+python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>
+python3 skills/mold/scripts/mold.pyz curd-count <path> \
   --blast-radius <low|medium|high>
 ```
 
 Pass the `--blast-radius` value verbatim from the shape-check verdict line
 (see `shape-check.md`). If shape-check was skipped or its verdict was `[?]`,
-omit the flag — the recommendation will degrade to `/cook` for sub-threshold
-specs.
+omit the flag; the route stays `/cook`, while
+sub-threshold specs receive no Cook mode hint.
 
 ## Signals counted
 
@@ -55,17 +56,15 @@ thoroughly a spec was written, the more likely it mis-recommended fan-out.
 
 ## Decision rule
 
-The script always recommends `/cook` for the *(recommended)* slot and names
-the internal `mode` signal alongside it. `--auto` variants (`/cook --auto`,
-etc.) are user-opt-in alternatives surfaced by the Handoff menu — the script
-never recommends them, because "Never pre-select; auto mode is opt-in" is an
-existing mold rule.
+`recommended_skill` is always `/cook`; it is an advisory destination, not an
+execution decision. Curd-count emits no handoff or command. The independent Cook
+mode signal follows the curd count and blast radius:
 
-| `candidate_curds` | `blast_radius` | `recommended_skill` (always `/cook`) | `mode` |
-| --- | --- | --- | --- |
-| ≥ 2 (`PARALLEL_THRESHOLD`) | any | `/cook` | `parallel` |
-| < 2 | `high` | `/cook` | `linear` |
-| < 2 | `medium`, `low`, or unknown | `/cook` | `null` |
+| `candidate_curds` | `blast_radius` | `mode` |
+| --- | --- | --- |
+| ≥ 2 (`PARALLEL_THRESHOLD`) | any | `parallel` |
+| < 2 | `high` | `linear` |
+| < 2 | `medium`, `low`, or unknown | `null` |
 
 ## Digest shape
 
@@ -80,12 +79,7 @@ existing mold rule.
   "decomposable": true,
   "recommended_skill": "/cook",
   "mode": "parallel",
-  "rationale": "7 candidate curds >= 2 threshold; parallel fan-out",
-  "notes": [
-    "Count is a signal, not a verdict.",
-    "candidate_curds = goals only; acceptance-criteria / quality-gate count does not drive it (issue #111).",
-    "Confirm curd independence (criterion 4: file-disjoint) before /cook fans out in parallel waves."
-  ]
+  "rationale": "7 candidate curds >= 2 threshold; parallel fan-out (advisory)"
 }
 ```
 
@@ -93,19 +87,16 @@ existing mold rule.
 
 The script counts; it cannot verify that the candidate curds are file-disjoint
 (criterion 4) from spec text alone. Before a parallel wave-plan runs, mold
-confirms independence with the user — typically by naming the file footprints
-captured in `## Interface sketches` and asking whether any two candidate
-curds touch the same file. If they do, the decomposer folds the shared-file
+confirms independence with the user — typically by naming each curd's `scope`
+from the typed `CurdPlan` (the planner derives file footprints from the
+Placement block's `slice:` and `public interface:` lines plus the shape-check
+importer list; `## Interface sketches` itself carries no file paths) and
+asking whether any two candidate curds touch the same file. If they do, the decomposer folds the shared-file
 curds back into the linear chain; the dispatched skill is `/cook` either way.
 
 ## When tilth / Python is unavailable
 
 The script depends only on the Python 3 stdlib. If the host has no `python3`,
-mold falls back to the pre-script Handoff: blast-radius alone recommends
-`/cook` and signals a parallel or linear wave-plan (high blast radius signals
-linear mode; low or medium recommends `/cook` with no mode) for the
-*(recommended)* slot, and a parallel wave-plan appears in the option list
-with a manual "if this spec decomposes into 2+ independent curds, the
-decomposer will fan it out" tagline. `/cook --auto` stays where it always
-lives — as a user-opt-in alternative in the non-decomposable low/medium menu,
-never the recommended pick. Say the substitution out loud.
+Mold may report the sizing signal manually: count the behavioural goals and
+apply the blast-radius mode table. Finalization still owns readiness and
+publishes any Cook handoff; do not substitute an execution command.

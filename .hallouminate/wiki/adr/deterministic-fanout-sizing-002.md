@@ -1,6 +1,13 @@
 # ADR-002 — The file-weight table is inverted: default full weight
 
 **Status:** accepted · **Spec:** `deterministic-fanout-sizing`
+**Current qualification (2026-09):** Superseded as the complete Age routing
+policy. The workload reasoning remains current: `review_surface` still uses
+the inverted default-weight table and its score bands still provide ordinary
+allowances. The contextual planner now receives semantic risk and subject
+evidence separately, and its explicit effort policy and specialist additions
+are authoritative. See
+[age-fanout-router](../architecture/age-fanout-router.md).
 
 ## Context
 

@@ -1,0 +1,283 @@
+"""Command surface for the Cook application bundle."""
+
+from __future__ import annotations
+
+import sys
+
+from easy_cheese.shared import findings, gates, handoff, paths, slugify, worktree
+from easy_cheese.shared.bundle_commands import (
+    bundle_command,
+    derive_command,
+    dispatch,
+)
+from easy_cheese.shared.fanout import manifest_update
+
+
+@bundle_command("wheypoint-resolve")
+def _wheypoint_resolve(argv: list[str]) -> int:
+    from easy_cheese.shared.wheypoint.resolve_cli import main
+
+    return main(argv)
+
+
+@bundle_command("artifact-path")
+def _artifact_path(argv: list[str]) -> int:
+    from easy_cheese.shared.artifact_path import main
+
+    return main(argv)
+
+
+@bundle_command("baseline")
+def _baseline(argv: list[str]) -> int:
+    from easy_cheese.shared.fanout.baseline import main
+
+    return main(argv)
+
+
+@bundle_command("phase-decision")
+def _phase_decision(argv: list[str]) -> int:
+    from easy_cheese.shared.fanout.phase_decision import main
+
+    return main(argv)
+
+
+@bundle_command("remediation-decision")
+def _remediation_decision(argv: list[str]) -> int:
+    from easy_cheese.shared.fanout.remediation_decision import main
+
+    return main(argv)
+
+
+@bundle_command("milknado")
+def _milknado(argv: list[str]) -> int:
+    from easy_cheese.shared.fanout.milknado import main
+
+    return main(argv)
+
+
+@bundle_command("mode")
+def _mode(argv: list[str]) -> int:
+    from easy_cheese.shared.fanout.mode import main
+
+    return main(argv)
+
+
+@bundle_command("worktree")
+def _worktree(argv: list[str]) -> int:
+    from easy_cheese.shared.worktree import main
+
+    return main(argv)
+
+
+@bundle_command("validate-decomposition")
+def _validate_decomposition(argv: list[str]) -> int:
+    from easy_cheese.shared.fanout.validate_decomposition import main
+
+    return main(argv)
+
+
+@bundle_command("validate-manifest")
+def _validate_manifest(argv: list[str]) -> int:
+    from easy_cheese.shared.fanout.validate_manifest import main
+
+    return main(argv)
+
+
+@bundle_command("validate-pr-plan")
+def _validate_pr_plan(argv: list[str]) -> int:
+    from easy_cheese.shared.fanout.validate_pr_plan import main
+
+    return main(argv)
+
+
+@bundle_command("manifest-update")
+def _manifest_update(argv: list[str]) -> int:
+    from easy_cheese.shared.fanout.manifest_update import main
+
+    return main(argv)
+
+
+@bundle_command("wiring-topo-sort")
+def _wiring_topo_sort(argv: list[str]) -> int:
+    from easy_cheese.shared.fanout.wiring_topo_sort import main
+
+    return main(argv)
+
+
+@bundle_command("pr-plan-to-branches")
+def _pr_plan_to_branches(argv: list[str]) -> int:
+    from easy_cheese.shared.fanout.pr_plan_to_branches import main
+
+    return main(argv)
+
+
+@bundle_command("normalize")
+def _normalize(argv: list[str]) -> int:
+    from easy_cheese.skills.cook.contract_handlers import normalize_main
+
+    return normalize_main(argv)
+
+
+@bundle_command("validate")
+def _validate(argv: list[str]) -> int:
+    from easy_cheese.skills.cook.contract_handlers import validate_main
+
+    return validate_main(argv)
+
+
+@bundle_command("slugify")
+def _slugify(argv: list[str]) -> int:
+    from easy_cheese.shared.slugify import main
+
+    return main(argv)
+
+
+@bundle_command("write-handoff-artifact")
+def _write_handoff_artifact(argv: list[str]) -> int:
+    from easy_cheese.shared.write_handoff_artifact import main
+
+    return main(argv)
+
+
+@bundle_command("read-handoff-slug")
+def _read_handoff_slug(argv: list[str]) -> int:
+    from easy_cheese.shared.read_handoff_slug import main
+
+    return main(argv)
+
+
+@bundle_command("findings")
+def _findings(argv: list[str]) -> int:
+    from easy_cheese.shared.findings import main
+
+    return main(argv)
+
+
+@bundle_command("gates")
+def _gates(argv: list[str]) -> int:
+    from easy_cheese.shared.gates import main
+
+    return main(argv)
+
+
+@bundle_command("paths")
+def _paths(argv: list[str]) -> int:
+    from easy_cheese.shared.paths import main
+
+    return main(argv)
+
+
+@bundle_command("handoff")
+def _handoff(argv: list[str]) -> int:
+    from easy_cheese.shared.handoff import main
+
+    return main(argv)
+
+
+@bundle_command("validate-result")
+def _validate_result(argv: list[str]) -> int:
+    from easy_cheese.skills.cook.validate_result import main
+
+    return main(argv)
+
+
+@bundle_command("render-html")
+def _render_html(argv: list[str]) -> int:
+    from easy_cheese.shared.html_report_cli import main
+
+    return main(argv)
+
+
+COMMANDS = (
+    derive_command(
+        _wheypoint_resolve,
+        "Resolve a phase slug through the shared Wheypoint kernel (JSON out)",
+    ),
+    derive_command(
+        _artifact_path,
+        "Resolve the durable or transient artifact path for a phase and slug",
+    ),
+    derive_command(
+        _baseline, "Classify a current test-failure list against a stored baseline"
+    ),
+    derive_command(
+        _phase_decision,
+        "Decide what the fan-out pathway does after a phase sub-agent returns",
+    ),
+    derive_command(
+        _remediation_decision,
+        "Apply one fan-remediation event and publish the next scope state",
+    ),
+    derive_command(_milknado, "Probe the milknado engine seam used by parallel mode"),
+    derive_command(_mode, "Select the fan-out mode from the canonical size thresholds"),
+    derive_command(
+        _worktree,
+        "Create, harvest, and tear down isolated sub-agent worktrees",
+        leaves=worktree.LEAVES,
+    ),
+    derive_command(
+        _validate_decomposition, "Validate a fan-out decomposition manifest"
+    ),
+    derive_command(_validate_manifest, "Validate a fan-out run manifest"),
+    derive_command(_validate_pr_plan, "Validate a fan-out PR-plan document"),
+    derive_command(
+        _manifest_update,
+        "Apply an atomic, schema-validated update to a fan-out run manifest",
+        leaves=manifest_update.LEAVES,
+    ),
+    derive_command(
+        _wiring_topo_sort, "Topologically sort a manifest's wiring into ordered waves"
+    ),
+    derive_command(
+        _pr_plan_to_branches,
+        "Convert a fan-out PR plan into branch, cherry-pick, and PR commands",
+    ),
+    derive_command(_normalize, "Normalize a typed contract payload on the host"),
+    derive_command(
+        _validate, "Validate a typed contract payload against its registered schema"
+    ),
+    derive_command(
+        _slugify,
+        "Derive a kebab-case slug and durable spec path from task text",
+        leaves=slugify.LEAVES,
+    ),
+    derive_command(
+        _write_handoff_artifact,
+        "Write a handoff preamble plus optional body atomically; pass --grounded paths",
+    ),
+    derive_command(
+        _read_handoff_slug, "Read the handoff preamble back from a phase artifact"
+    ),
+    derive_command(
+        _findings,
+        "Render an /age report's selection table or coder brief and resolve selection verbs",
+        leaves=findings.LEAVES,
+    ),
+    derive_command(
+        _gates,
+        "Map a quality-gate scoreboard's booleans to a readiness verdict",
+        leaves=gates.LEAVES,
+    ),
+    derive_command(
+        _paths,
+        "Slugify, validate, resolve, and list .cheese artifact paths",
+        leaves=paths.LEAVES,
+    ),
+    derive_command(
+        _handoff,
+        "Render, parse, and dispatch-split handoff preambles",
+        leaves=handoff.LEAVES,
+    ),
+    derive_command(
+        _render_html,
+        "Render a markdown report into one self-contained offline HTML file",
+    ),
+    derive_command(
+        _validate_result,
+        "Validate a ready Mold finalization result before any writer starts",
+    ),
+)
+
+
+def main(argv: list[str] | None = None) -> int:
+    return dispatch(COMMANDS, sys.argv[1:] if argv is None else argv)

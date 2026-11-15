@@ -1,0 +1,16 @@
+Repository: easy-cheese. Trunk: main. Branch: chore/friday-fixes. No PR exists for this branch.
+Quality gate: `just check` passed at HEAD (exit 0).
+PR template: .github/PULL_REQUEST_TEMPLATE.md with sections What changed / Why / How to verify / Non-obvious changes / Risk / rollout notes / Checklist.
+
+$ git log --oneline --reverse main..HEAD
+11aa0f3 fix(briesearch): stop treating a 401 from the Tavily probe as provider absent
+22bb1e4 ci: pin actions/setup-python to v6.1.0 by commit SHA
+33cc2d5 docs(melt): fix the rebase example that used the wrong flag order
+
+$ git diff --stat per commit
+11aa0f3  src/easy_cheese/skills/briesearch/detect.py (+18 -4), tests/python/test_briesearch_detect.py (+40)
+22bb1e4  .github/workflows/validate.yml (+1 -1)
+33cc2d5  skills/melt/SKILL.md (+2 -2)
+
+The three commits touch disjoint files. None imports, reads, or documents another.
+Each commit cherry-picks cleanly onto main alone and passes the gate there.

@@ -1,20 +1,29 @@
 # Harness Portability
 
-Use this reference when a skill needs to talk about host capabilities instead of one harness's syntax. Helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions are capability contracts. The portable docs name the contract first and only then show a host example.
+Use this reference for host capability descriptions.
+Helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions are capability contracts.
+Name the contract before you show a host example.
 
 ## Helper resolution
 
-Prefer repo-local or bundled helpers first:
+Prefer bundled or repo-local paths.
+They work on every host:
 
-- `shared/scripts/*.py` for repo-wide helpers such as corpus path resolution, handoff artifact writing, and slug readers.
-- `skills/<skill>/scripts/*.pyz` for skill-specific helpers bundled with the repo.
-- `${CLAUDE_SKILL_DIR}/scripts/*` only when the host actually provides that environment variable.
+- `src/easy_cheese/shared/*.py` for repo-wide helpers such as corpus path resolution, handoff artifact writing, and slug readers.
+- `skills/<skill>/scripts/<skill>.pyz` for the self-contained skill archive, which runs the helpers bundled with the repo.
 
-If a helper path is shown, the doc should say what behavior the helper provides, not imply one absolute path is the only valid transport.
+Do not use the `${CLAUDE_SKILL_DIR}` environment variable in invocation paths.
+Claude Code substitutes it, but Codex CLI does not.
+Codex receives the literal variable and fails.
+
+Name the behavior that a helper provides.
+Do not imply that one absolute path is the only valid transport.
 
 ## Read, search, edit, inspect
 
-Use the host primitive that preserves bounded context. When the host offers multiple primitives, prefer the one that returns fresh line or snapshot context and call out the fallback only as a fallback.
+Use the host primitive that preserves bounded context.
+When the host offers several primitives, prefer the one that returns fresh line or snapshot context.
+Name every other primitive as a fallback only.
 
 ## User interaction
 
@@ -45,13 +54,17 @@ Then show the host-specific syntax as an example:
 - Codex: host-exposed sub-agent capability, such as `collaboration.spawn_agent`
 - OMP: `task(...)`
 
-Treat every syntax name as an example. Discover the active host capability and gate on fresh context, tool scope, and synchronous completion rather than a versioned identifier.
+Treat each syntax name as an example.
+Discover the active host capability.
+Require fresh context, correct tool scope, and synchronous completion.
 
-Agent selection, minimum power, fallback order, permission degradation, and artifact provenance are normative in [`agent-resolution.md`](agent-resolution.md). Use that resolver before rendering any host-specific dispatch.
+[`agent-resolution.md`](agent-resolution.md) defines selection, minimum power, fallbacks, permission degradation, and artifact provenance.
+Use that resolver before you render host-specific dispatch.
 
 ## GitHub operations
 
-State the GitHub action first: read PR state, post a reply, push a branch, open a PR. Then name the transport:
+State the GitHub action first.
+Then name the transport:
 
 - host GitHub primitive when the harness exposes one
 - `gh` CLI as the fallback transport
@@ -66,7 +79,10 @@ Slash commands are presentation, not the control model. The portable contract is
 - `artifact`
 - one-line orientation
 
-If a skill can render a slash command, it may do so, but the same transition should also be usable as explicit dispatch data for non-slash hosts. When the handoff is a resume point, `next` names the runnable target; when it is terminal, `next: done` records that the chain is complete.
+A slash command can render a transition.
+The same transition must also work as explicit dispatch data.
+At a resume point, `next` names the runnable target.
+At a terminal point, `next: done` records completion.
 
 ## Quick checklist
 
@@ -76,6 +92,6 @@ When writing or editing a skill doc:
 2. Use the richest callable structured question primitive that fits every action; otherwise use a lossless numbered or hybrid rendering.
 3. Preserve every explicit action, recommendations, option tradeoffs, free-form `Other`, and immediate selected action.
 4. Show the bundled or repo-local helper path before the host fallback.
-5. Treat `${CLAUDE_SKILL_DIR}` as optional host context, not the required contract.
+5. Use repo-relative paths (`skills/<skill>/scripts/...`), not `${CLAUDE_SKILL_DIR}` — the latter is Claude Code-specific.
 6. Keep `status`, `next`, and `artifact` as the durable handoff fields.
 7. Use the host GitHub primitive when present; use `gh` as the documented fallback.

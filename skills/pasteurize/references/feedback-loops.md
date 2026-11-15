@@ -1,14 +1,15 @@
-# Feedback loop shapes
+# Feedback loop options
 
-Try these in roughly this order. Pick the first that reaches the failing seam.
+Try these options in order.
+Select the first option that reaches the failed seam.
 
-1. **Failing test** at whatever seam reaches the bug — unit, integration, e2e.
-2. **Curl / HTTP script** against a running dev server.
-3. **CLI invocation** with a fixture input, diffing stdout against a known-good snapshot.
-4. **Headless browser script** (Playwright / Puppeteer) — drives the UI, asserts on DOM/console/network.
-5. **Replay a captured trace.** Save a real network request / payload / event log to disk; replay it through the code path in isolation.
-6. **Throwaway harness.** Spin up a minimal subset of the system (one service, mocked deps) that exercises the bug code path with a single function call.
-7. **Property / fuzz loop.** If the bug is “sometimes wrong output”, run 1000 random inputs and look for the failure mode.
-8. **Bisection harness.** If the bug appeared between two known states (commit, dataset, version), automate “boot at state X, check, repeat” so you can `git bisect run` it.
-9. **Differential loop.** Run the same input through old-version vs new-version (or two configs) and diff outputs.
-10. **HITL bash script.** Last resort. If a human must click, drive _them_ with a structured loop so output still feeds back to you.
+1. Run a failing unit, integration, or end-to-end test at the nearest useful seam.
+2. Send an HTTP request to a running development server.
+3. Run the CLI with a fixture and compare its output with an approved snapshot.
+4. Drive the interface with Playwright or Puppeteer and check the DOM, console, and network.
+5. Replay a captured request, payload, or event log through the isolated code path.
+6. Run the minimum system subset that reaches the bug with one function call.
+7. Run random inputs and check each result for the reported failure.
+8. Automate setup and checks across known revisions for `git bisect run`.
+9. Compare the same input across two versions or configurations.
+10. Use a structured human-driven script only when automation cannot perform the required action.

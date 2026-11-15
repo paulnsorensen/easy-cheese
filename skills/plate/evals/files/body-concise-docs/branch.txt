@@ -1,0 +1,13 @@
+Repository: easy-cheese. Trunk: main. Branch: docs/readme-install. No PR exists for this branch.
+Quality gate: `just check` passed at HEAD (exit 0), including `mkdocs build --strict`.
+PR template: .github/PULL_REQUEST_TEMPLATE.md with sections What changed / Why / How to verify / Non-obvious changes / Risk / rollout notes / Checklist.
+
+$ git log --oneline main..HEAD
+7f2 docs(readme): replace the retired /gh install line with the gh CLI prerequisite
+
+$ git diff main...HEAD
+ README.md | 6 +++---
+-- Install the `/gh` skill for GitHub plumbing.
++- Install the [`gh` CLI](https://cli.github.com) for GitHub plumbing.
+-See `/gh` for PR creation.
++`/plate` creates PRs; `/affinage` handles review comments.

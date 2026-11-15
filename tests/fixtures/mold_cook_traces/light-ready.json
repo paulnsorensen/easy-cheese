@@ -1,0 +1,12 @@
+{
+  "scenario": "runner-setup-ready",
+  "events": [
+    {"type": "input_classified", "input_kind": "slug"},
+    {"type": "plan_materialized", "outcome": "complete"},
+    {"type": "runner_response", "source": "harness", "decision": "approved"},
+    {"type": "setup_authorized", "curd_id": "curd-1"},
+    {"type": "setup_evidence", "status": "valid", "exit_code": 0},
+    {"type": "bound_inputs", "ready": true, "artifact_ref": "artifacts/finalization-results/runner.json"},
+    {"type": "feature_write", "path": "src/feature.py", "artifact_ref": "artifacts/finalization-results/runner.json"}
+  ]
+}

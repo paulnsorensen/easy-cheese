@@ -1,0 +1,94 @@
+"""Shared graph checks and wave scheduling for wiring rows.
+
+The schema and fan-out validators own their domain-specific validation (for
+example, whether a ``W<n>`` dependency exists).  This module only knows the
+wiring graph shape: ``(id, dependencies)`` pairs whose dependencies that are
+not graph nodes are ignored.
+"""
+
+from __future__ import annotations
+
+import graphlib
+from collections.abc import Iterable, Sequence
+from typing import TypeAlias, cast
+
+
+WiringGraph: TypeAlias = Iterable[tuple[str, Sequence[str]]]
+
+
+def _normalise(nodes: WiringGraph) -> list[tuple[str, Sequence[str]]]:
+    return list(nodes)
+
+
+def _sorter(
+    nodes: list[tuple[str, Sequence[str]]], *, include_self: bool
+) -> graphlib.TopologicalSorter[str]:
+    ids = {node for node, _ in nodes}
+    sorter: graphlib.TopologicalSorter[str] = graphlib.TopologicalSorter()
+    for node, dependencies in nodes:
+        sorter.add(
+            node,
+            *(
+                dependency
+                for dependency in dependencies
+                if dependency in ids and (include_self or dependency != node)
+            ),
+        )
+    return sorter
+
+
+class WiringCycleError(ValueError):
+    """A wiring cycle with canonical path and deterministic ID detail."""
+
+    def __init__(self, cycle_path: Sequence[str]) -> None:
+        self.cycle_path: tuple[str, ...] = tuple(cycle_path)
+        self.cycle_ids: tuple[str, ...] = tuple(sorted(set(self.cycle_path)))
+        path = " -> ".join(self.cycle_path)
+        super().__init__(f"the dependency graph has cycle {path}")
+
+
+def _prepare(
+    sorter: graphlib.TopologicalSorter[str],
+) -> WiringCycleError | None:
+    try:
+        sorter.prepare()
+    except graphlib.CycleError as exc:
+        cycle_nodes = cast(Iterable[object], exc.args[1])
+        cycle_path = tuple(str(node) for node in cycle_nodes)
+        return WiringCycleError(cycle_path)
+    return None
+
+
+def cycle_errors(nodes: WiringGraph) -> list[str]:
+    """Return canonical errors for cycles in ``(id, dependencies)`` pairs.
+
+    Dependencies that do not name a node in ``nodes`` are external references
+    (usually curd IDs) and do not participate in cycle detection.
+    """
+    normalised = _normalise(nodes)
+    error = _prepare(_sorter(normalised, include_self=True))
+    return [] if error is None else [str(error)]
+
+
+def compute_waves(nodes: WiringGraph) -> list[list[str]]:
+    """Group graph IDs into deterministic, dependency-ready waves.
+
+    External dependencies are ignored, and self-dependencies are ignored to
+    preserve the fan-out scheduler's historical progress behavior.  Other
+    cycles raise ``ValueError`` with the same canonical wording as
+    :func:`cycle_errors`.
+    """
+    normalised = _normalise(nodes)
+    sorter = _sorter(normalised, include_self=False)
+    error = _prepare(sorter)
+    if error is not None:
+        raise error
+
+    waves: list[list[str]] = []
+    while ready := sorted(sorter.get_ready()):
+        waves.append(ready)
+        sorter.done(*ready)
+    return waves
+
+
+__all__ = ["WiringCycleError", "WiringGraph", "compute_waves", "cycle_errors"]

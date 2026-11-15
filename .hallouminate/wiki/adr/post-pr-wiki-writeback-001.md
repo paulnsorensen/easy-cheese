@@ -28,7 +28,7 @@ curdle output naming each target + backend, so a skip is visible to the author.
   `kind="gate"` nodes against the handshake checklist, so a terminal node would carry no
   lockstep protection — defeating the enforcement this ADR exists to add. Reframing the gate
   as a pre-handshake *commitment* (`durable-writes`) fits the existing four-artifact lockstep
-  (`gate-graph.py` / `handshake.md` / `mold.dot` / `mold.pyz`) with no test-structure change.
+  (`gate-graph.py` / `handshake.md` / `mold.dot` / the mold archive) with no test-structure change.
 
 ## Consequences
 

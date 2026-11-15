@@ -2,30 +2,30 @@
 
 ## Iron Law
 
-**No finding is "fixed" without a gate-passing test run to prove it.**
+**No finding is Applied until a passing gate proves the fix.**
 
-Applying an edit is not the same as curing a finding. Every applied fix runs
-the narrowest test that proves the fix, then any relevant project-wide gates,
-before the finding moves to `### Applied`. A fix whose tests were not run is
-not applied — it is staged.
+An edit alone does not make a finding Applied.
+Run the narrowest proving test after each fix.
+Then run each relevant project gate.
+Move a finding to `### Applied` only after these checks pass.
+Keep an unvalidated fix in staged state.
 
 ---
 
 ## Red Flags
 
-Stop if you notice yourself thinking any of these:
+Stop when you notice one of these thoughts:
 
-- "The fix is obviously correct; running tests is formality."
-- "I'll run the full suite at the end rather than after each fix."
-- "The finding description is clear enough; I don't need to re-read the
-  cited code before applying."
-- "The age report is wrong about this finding; I'll apply the fix anyway and
-  note it."
-- "All findings came from one logical problem; I can fix them in one edit
-  without validating each."
-- Declaring a finding `### Applied` while any gate is still red.
+- "The fix is obvious, so I can skip its test."
+- "I can test all fixes together at the end."
+- "The finding gives enough context, so I can skip a fresh read."
+- "The Age report is wrong, but I can apply its fix anyway."
+- "One edit fixes all findings, so I can skip separate checks."
+- "I know a better fix than the recommendation, so I'll do that instead."
+- "I can mark this finding Applied while a gate remains red."
 
-Each of these is a rationalization. Name it and stop.
+Each thought is a rationalization.
+Name it and stop.
 
 ---
 
@@ -33,10 +33,55 @@ Each of these is a rationalization. Name it and stop.
 
 | Rationalization | Why it fails | Required action |
 | --- | --- | --- |
-| "The fix is obviously correct; tests are formality." | "Obvious" fixes introduce subtle regressions at a higher rate than non-obvious ones, because they skip the mental check that a test encodes. | Run the narrowest test that proves the fix before marking Applied. |
-| "I'll validate all fixes together at the end." | A later test failure cannot be attributed to a specific fix without re-running individual ones. Batched validation hides which fix broke what. | Validate each fix individually, in order. |
-| "The finding rests on a false premise; I'll skip it." | Silently skipping a finding is not the same as disagreeing with it. If the age claim is wrong, say so in the report. | Put the finding in Deferred with the rebuttal. Do not silently drop it. |
-| "I don't need to re-read the code; the finding location is clear." | Fix locations shift during a cure pass. A stale read produces an edit at the wrong anchor. | Re-read the cited location through a fresh bounded read before every edit; follow the [shared routing contract](../../cheese/references/code-intelligence-routing.md). |
-| "All findings stem from one root cause; one edit covers all." | This may be true, but it must be verified. Apply the edit, run the gate, then re-check which remaining findings the gate result clears. | Apply once, validate, then re-read each remaining finding to confirm it is resolved. |
-| "The gate is flaky; I'll mark the fix Applied and note the flakiness." | A flaky gate is a blocker, not an excuse. Marking Applied on a red gate means the cure report lies. | Record the flakiness in Checks. Do not mark Applied. Surface the blocker. |
-| "This finding is low severity; I can skip validation to save time." | Low-severity fixes fail tests at the same rate as high-severity ones. Severity is about impact, not about validation cost. | Validate every applied fix regardless of severity. |
+| "The fix is obvious, so tests are unnecessary." | An unchecked fix can introduce a subtle regression. | Run the narrowest proving test before you mark Applied. |
+| "I can validate all fixes at the end." | A later failure does not identify which fix caused it. | Validate each fix in order. |
+| "The finding has a false premise, so I can skip it." | A silent skip hides a disagreement with the report. | Put the finding in Deferred with the rebuttal. |
+| "The location is clear, so I can skip a fresh read." | A stale location can send an edit to the wrong anchor. | Read the cited location again before every edit. Follow the [shared routing contract](../../cheese/references/code-intelligence-routing.md). |
+| "One root cause means one check is enough." | One edit can affect findings in different ways. | Apply once and validate. Then check every related finding again. |
+| "The gate is flaky, so I can mark Applied." | A red gate cannot prove the fix. | Record the failure in Checks. Keep the finding out of Applied. |
+| "A low severity lets me skip validation." | Severity measures impact, not validation need. | Validate every applied fix. |
+| "The recommendation is only a hint, so I can pick my own fix." | A silent substitution hides a design change from the reviewer and the Locked-decision lens. | Implement the recommendation, or rebut it under Deferred and stop. |
+
+---
+
+## Stacked-layer fix write-back
+
+When a fix targets a stacked PR, read the spec's `landing.review_fixes` before
+committing it. `fold` (the default) folds the fix into the layer commit it
+corrects, rewriting that layer in place. `top-up` instead adds the fix as a new
+commit on top of the stack, leaving every existing layer commit untouched.
+
+## Bounded responsibility on dispatch
+
+A repair agent owns only the findings in its brief.
+Do not add nearby cleanup, repeat the review, or expand the scope.
+This limit makes another dispatch safe and specific.
+
+Before a near-limit stop, return one structured handoff with these parts:
+
+- **Completed.** List each Applied finding and its verification result.
+  Keep an unvalidated fix in staged state.
+- **Changed-file ownership.** List every file that the agent changed.
+- **Remaining.** List each unfinished finding and its exact next action.
+- **Blockers.** List each environment or tool failure.
+
+The orchestrator must use this handoff for the next dispatch.
+Give the next agent the completed set and the next action.
+Do not restart the full finding set.
+
+A limit stop keeps the `BLOCKED` disposition.
+The first `unresolved_work` entry starts with `writer stopped at its budget:`.
+Use `budget checkpoint invalid:` when checkpoint validation fails.
+These prefixes distinguish a limit stop from an executor failure.
+
+`easy_cheese.shared.workflow.WriterBudgetExceeded` defines this seam.
+It carries a `WriterCheckpoint` with the four handoff parts.
+The `reason` text carries the blocker and the limit cause.
+The host finalizes the checkpoint as a partial curd result.
+Completed criteria keep their disposition and evidence.
+Unreached criteria receive the limit reason.
+List completed criteria in criterion order.
+List only finished criteria as completed.
+A failed checkpoint can still preserve readable deliverables.
+Reject a checkpoint that claims every criterion.
+The limit path skips review, so full coverage has no review evidence.

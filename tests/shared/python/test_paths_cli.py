@@ -1,34 +1,42 @@
-"""Tests for shared/scripts/paths_cli.py — slugify / validate / existing CLI."""
+"""Tests for shared/paths.py's slugify, validate, existing, resolve, list,
+and domain-model-target CLI."""
 
 from __future__ import annotations
 
 import os
 
-import importlib.util
+import importlib
 import json
 import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import TYPE_CHECKING, Protocol, cast
 
 import pytest
 
+if TYPE_CHECKING:
+    import re
+
+    import fromargs
+    from collections.abc import Callable
+
+
+class _PathsCliModule(Protocol):
+    KEBAB_SLUG: re.Pattern[str]
+    PHASES: frozenset[str]
+    build_app: Callable[[], fromargs.App]
+    main: Callable[..., int]
+
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
-SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
-PATHS_CLI = SHARED_SCRIPTS / "paths_cli.py"
+SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
+PATHS_CLI = SHARED_SCRIPTS / "paths.py"
 
 
 @pytest.fixture(scope="module")
 def paths_cli_mod() -> ModuleType:
-    # Sibling imports (cli, paths) resolve via sys.path; conftest already inserts it.
-    if str(SHARED_SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(SHARED_SCRIPTS))
-    spec = importlib.util.spec_from_file_location("paths_cli", PATHS_CLI)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["paths_cli"] = module
-    spec.loader.exec_module(module)
-    return module
+    return importlib.import_module("easy_cheese.shared.paths")
 
 
 def _run(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -44,23 +52,23 @@ class TestSlugify:
     def test_basic(self) -> None:
         result = _run("slugify", "--text", "Tail trailing newline")
         assert result.returncode == 0, result.stderr
-        assert result.stdout.strip() == "tail-trailing-newline"
+        assert json.loads(result.stdout) == "tail-trailing-newline"
 
     def test_punctuation_stripped(self) -> None:
         result = _run("slugify", "--text", "Don't break!!! User-facing API.")
         assert result.returncode == 0
-        assert result.stdout.strip() == "dont-break-user-facing-api"
+        assert json.loads(result.stdout) == "dont-break-user-facing-api"
 
     def test_empty_text_errors(self) -> None:
         result = _run("slugify", "--text", "")
         assert result.returncode == 2
-        assert "ERROR:" in result.stderr
+        assert "error" in json.loads(result.stderr)
 
     def test_only_stopwords_errors(self) -> None:
         # All-stopword input produces an empty slug → CliError.
         result = _run("slugify", "--text", "the of and")
         assert result.returncode == 2
-        assert "ERROR:" in result.stderr
+        assert "error" in json.loads(result.stderr)
 
     def test_missing_text_arg_exits_two(self) -> None:
         result = _run("slugify")
@@ -83,30 +91,30 @@ class TestValidate:
     def test_rejects_bad(self, slug: str) -> None:
         result = _run("validate", "--slug", slug)
         assert result.returncode == 2
-        assert "ERROR:" in result.stderr
+        assert "error" in json.loads(result.stderr)
 
     def test_rejects_leading_hyphen(self) -> None:
         # argparse needs `--slug=-leading` to keep the leading dash as a value.
         result = _run("validate", "--slug=-leading")
         assert result.returncode == 2
-        assert "ERROR:" in result.stderr
+        assert "error" in json.loads(result.stderr)
 
     def test_missing_slug_arg_exits_two(self) -> None:
         result = _run("validate")
         assert result.returncode == 2
 
     def test_acceptance_bad_double_hyphen(self) -> None:
-        # Spec acceptance: validate --slug bad--slug exits 2 with ERROR.
+        # Spec acceptance: validate --slug bad--slug exits 2 with an error payload.
         result = _run("validate", "--slug", "bad--slug")
         assert result.returncode == 2
-        assert result.stderr.startswith("ERROR:")
+        assert "error" in json.loads(result.stderr)
 
 
 class TestExisting:
     def test_json_returns_list(self, tmp_path: Path) -> None:
         (tmp_path / "age").mkdir()
         target = tmp_path / "age" / "demo.md"
-        target.write_text("body", encoding="utf-8")
+        _ = target.write_text("body", encoding="utf-8")
 
         result = _run(
             "existing",
@@ -116,10 +124,9 @@ class TestExisting:
             "age",
             "--root",
             str(tmp_path),
-            "--json",
         )
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast(list[str], json.loads(result.stdout))
         assert payload == [str(target)]
 
     def test_empty_when_missing(self, tmp_path: Path) -> None:
@@ -131,7 +138,6 @@ class TestExisting:
             "age",
             "--root",
             str(tmp_path),
-            "--json",
         )
         assert result.returncode == 0
         assert json.loads(result.stdout) == []
@@ -139,7 +145,7 @@ class TestExisting:
     def test_filters_to_requested_phase(self, tmp_path: Path) -> None:
         # Artifact exists under cook but caller asked for age — must come back empty.
         (tmp_path / "cook").mkdir()
-        (tmp_path / "cook" / "demo.md").write_text("body", encoding="utf-8")
+        _ = (tmp_path / "cook" / "demo.md").write_text("body", encoding="utf-8")
 
         result = _run(
             "existing",
@@ -149,7 +155,6 @@ class TestExisting:
             "age",
             "--root",
             str(tmp_path),
-            "--json",
         )
         assert result.returncode == 0
         assert json.loads(result.stdout) == []
@@ -165,7 +170,7 @@ class TestExisting:
             str(tmp_path),
         )
         assert result.returncode == 2
-        assert "ERROR:" in result.stderr
+        assert "error" in json.loads(result.stderr)
 
     def test_unknown_phase_errors(self, tmp_path: Path) -> None:
         result = _run(
@@ -178,8 +183,8 @@ class TestExisting:
             str(tmp_path),
         )
         assert result.returncode == 2
-        assert "ERROR:" in result.stderr
-        assert "unknown phase" in result.stderr
+        error_payload = cast("dict[str, object]", json.loads(result.stderr))
+        assert "unknown phase" in str(error_payload["error"])
 
     def test_missing_required_args_exits_two(self) -> None:
         result = _run("existing")
@@ -191,12 +196,12 @@ class TestExisting:
         home = tmp_path / "corpus-home"
         spec = home / "owner-repo" / "specs" / "demo.md"
         spec.parent.mkdir(parents=True)
-        spec.write_text("body", encoding="utf-8")
+        _ = spec.write_text("body", encoding="utf-8")
         env = dict(os.environ)
         env["EASY_CHEESE_HOME"] = str(home)
         env["EASY_CHEESE_PROJECT"] = "owner-repo"
 
-        result = _run("existing", "--slug", "demo", "--phase", "specs", "--json", env=env)
+        result = _run("existing", "--slug", "demo", "--phase", "specs", env=env)
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout) == [str(spec)]
 
@@ -206,11 +211,11 @@ class TestExisting:
         home = tmp_path / "corpus-home"
         corpus_spec = home / "owner-repo" / "specs" / "demo.md"
         corpus_spec.parent.mkdir(parents=True)
-        corpus_spec.write_text("body", encoding="utf-8")
+        _ = corpus_spec.write_text("body", encoding="utf-8")
         override_root = tmp_path / "custom-root"
         override_spec = override_root / "specs" / "demo.md"
         override_spec.parent.mkdir(parents=True)
-        override_spec.write_text("body", encoding="utf-8")
+        _ = override_spec.write_text("body", encoding="utf-8")
         env = dict(os.environ)
         env["EASY_CHEESE_HOME"] = str(home)
         env["EASY_CHEESE_PROJECT"] = "owner-repo"
@@ -223,7 +228,6 @@ class TestExisting:
             "specs",
             "--root",
             str(override_root),
-            "--json",
             env=env,
         )
         assert result.returncode == 0, result.stderr
@@ -237,65 +241,61 @@ class TestList:
         home = tmp_path / "corpus-home"
         spec = home / "owner-repo" / "specs" / "demo.md"
         spec.parent.mkdir(parents=True)
-        spec.write_text("body", encoding="utf-8")
+        _ = spec.write_text("body", encoding="utf-8")
         env = dict(os.environ)
         env["EASY_CHEESE_HOME"] = str(home)
         env["EASY_CHEESE_PROJECT"] = "owner-repo"
 
-        result = _run("list", "--phase", "specs", "--json", env=env)
+        result = _run("list", "--phase", "specs", env=env)
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout) == [{"slug": "demo", "path": str(spec)}]
 
     def test_transient_phase_anchors_under_dot_cheese(self, tmp_path: Path) -> None:
         art = tmp_path / ".cheese" / "cook" / "demo.md"
         art.parent.mkdir(parents=True)
-        art.write_text("body", encoding="utf-8")
-
-        result = _run("list", "--phase", "cook", "--repo-root", str(tmp_path), "--json")
-        assert result.returncode == 0, result.stderr
-        assert json.loads(result.stdout) == [{"slug": "demo", "path": str(art)}]
-
-    def test_json_mode_honors_limit(self, tmp_path: Path) -> None:
-        # --limit must cap JSON output too, not only plain mode; --full
-        # overrides it. Programmatic callers rely on --json + --limit.
-        for name in ("alpha", "bravo", "charlie"):
-            art = tmp_path / ".cheese" / "cook" / f"{name}.md"
-            art.parent.mkdir(parents=True, exist_ok=True)
-            art.write_text("body", encoding="utf-8")
-
-        capped = _run(
-            "list", "--phase", "cook", "--repo-root", str(tmp_path),
-            "--json", "--limit", "2",
-        )
-        assert capped.returncode == 0, capped.stderr
-        assert len(json.loads(capped.stdout)) == 2
-
-        full = _run(
-            "list", "--phase", "cook", "--repo-root", str(tmp_path),
-            "--json", "--limit", "2", "--full",
-        )
-        assert full.returncode == 0, full.stderr
-        assert len(json.loads(full.stdout)) == 3
-
-    def test_plain_mode_emits_slugs_only(self, tmp_path: Path) -> None:
-        art = tmp_path / ".cheese" / "cook" / "demo.md"
-        art.parent.mkdir(parents=True)
-        art.write_text("body", encoding="utf-8")
+        _ = art.write_text("body", encoding="utf-8")
 
         result = _run("list", "--phase", "cook", "--repo-root", str(tmp_path))
         assert result.returncode == 0, result.stderr
-        assert result.stdout.strip() == "demo"
+        assert json.loads(result.stdout) == [{"slug": "demo", "path": str(art)}]
+
+    def test_limit_caps_output(self, tmp_path: Path) -> None:
+        # --limit must cap output; omitted it returns the full list.
+        for name in ("alpha", "bravo", "charlie"):
+            art = tmp_path / ".cheese" / "cook" / f"{name}.md"
+            art.parent.mkdir(parents=True, exist_ok=True)
+            _ = art.write_text("body", encoding="utf-8")
+
+        uncapped = _run("list", "--phase", "cook", "--repo-root", str(tmp_path))
+        assert uncapped.returncode == 0, uncapped.stderr
+        assert len(cast(list[object], json.loads(uncapped.stdout))) == 3
+
+        capped = _run(
+            "list", "--phase", "cook", "--repo-root", str(tmp_path),
+            "--limit", "2",
+        )
+        assert capped.returncode == 0, capped.stderr
+        assert len(cast(list[object], json.loads(capped.stdout))) == 2
+
+    def test_emits_slug_and_path_dicts(self, tmp_path: Path) -> None:
+        art = tmp_path / ".cheese" / "cook" / "demo.md"
+        art.parent.mkdir(parents=True)
+        _ = art.write_text("body", encoding="utf-8")
+
+        result = _run("list", "--phase", "cook", "--repo-root", str(tmp_path))
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == [{"slug": "demo", "path": str(art)}]
 
     def test_empty_when_missing(self, tmp_path: Path) -> None:
-        result = _run("list", "--phase", "cook", "--repo-root", str(tmp_path), "--json")
+        result = _run("list", "--phase", "cook", "--repo-root", str(tmp_path))
         assert result.returncode == 0
         assert json.loads(result.stdout) == []
 
     def test_unknown_phase_errors(self, tmp_path: Path) -> None:
         result = _run("list", "--phase", "bogus", "--repo-root", str(tmp_path))
         assert result.returncode == 2
-        assert "ERROR:" in result.stderr
-        assert "unknown phase" in result.stderr
+        error_payload = cast("dict[str, object]", json.loads(result.stderr))
+        assert "unknown phase" in str(error_payload["error"])
 
     def test_missing_required_args_exits_two(self) -> None:
         result = _run("list")
@@ -306,10 +306,10 @@ class TestResolve:
     def test_hit_emits_contract_keys(self, tmp_path: Path) -> None:
         art = tmp_path / ".cheese" / "cook" / "demo.md"
         art.parent.mkdir(parents=True)
-        art.write_text("body", encoding="utf-8")
+        _ = art.write_text("body", encoding="utf-8")
         result = _run("resolve", "--slug", "demo", "--repo-root", str(tmp_path))
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast(dict[str, object], json.loads(result.stdout))
         assert payload["fallback_roots"] == []
         assert payload["matches"] == [
             {
@@ -323,29 +323,30 @@ class TestResolve:
     def test_fallback_emits_searched_roots(self, tmp_path: Path) -> None:
         result = _run("resolve", "--slug", "nowhere", "--repo-root", str(tmp_path))
         assert result.returncode == 0, result.stderr
-        payload = json.loads(result.stdout)
+        payload = cast(dict[str, object], json.loads(result.stdout))
         assert payload["matches"] == []
-        assert str(tmp_path / ".cheese" / "cook") in payload["fallback_roots"]
+        assert str(tmp_path / ".cheese" / "cook") in cast(list[str], payload["fallback_roots"])
 
     def test_invalid_slug_exits_two(self, tmp_path: Path) -> None:
         result = _run("resolve", "--slug", "Bad_Slug", "--repo-root", str(tmp_path))
         assert result.returncode == 2
-        assert "ERROR:" in result.stderr
+        assert "error" in json.loads(result.stderr)
 
     def test_unknown_phase_exits_two(self, tmp_path: Path) -> None:
         result = _run(
             "resolve", "--slug", "demo", "--phase", "bogus", "--repo-root", str(tmp_path)
         )
         assert result.returncode == 2
-        assert "ERROR: unknown phase 'bogus'" in result.stderr
+        assert "unknown phase 'bogus'" in json.loads(result.stderr)["error"]
 
 
 class TestModuleImport:
-    def test_setup_callable_present(self, paths_cli_mod: ModuleType) -> None:
-        # Sanity: the module exports the argparse setup hook cli.run consumes.
-        assert callable(paths_cli_mod._setup)
+    def test_build_app_and_main_present(self, paths_cli_mod: _PathsCliModule) -> None:
+        # Sanity: the module exports the fromargs entry points.
+        assert callable(paths_cli_mod.build_app)
+        assert callable(paths_cli_mod.main)
 
-    def test_delegates_to_paths_module(self, paths_cli_mod: ModuleType) -> None:
-        # paths_cli must use the shared paths module, not redefine the regex/phases.
-        assert paths_cli_mod.paths.KEBAB_SLUG is not None
-        assert "age" in paths_cli_mod.paths.PHASES
+    def test_cli_shares_the_slug_rules(self, paths_cli_mod: _PathsCliModule) -> None:
+        # One module owns the regex and phase list the CLI validates against.
+        assert paths_cli_mod.KEBAB_SLUG is not None
+        assert "age" in paths_cli_mod.PHASES

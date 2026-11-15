@@ -1,14 +1,18 @@
 import json
-import re
+import sys
 from pathlib import Path
+from typing import cast
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 
 def test_claude_plugin_manifest_matches_top_level_skills() -> None:
     manifest_path = REPO_ROOT / ".claude-plugin" / "plugin.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = cast(
+        dict[str, object], json.loads(manifest_path.read_text(encoding="utf-8"))
+    )
 
     expected = sorted(
         f"./skills/{path.parent.name}"
@@ -16,18 +20,15 @@ def test_claude_plugin_manifest_matches_top_level_skills() -> None:
     )
 
     assert manifest["name"] == "easy-cheese"
-    assert sorted(manifest["skills"]) == expected
+    assert sorted(cast(list[str], manifest["skills"])) == expected
 
 
-def test_install_sh_fallback_matches_top_level_skills() -> None:
-    install_sh = (REPO_ROOT / "scripts" / "install.sh").read_text(encoding="utf-8")
-    match = re.search(r'^EC_FALLBACK_SKILLS="([^"]+)"', install_sh, re.MULTILINE)
-    assert match, "EC_FALLBACK_SKILLS assignment not found in scripts/install.sh"
-
-    expected = sorted(
-        f"./skills/{path.parent.name}"
-        for path in (REPO_ROOT / "skills").glob("*/SKILL.md")
+def test_cut_is_not_listed_in_plugin_manifest() -> None:
+    manifest = cast(
+        dict[str, object],
+        json.loads(
+            (REPO_ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
+        ),
     )
-    fallback = sorted(f"./skills/{name}" for name in match.group(1).split())
+    assert "./skills/cut" not in cast(list[str], manifest["skills"])
 
-    assert fallback == expected

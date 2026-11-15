@@ -1,33 +1,26 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
-import mermaid from 'astro-mermaid';
-import { sidebar } from './src/sidebar.mjs';
+import { cheeselordTheme } from '@cheeselord/design/starlight';
+import { sidebar } from './website/sidebar.mjs';
 
 export default defineConfig({
   site: 'https://paulnsorensen.github.io',
   base: '/easy-cheese',
   output: 'static',
+  srcDir: './website',
   integrations: [
-    mermaid({
-      autoTheme: true,
-      mermaidConfig: {
-        flowchart: { curve: 'basis' },
-      },
-    }),
     starlight({
-      title: 'easy-cheese',
+      title: '🧀 easy-cheese',
+      plugins: [cheeselordTheme({ flavor: 'easy-cheese' })],
       description:
         'Harness-agnostic Agent Skills (agentskills.io) — the cheese-making pipeline that ages raw curds into shippable wheels of code.',
-      logo: {
-        src: './public/favicon.svg',
-        alt: 'easy-cheese',
-      },
       sidebar,
       components: {
-        Sidebar: './src/components/Sidebar.astro',
+        Sidebar: './website/components/Sidebar.astro',
+        SiteTitle: './website/components/SiteTitle.astro',
       },
-      customCss: ['./src/styles/cheese.css'],
+      customCss: ['./website/styles/cheese.css'],
       social: [
         {
           icon: 'github',
@@ -36,7 +29,7 @@ export default defineConfig({
         },
       ],
       editLink: {
-        baseUrl: 'https://github.com/paulnsorensen/easy-cheese/edit/main/src/content/docs/',
+        baseUrl: 'https://github.com/paulnsorensen/easy-cheese/edit/main/website/content/docs/',
       },
     }),
   ],

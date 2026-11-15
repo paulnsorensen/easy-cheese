@@ -30,13 +30,13 @@ def test_automatic_mode_selection_distinguishes_drafts_from_invalid_reviews(
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     cargo = bin_dir / "cargo"
-    cargo.write_text(
+    _ = cargo.write_text(
         "#!/usr/bin/env bash\n"
-        'if [[ "$*" == *"calibration validate"* ]]; then '\
-        'exit "$CALIBRATION_RESULT"; fi\n'
-        'if [[ "$*" == *"baseline validate"* ]]; then '\
-        'exit "$BASELINE_RESULT"; fi\n'
-        "exit 99\n",
+        + 'if [[ "$*" == *"calibration validate"* ]]; then '
+        + 'exit "$CALIBRATION_RESULT"; fi\n'
+        + 'if [[ "$*" == *"baseline validate"* ]]; then '
+        + 'exit "$BASELINE_RESULT"; fi\n'
+        + "exit 99\n",
         encoding="utf-8",
     )
     cargo.chmod(0o755)
@@ -109,10 +109,10 @@ def test_automatic_mode_selection_distinguishes_drafts_from_invalid_reviews(
         expected_mode,
         expected_stderr,
     ) in cases:
-        (metadata / "skill-overlap-calibration.yml").write_text(
+        _ = (metadata / "skill-overlap-calibration.yml").write_text(
             f"status: {calibration_status}\n", encoding="utf-8"
         )
-        (metadata / "skill-overlap-baseline.yml").write_text(
+        _ = (metadata / "skill-overlap-baseline.yml").write_text(
             f"status: {baseline_status}\n", encoding="utf-8"
         )
         output = tmp_path / "output"
@@ -151,7 +151,7 @@ def test_job_summary_is_concise_and_points_to_full_artifact(tmp_path: Path) -> N
         "${{ steps.mode.outputs.value }}", "check"
     ).replace("${{ steps.analyze.outcome }}", "success")
 
-    (tmp_path / "report.json").write_text(
+    _ = (tmp_path / "report.json").write_text(
         json.dumps({"findings": [1, 2, 3], "trends": {"groups": ["a", "b"]}}),
         encoding="utf-8",
     )

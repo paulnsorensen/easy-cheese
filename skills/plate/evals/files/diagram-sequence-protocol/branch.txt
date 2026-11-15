@@ -1,0 +1,16 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/cook-handback-ack. No PR exists for this branch.
+Quality gate: `just check` passed at HEAD (exit 0).
+PR template: .github/PULL_REQUEST_TEMPLATE.md with sections What changed / Why / How to verify / Non-obvious changes / Risk / rollout notes / Checklist.
+
+$ git log --oneline main..HEAD
+8c3 feat(cook): require a coder ack before the reviewer starts
+
+$ git diff --stat main...HEAD
+ skills/cook/references/fan-path.md                | 34 +++++-----
+ src/easy_cheese/skills/cook/dispatch.py           | 71 +++++++++++------
+ tests/python/test_cook_dispatch_order.py          | 95 ++++++++++++++++++++
+
+Protocol before: Cook dispatches coder; coder writes handback; Cook dispatches reviewer immediately.
+Protocol after:  Cook dispatches coder; coder writes handback; Cook validates handback and sends ack(handback_id);
+                 coder replies ready; only then Cook dispatches reviewer. A missing ready within 120 s marks the curd blocked.
+The message order is the whole change. No file layout or module boundary changes.

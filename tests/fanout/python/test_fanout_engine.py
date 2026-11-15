@@ -1,9 +1,8 @@
 """Structural tests for the fan-out engine's shipped surface (src/fanout/ + refs).
 
-The fan-out engine (formerly /cheese-factory) ships as /ultracook's engine:
-prompt/schema references under skills/ultracook/references/ and scripts under
-src/fanout/ bundled into ultracook.pyz. This guards that every promised file is
-present so a dropped reference or script surfaces in CI. The /ultracook SKILL
+The fan-out engine is owned by /cook; prompt/schema references remain under
+skills/ultracook/references/ and implementation modules under src/easy_cheese/shared/fanout.
+This guards that every promised reference and module is present so drops surface in CI.
 frontmatter and prose are validated by .github/scripts/validate_skills.py and
 tests/python/test_ultracook_skills.py respectively.
 """
@@ -14,13 +13,13 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 REFERENCES_DIR = REPO_ROOT / "skills" / "ultracook" / "references"
-SRC_FANOUT = REPO_ROOT / "src" / "fanout"
+SRC_FANOUT = REPO_ROOT / "src" / "easy_cheese" / "shared" / "fanout"
 
 
 class TestReferencesPresent:
     """Every prompt / schema reference the parallel mode loads must be present."""
 
-    REQUIRED_REFERENCES = (
+    REQUIRED_REFERENCES: tuple[str, ...] = (
         "decomposer-prompt.md",
         "curd-prompt.md",
         "wiring-prompt.md",
@@ -38,9 +37,9 @@ class TestReferencesPresent:
 
 
 class TestScriptsPresent:
-    """Every engine module bundled into ultracook.pyz must exist in src/fanout/."""
+    """Every retained engine module must exist in src/easy_cheese/shared/fanout/."""
 
-    REQUIRED_SCRIPTS = (
+    REQUIRED_SCRIPTS: tuple[str, ...] = (
         "phase_decision.py",
         "mode.py",
         "milknado.py",
@@ -56,7 +55,7 @@ class TestScriptsPresent:
 
     # The CLI validators are marked executable; the dispatcher runs every module
     # from inside the .pyz, so only these carry the exec bit historically.
-    EXECUTABLE_SCRIPTS = (
+    EXECUTABLE_SCRIPTS: tuple[str, ...] = (
         "validate_decomposition.py",
         "validate_manifest.py",
         "validate_pr_plan.py",
@@ -77,7 +76,7 @@ class TestScriptsPresent:
 
 class TestSharedHelpersPresent:
     def test_shared_helpers_present(self) -> None:
-        for helper in ("manifest_io.py", "schema.py", "cli.py", "worktree.py"):
-            assert (REPO_ROOT / "shared" / "scripts" / helper).is_file(), (
-                f"missing required shared helper: shared/scripts/{helper}"
+        for helper in ("manifest_io.py", "schema.py", "worktree.py"):
+            assert (REPO_ROOT / "src" / "easy_cheese" / "shared" / helper).is_file(), (
+                f"missing required shared helper: easy_cheese/shared/{helper}"
             )

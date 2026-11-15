@@ -134,9 +134,19 @@ index and ancestor `index.md` link lists stay in sync.
 
 ## Style
 
+Follow repository-specific terminology and voice first. For editorial questions that the repository does not answer, follow the Google developer documentation style guide.[^1]
+
 - Lead with the conclusion. Don't bury the point under preamble.
+- Address the reader directly, prefer active voice, and put conditions before instructions.
+- Use sentence case for headings.
+- Format filenames, commands, symbols, and other code-related text with backticks.
+- Use descriptive link text instead of generic phrases such as "click here."
 - Cite files and line ranges by path: `skills/mold/references/handshake.md:1-3`.
 - Cite commits by SHA when behavior depends on history.
 - Prefer concrete examples to abstract description.
 - Keep entries short — ~50–150 lines is the right band. A wiki page is
   not a tutorial.
+
+[^1]: https://developers.google.com/style/
+
+_Source: repository documentation convention · Updated: 2026-08-28 · Supersedes: uncodified editorial fallback guidance_

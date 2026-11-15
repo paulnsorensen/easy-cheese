@@ -41,15 +41,23 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           languages: ${{ matrix.language }}
           queries: security-and-quality
+          # Vendored third-party wheel trees (attrs, cattrs, typing_extensions)
+          # are committed so the skill archives build hermetically. They are not
+          # our code to fix, and security-and-quality flags their
+          # version-guarded exports as undefined. Analysing them would bury real
+          # findings under third-party noise.
+          config: |
+            paths-ignore:
+              - vendor
 
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           category: "/language:${{ matrix.language }}"

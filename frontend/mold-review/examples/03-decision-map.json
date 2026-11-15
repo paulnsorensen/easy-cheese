@@ -1,0 +1,226 @@
+{
+  "goal": "Give the agent CLI a file-only database: no server, one directory, safe under concurrent agent writes.",
+  "goal_emphasis": "file-only",
+  "tier": "light",
+  "stage": "decision map",
+  "agent_status": "no agent listening · feedback waits for the next poll",
+  "summary": "Here is the decision map instead of a fourth question. Nothing on it is an artifact. Pick how round four gets its evidence, or stop.",
+  "revisions": [
+    {
+      "label": "r1 · bounds pass",
+      "note": "goal pinned"
+    },
+    {
+      "label": "r2 · shape",
+      "note": "F-1, F-2 settled"
+    },
+    {
+      "label": "r3 · sketch",
+      "note": "placement block, F-3 asked"
+    },
+    {
+      "label": "r4 · decision map",
+      "note": "three rounds, no new evidence"
+    }
+  ],
+  "ledger": [
+    {
+      "label": "decided",
+      "items": [
+        {
+          "id": "F-1",
+          "text": "SQLite, one file at `.cheese/db/store.sqlite`"
+        },
+        {
+          "id": "F-2",
+          "text": "WAL mode plus a writer lock file carrying the pid"
+        },
+        {
+          "id": "F-3",
+          "text": "Store facade: open, put, get, query"
+        }
+      ]
+    },
+    {
+      "label": "open",
+      "items": [
+        {
+          "id": "F-4",
+          "text": "Schema migration when a kind changes shape"
+        },
+        {
+          "id": "F-5",
+          "text": "Lock behaviour on network mounts"
+        }
+      ]
+    }
+  ],
+  "placement": {
+    "badge": "r3",
+    "rows": [
+      {
+        "key": "slice",
+        "value": "NEW SLICE store"
+      },
+      {
+        "key": "spine step",
+        "value": "infra"
+      },
+      {
+        "key": "public",
+        "value": "Store.open(path)\nStore.put(kind, id, doc)\nStore.get(kind, id)\nStore.query(kind, **where)",
+        "highlight": true
+      },
+      {
+        "key": "private",
+        "value": "lock file, WAL pragmas"
+      },
+      {
+        "key": "arrows",
+        "value": "cli → store → sqlite3"
+      }
+    ]
+  },
+  "gates": {
+    "items": [
+      {
+        "label": "problem statement",
+        "state": "met"
+      },
+      {
+        "label": "grounding recorded",
+        "state": "met"
+      },
+      {
+        "label": "options weighed",
+        "state": "met"
+      },
+      {
+        "label": "option grounded",
+        "state": "met"
+      },
+      {
+        "label": "exploration delegated",
+        "state": "met"
+      },
+      {
+        "label": "interface sketches",
+        "state": "met"
+      },
+      {
+        "label": "public interfaces only",
+        "state": "met"
+      },
+      {
+        "label": "identity nouns",
+        "state": "met"
+      },
+      {
+        "label": "non-goals audit",
+        "state": "met"
+      },
+      {
+        "label": "goal coverage 2/4",
+        "state": "met"
+      },
+      {
+        "label": "validate cycles",
+        "state": "met"
+      },
+      {
+        "label": "grilled",
+        "state": "met"
+      },
+      {
+        "label": "open questions marked",
+        "state": "open"
+      },
+      {
+        "label": "quality gates",
+        "state": "open"
+      },
+      {
+        "label": "durable writes",
+        "state": "open"
+      },
+      {
+        "label": "fork taste test",
+        "state": "open"
+      },
+      {
+        "label": "spec format",
+        "state": "open"
+      },
+      {
+        "label": "reproduction",
+        "state": "na"
+      }
+    ]
+  },
+  "decision_map": {
+    "settled": [
+      {
+        "id": "F-1",
+        "text": "SQLite, one file at `.cheese/db/store.sqlite`"
+      },
+      {
+        "id": "F-2",
+        "text": "WAL mode plus a writer lock file carrying the pid"
+      },
+      {
+        "id": "F-3",
+        "text": "Store facade: open, put, get, query"
+      }
+    ],
+    "open": [
+      {
+        "id": "F-4",
+        "text": "Schema migration when a kind changes shape",
+        "marker": "[TBD] · yours"
+      },
+      {
+        "id": "F-5",
+        "text": "Lock behaviour on network mounts",
+        "marker": "[BLOCKED]"
+      }
+    ],
+    "verdict": {
+      "title": "Blocked",
+      "lines": [
+        "G-2 has no acceptance line. One Validate Cycle is open. 12 of 18 gates met.",
+        "Three rounds added no new evidence, so questions stop here."
+      ]
+    }
+  },
+  "questions": [
+    {
+      "id": "R-4",
+      "prompt": "How does round four get new evidence?",
+      "meta": "routes the next step · nothing settles",
+      "selection_mode": "single",
+      "recommended_option_id": "validate",
+      "options": [
+        {
+          "id": "validate",
+          "label": "Run the Validate Cycle",
+          "tradeoff": "stale-pid lock, explorer worktree"
+        },
+        {
+          "id": "explore",
+          "label": "Delegate an explorer digest",
+          "tradeoff": "list existing kinds to unblock F-4"
+        },
+        {
+          "id": "wheypoint",
+          "label": "Checkpoint with /wheypoint",
+          "tradeoff": "save the ledger, resume fresh"
+        },
+        {
+          "id": "stop",
+          "label": "Stop here",
+          "tradeoff": "keep the draft, no Cook"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+Repository: easy-cheese. Trunk: main. Branch: fix/briesearch-config. No PR exists for this branch.
+Quality gate: `just check` passed at HEAD (exit 0). The manual smoke test against live Tavily did NOT run (no API key in this environment).
+PR template: .github/PULL_REQUEST_TEMPLATE.md with sections What changed / Why / How to verify / Non-obvious changes / Risk / rollout notes / Checklist.
+
+$ git log --oneline --reverse main..HEAD
+4a1 fix(briesearch): validate provider config keys at load time
+4a2 feat(briesearch): add exponential retry backoff for provider calls
+4a3 Revert "feat(briesearch): add exponential retry backoff for provider calls"
+
+$ git diff --stat main...HEAD
+ src/easy_cheese/skills/briesearch/config.py     | 23 ++++++++++++++++++++---
+ tests/python/test_briesearch_config.py          | 31 +++++++++++++++++++++++++++++++
+ 2 files changed, 51 insertions(+), 3 deletions(-)
+
+Key hunk (config.py):
++KNOWN_KEYS = frozenset({"provider", "timeout", "max_results"})
++    unknown = set(raw) - KNOWN_KEYS
++    if unknown:
++        raise ConfigError(f"unknown provider config keys: {sorted(unknown)}")
+
+The net diff has no retry or backoff code.

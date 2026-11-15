@@ -1,30 +1,38 @@
-# Unavailable sources
+# Unavailable providers
 
-Optional MCP servers (Context7, Tavily, tilth) are not always present. Fallbacks exist, but evidence quality drops — state that explicitly.
+A provider is an implementation detail; the routed capability is the contract. Use the next route that `providers` lists for the capability. The order is a CLI, then an MCP tool in your tool list, then a native harness tool. `git-host` uses the host GitHub primitive, then `gh`. This order covers only the `providers` capabilities. Wiki and local code keep their own routing rules. See `providers.md`.
 
-## Per-source fallbacks
+## Capability fallbacks
 
-| Source | If MCP missing | Confidence impact |
+| Capability | Equivalent fallbacks | Confidence impact |
 | --- | --- | --- |
-| Context7 | Read repo docs, package README, vendor pages, then web search | Cap at `speculating` for version-specific questions |
-| Tavily | WebFetch (host fetch) for verify/extract; host web search or user-provided links for discovery | Cap at `speculating` when freshness matters |
-| Codebase semantic backend | Fall back to Serena or LSP, `sg`, bounded text search, and targeted reads per the [shared routing contract](../../cheese/references/code-intelligence-routing.md) | Cap at `speculating` when local precedent is central |
-| GitHub (`gh`) | Note absence; user-supplied URLs are acceptable | Skip with a confidence note |
+| Library/API documentation | Any `docs` route, official vendor docs or `llms.txt` through a `web-extract` route, package docs or README | Lower only if version/authority coverage weakens |
+| Current-web discovery/extraction | Any `web-search` or `web-extract` route, including Jina Reader through `curl` | Lower only if freshness or verification coverage weakens |
+| Scholarly literature | Any `papers` route, or the publisher page through a `web-extract` route | Lower only if the paper or its version remains unread |
+| Repository knowledge/wiki | Hallouminate, llm-wiki, bounded Markdown ADR/wiki reads | Lower only if rationale/decision coverage remains incomplete |
+| Local code intelligence | Use alternate semantic, LSP, AST, or text backends. Follow the [shared routing contract](../../cheese/references/code-intelligence-routing.md). | Lower only if the backend cannot inspect critical local evidence precisely |
+| Git hosting/examples | Any `git-host` route or host-scoped web search/open | Lower only when hosted state or examples are critical and uncovered |
 
-## Reporting an unavailable source
+A configured MCP server can fail to connect. Treat a server that is absent from your tool list as unavailable, and use the next route. A model summary from a native fetch tool is discovery evidence. It does not replace a raw retrieval for a quoted claim.
 
-Once per session, after the routing block:
+Direct URLs and user URLs are candidate sources, not provider operations. Inspect their content with a provider retrieval tool before you use it. The user URL exemption in `synthesis.md` applies only to link checks.
+
+## Reporting a substitution
+
+Report it once after the routing block:
 
 ```text
-UNAVAILABLE: Tavily MCP not loaded. Falling back to WebFetch for link verification and host web search for discovery.
-Freshness-sensitive answers will be capped at `speculating`.
+UNAVAILABLE: context7 MCP is configured but not loaded. Using the ctx7 CLI for
+Library/API documentation. Coverage remains authoritative; no confidence change.
 ```
 
-Do not retry. Do not silently swap to a different question. The cap is real and the user reads the same line you do.
+If the replacement is weaker, name the lost coverage. Then apply the matching cap from `synthesis.md`. Do not lower confidence because the preferred provider is absent. Do not retry the same unavailable provider. Do not change the question silently.
 
-## When to refuse instead of fall back
+## When to stop
 
 Stop and ask the user when:
-- The question explicitly demands a source that is unavailable (e.g., "use Context7 for this").
-- All routed sources are unavailable.
-- A fallback would require fabricating information.
+
+- The user explicitly requires a provider that is unavailable.
+- A required capability has no usable provider or evidence source.
+- Every equivalent fallback leaves a critical claim uncovered.
+- Continuing would require fabricating information.

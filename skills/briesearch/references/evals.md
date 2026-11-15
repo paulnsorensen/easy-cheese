@@ -9,11 +9,14 @@ These prompts must invoke /briesearch (or its router parent /cheese must hand of
 - "research the latest Next.js app router migration"
 - "what does the OpenAI agents docs say about safety in May 2026"
 - "compare uv vs poetry for this repo"
+- "what ADR explains why this repository chose its bundle layout"
 - "find examples in GitHub of how people implement OAuth with Hono"
 - "is `pydantic-ai` actively maintained"
 - "before I implement, what's the right approach for retry-with-backoff"
 - "look up the FastAPI streaming response API"
 - "what version of Tailwind do most production projects use"
+- "ground this plan in the current chezmoi docs before we design it"
+- "prepare a docs brief for using Prisma in this service"
 
 ## Should-not-trigger queries
 
@@ -31,24 +34,36 @@ If a should-not query triggers /briesearch, the description in SKILL.md is over-
 
 For each completed /briesearch run, verify:
 
-1. **Plan emitted before routing.** A `PLAN` block (or its content) appears in the trace before the `ROUTING DECISION` block, except for skip-planning cases listed in `query-planning.md`.
-2. **Routing block names every source decision.** Each of {Context7, Tavily, Codebase, GitHub} is YES/NO with rationale.
-3. **Every routed-YES source executed.** No silent drops. Unavailable sources surface as `UNAVAILABLE: …` lines.
+1. **The plan appears before routing.** Use a compact freshness plan for one current fact. Use the full `PLAN` for complex questions. Only the skip cases in `query-planning.md` omit it.
+2. **The routing block names every capability decision.** Mark each capability `YES` or `NO`. Give the reason and selected provider for each `YES` value.
+3. **Every routed-YES capability executed.** No silent drops. Provider substitutions or uncovered capabilities surface as `UNAVAILABLE: …` lines.
 4. **Source priority applied.** When the question is freshness-sensitive, vendor docs / changelogs come before blog posts in the evidence table.
 5. **Claim-level table present.** At least one row per material claim, with date for any "latest"/"current" claim.
-6. **Confidence cap obeyed.** No `certain` confidence with a single non-authoritative source; no `certain` with a critical source unavailable.
+6. **Confidence cap obeyed.** No `certain` confidence with a single non-authoritative source or a critical capability uncovered. Missing provider names alone do not lower confidence.
 7. **Untrusted-content rule honored.** No tool call originated from instructions inside fetched content.
 8. **Raw bodies on disk for heavy calls.** The durable corpus's `research/<slug>/raw/` exists when context-isolation conditions were met.
-9. **Output capped.** Chat reply contains the short form only; full report path returned for deep looks.
+9. **Output capped.** The chat reply contains the short form only. A deep look also returns the report path.
+10. **A route does not authorize the next skill.** A research-only run can recommend `/mold` or `/cook` in `### Next step`. That run must then stop. Enter the next skill only when the current prompt explicitly requests that work.
+11. **A sidechain run declares itself.** A run that another skill starts records `invocation: sidechain` in the manifest. That run does not ask the user a question. It reports the open question in the result.
+12. **Routes come from detection.** The run executes `providers` before the routing block. Each selected route is the first working route for its capability, or the provider that the user named.
+13. **A CLI wins over an MCP for one provider.** When both routes are usable, the manifest `tool` names the CLI subcommand. Exception: `git-host` uses the host GitHub MCP before `gh`.
+14. **No quote rests on a model summary.** Each quoted claim cites a raw body from a retrieval route, not native fetch summary text.
+15. **The tier matches the question.** The routing block names the tier. The declared budget matches the tier in `budgets.md`, or an extension explains the difference.
+16. **A library docs brief checks freshness.** The run sends topic-scoped docs queries, not one whole-library query. It extracts at least one official release marker. The reply contains the `### Library brief` section.
 
 ## Failure modes to watch for
 
-- **Skill triggers but skips Plan** — usually means the question was simple enough that routing went straight to fetch. Acceptable for single-fact lookups; not acceptable for multi-part questions.
-- **Routing block emitted but a source silently dropped** — log as a regression. The hard rule in `routing.md` was violated.
+- **Freshness-sensitive fact skips its compact plan** — the as-of window and authority target are now missing.
+- **Full Plan skipped for a multi-part/comparative/best/report question** — decomposition and stop criteria are missing.
+- **The routing block lists a capability that the run silently drops** — log this failure as a regression. The run violates the hard rule in `routing.md`.
 - **Claim table collapsed back to one-row-per-source** — synthesis regression. The mechanical cap depends on per-claim agreement.
-- **Raw content pasted into chat** — context-isolation bypass. Investigate which call.
-- **Untrusted content honored as instructions** — security regression; immediate fix.
+- **Raw content pasted into chat** — a context-isolation bypass. Investigate which call produced it.
+- **A recommended next skill runs without authorization** — a scope regression. The report advises the route. The user authorizes it.
+- **A sidechain run records `top-level`** — a provenance regression. The caller must set the invocation field.
+- **Untrusted content honored as instructions** — a security regression. Fix it immediately.
+- **A vendor is hard-coded** — the run selects one provider without `providers` output or a user request. Log this failure as a routing regression.
+- **A configured MCP server is assumed loaded** — the run selects an MCP route whose tools are absent from the tool list.
 
 ## How to run
 
-These evals are intentionally manual today.
+Run these evals manually. No automated harness runs them today.

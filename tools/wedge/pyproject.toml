@@ -1,0 +1,9 @@
+# Wedge is a build-time tool pinned by commit through this directory's uv.lock.
+# Keep its dependency closure separate from the runtime lock at the repository root.
+[project]
+name = "easy-cheese-wedge"
+version = "0"
+requires-python = ">=3.11"
+dependencies = [
+  "skillz-that-grillz @ git+https://github.com/paulnsorensen/skillz-that-grillz@82d04be8be95a367e484c035567be68253e9e992#subdirectory=lib",
+]

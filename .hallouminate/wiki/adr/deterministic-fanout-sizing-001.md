@@ -1,6 +1,13 @@
 # ADR-001 — Risk overrides promote a dimension, they do not escalate `n`
 
 **Status:** accepted · **Spec:** `deterministic-fanout-sizing`
+**Current qualification (2026-09):** Superseded for the implemented contextual
+Age planner. This ADR remains readable historical rationale for separating
+workload from risk, but current risk flags select required **subjects** and
+may add high-effort specialists; they no longer promote dimensions into solo
+lenses or define the plan schema. See
+[age-fanout-router](../architecture/age-fanout-router.md) for the active
+policy.
 
 ## Context
 

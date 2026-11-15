@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 728 1250" width="728" height="1250" role="img" aria-labelledby="title">
+<title id="title">The /age review flow</title>
+<style>
+  svg{--card:#f6f8fa;--border:#d0d7de;--fg:#1f2328;--muted:#59636e;--info:#0969da;--success:#1a7f37;--warning:#9a6700;--accent:#8250df;--code:#eef1f4;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+  @media (prefers-color-scheme: dark){svg{--card:#161b22;--border:#30363d;--fg:#e6edf3;--muted:#9198a1;--info:#4493f8;--success:#3fb950;--warning:#d29922;--accent:#ab7df8;--code:#0d1117}}
+  .box{fill:var(--card);stroke:var(--border);stroke-width:1.2}
+  .script{stroke:var(--info);stroke-width:1.6}
+  .agent{stroke:var(--success);stroke-width:1.6}
+  .gate{stroke:var(--warning);stroke-width:1.6}
+  .term{fill:var(--code)}
+  .t{fill:var(--fg);font-size:13px;font-weight:600}
+  .s{fill:var(--muted);font-size:11.5px}
+  .m{fill:var(--fg);font-size:11.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .lbl{fill:var(--muted);font-size:11px;font-style:italic}
+  .ln{stroke:var(--muted);stroke-width:1.3;fill:none}
+  .br{stroke:var(--accent);stroke-width:1.3;fill:none}
+  .num{fill:var(--muted);font-size:11px;font-weight:700}
+  .lg{fill:var(--muted);font-size:11px}
+  .head{fill:var(--muted)}
+</style>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+
+<rect class="box term" x="124" y="10" width="480" height="50" rx="8"/>
+<text class="m" x="364" y="32" text-anchor="middle">/age [&lt;range&gt;] [--scope &lt;path&gt;] [--effort quick|normal|deep]</text>
+<text class="m" x="364" y="49" text-anchor="middle">[--overall] [--safe] [--auto] · default: the working diff</text>
+<path class="ln" d="M364 60 V84" marker-end="url(#a)"/>
+
+<rect class="box" x="124" y="86" width="480" height="58" rx="8"/>
+<text class="num" x="138" y="108">1</text><text class="t" x="154" y="108">Phase entry</text>
+<text class="s" x="154" y="128">wheypoint-resolve → base revision · read /press report → Press findings</text>
+<path class="ln" d="M364 144 V168" marker-end="url(#a)"/>
+
+<rect class="box" x="124" y="170" width="480" height="76" rx="8"/>
+<text class="num" x="138" y="192">2</text><text class="t" x="154" y="192">Context (coordinator reads the code)</text>
+<text class="s" x="154" y="212">changed paths + components · per subject: applies? + evidence</text>
+<text class="s" x="154" y="230">risk flags (auth, public API, concurrency …) · host: can it fan out?</text>
+<path class="ln" d="M364 246 V270" marker-end="url(#a)"/>
+
+<rect class="box script" x="124" y="272" width="480" height="96" rx="8"/>
+<text class="num" x="138" y="294">3</text><text class="t" x="154" y="294">Plan — age-route (deterministic script)</text>
+<text class="s" x="154" y="314">→ .cheese/age/&lt;slug&gt;-plan.json · same context ⇒ same plan</text>
+<text class="s" x="154" y="332">reviewers by size: normal 1 / ≤2 / ≤5 · deep ≤3 / ≤5 / all · quick: one</text>
+<text class="s" x="154" y="350">--overall: one reviewer per subject · no fan-out: one combined, degraded</text>
+<path class="ln" d="M364 368 V392" marker-end="url(#a)"/>
+
+<rect class="box script" x="124" y="394" width="480" height="58" rx="8"/>
+<text class="num" x="138" y="416">4</text><text class="t" x="154" y="416">Evidence packet + review lock</text>
+<text class="s" x="154" y="436">shared evidence built once · lock freezes production files</text>
+
+<path class="ln" d="M364 452 V470 M69 470 H659"/>
+<path class="ln" d="M69 470 V498" marker-end="url(#a)"/><path class="ln" d="M187 470 V498" marker-end="url(#a)"/>
+<path class="ln" d="M305 470 V498" marker-end="url(#a)"/><path class="ln" d="M423 470 V498" marker-end="url(#a)"/>
+<path class="ln" d="M541 470 V498" marker-end="url(#a)"/><path class="ln" d="M659 470 V498" marker-end="url(#a)"/>
+<text class="lbl" x="14" y="464">read-only, fresh-context reviewers</text>
+<path class="br" d="M368 494 V488 H714 V494"/>
+<text class="lbl" x="541" y="483" text-anchor="middle" style="fill:var(--accent)">protected: own reviewer at normal / deep</text>
+
+<rect class="box agent" x="14" y="500" width="110" height="96" rx="8"/>
+<text class="t" x="69" y="522" text-anchor="middle">general</text>
+<text class="s" x="69" y="542" text-anchor="middle">ordinary subjects</text>
+<text class="s" x="69" y="558" text-anchor="middle">not split out</text>
+
+<rect class="box agent" x="132" y="500" width="110" height="96" rx="8"/>
+<text class="t" x="187" y="522" text-anchor="middle">specialists</text>
+<text class="s" x="187" y="542" text-anchor="middle">security, callers,</text>
+<text class="s" x="187" y="558" text-anchor="middle">removed, spec …</text>
+<text class="s" x="187" y="574" text-anchor="middle">within budget</text>
+
+<rect class="box agent" x="250" y="500" width="110" height="96" rx="8"/>
+<text class="t" x="305" y="522" text-anchor="middle">risk</text>
+<text class="s" x="305" y="542" text-anchor="middle">auth → security</text>
+<text class="s" x="305" y="558" text-anchor="middle">API → callers</text>
+<text class="s" x="305" y="574" text-anchor="middle">effort: high</text>
+
+<rect class="box agent" x="368" y="500" width="110" height="96" rx="8"/>
+<text class="t" x="423" y="522" text-anchor="middle">conventions</text>
+<text class="s" x="423" y="542" text-anchor="middle">rule · source</text>
+<text class="s" x="423" y="558" text-anchor="middle">code · correction</text>
+
+<rect class="box agent" x="486" y="500" width="110" height="96" rx="8"/>
+<text class="t" x="541" y="522" text-anchor="middle">altitude</text>
+<text class="s" x="541" y="542" text-anchor="middle">symptom · owner</text>
+<text class="s" x="541" y="558" text-anchor="middle">placement · cost</text>
+
+<rect class="box agent" x="604" y="500" width="110" height="96" rx="8"/>
+<text class="t" x="659" y="522" text-anchor="middle">reframe</text>
+<text class="s" x="659" y="542" text-anchor="middle">complexity</text>
+<text class="s" x="659" y="558" text-anchor="middle">new model</text>
+<text class="s" x="659" y="574" text-anchor="middle">deleted · kept</text>
+
+<path class="ln" d="M69 596 V616 M187 596 V616 M305 596 V616 M423 596 V616 M541 596 V616 M659 596 V616 M69 616 H659"/>
+<path class="ln" d="M364 616 V640" marker-end="url(#a)"/>
+
+<rect class="box" x="124" y="642" width="480" height="92" rx="8"/>
+<text class="num" x="138" y="664">5</text><text class="t" x="154" y="664">Reconcile (coordinator + severity script)</text>
+<text class="s" x="154" y="684">merge by underlying defect · boundary table picks one dimension</text>
+<text class="s" x="154" y="702">severity = base + contract bump + structural bump (cap: blocker)</text>
+<text class="s" x="154" y="720">fix-cost-now from dependent counts · confidence: certain | speculating</text>
+<path class="ln" d="M364 734 V758" marker-end="url(#a)"/>
+
+<rect class="box agent" x="124" y="760" width="480" height="58" rx="8"/>
+<text class="num" x="138" y="782">6</text><text class="t" x="154" y="782">Verify</text>
+<text class="s" x="154" y="802">check each candidate · deep only: gap sweep, then verify new finds</text>
+<path class="ln" d="M364 818 V842" marker-end="url(#a)"/>
+
+<rect class="box script" x="124" y="844" width="480" height="58" rx="8"/>
+<text class="num" x="138" y="866">7</text><text class="t" x="154" y="866">Write report (gated writer)</text>
+<text class="s" x="154" y="886">→ .cheese/age/&lt;slug&gt;.md, by severity · rejected if the lock broke</text>
+<path class="ln" d="M364 902 V926" marker-end="url(#a)"/>
+
+<path class="box gate" d="M364 928 L574 970 L364 1012 L154 970 Z"/>
+<text class="t" x="364" y="966" text-anchor="middle">recommended set</text>
+<text class="s" x="364" y="984" text-anchor="middle">blocker + high + medium + cheap lows</text>
+
+<path class="ln" d="M154 970 H124 V1058" marker-end="url(#a)"/>
+<path class="ln" d="M364 1012 V1058" marker-end="url(#a)"/>
+<path class="ln" d="M574 970 H604 V1058" marker-end="url(#a)"/>
+<text class="lbl" x="130" y="1040">empty</text>
+<text class="lbl" x="370" y="1040">reason to ask</text>
+<text class="lbl" x="610" y="1040">otherwise</text>
+
+<rect class="box" x="14" y="1060" width="220" height="64" rx="8"/>
+<text class="t" x="124" y="1086" text-anchor="middle">next: done</text>
+<text class="s" x="124" y="1106" text-anchor="middle">print the report path, stop</text>
+
+<rect class="box gate" x="254" y="1060" width="220" height="64" rx="8"/>
+<text class="t" x="364" y="1082" text-anchor="middle">selection gate — you pick</text>
+<text class="s" x="364" y="1100" text-anchor="middle">sprawling · structural · conflict</text>
+<text class="s" x="364" y="1116" text-anchor="middle">or --safe</text>
+
+<rect class="box" x="494" y="1060" width="220" height="64" rx="8"/>
+<text class="t" x="604" y="1086" text-anchor="middle">act</text>
+<text class="s" x="604" y="1106" text-anchor="middle">announce the selection</text>
+
+<path class="ln" d="M364 1124 V1168" marker-end="url(#a)"/>
+<path class="ln" d="M604 1124 V1168" marker-end="url(#a)"/>
+<rect class="box" x="254" y="1170" width="460" height="52" rx="8"/>
+<text class="t" x="484" y="1193" text-anchor="middle">/cure applies the fixes → /plate publishes</text>
+<text class="s" x="484" y="1211" text-anchor="middle">/age never edits production code</text>
+
+<g transform="translate(14,1232)">
+<rect class="box script" x="0" y="0" width="14" height="14" rx="3"/><text class="lg" x="20" y="11">script</text>
+<rect class="box agent" x="80" y="0" width="14" height="14" rx="3"/><text class="lg" x="100" y="11">sub-agents</text>
+<rect class="box gate" x="184" y="0" width="14" height="14" rx="3"/><text class="lg" x="204" y="11">decision / user gate</text>
+<rect class="box" x="330" y="0" width="14" height="14" rx="3"/><text class="lg" x="350" y="11">coordinator</text>
+</g>
+</svg>

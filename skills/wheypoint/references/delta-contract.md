@@ -1,0 +1,100 @@
+# Wheypoint phase delta contract
+
+This contract covers the durable revision written at the end of the Cook, Press, Age, or Cure phase.
+The record is keyed by the phase slug and work id.
+A terminal phase handoff writes its phase artifact and then commits one revision for that phase.
+Mold publication and Plate publication do not call this writer and do not create a wheypoint revision.
+No plugin hook is part of this contract. Issue #654 ask 4 (a `/compact` hook that emits the grounded manifest) is deferred follow-up work until a host-neutral compaction trigger exists; the compaction hook itself is host-specific and out of scope here.
+
+## Entry resolution
+
+Each phase uses its own archive for entry resolution: `python3 skills/<phase>/scripts/<phase>.pyz wheypoint-resolve --ref <slug>`.
+Pass `--corpus-root <dir>` to read this project's corpus from another location; the writer accepts the same flag.
+A corpus belonging to another project resolves but gates on `project-mismatch`, so the flag relocates a corpus rather than borrowing one.
+`--corpus-root` is not accepted with `--legacy`, which reads a note beside the repository rather than any corpus; the pair exits `2`.
+Plate also runs this command on entry, but only to resolve; it creates no revision.
+The six outcomes are `authoritative`, `not-found`, `legacy`, `gated`, `ambiguous`, and `error`.
+An `authoritative` record is the primary input.
+Its `working_context` is authoritative and supplies the first batched `tilth_read`.
+A `not-found` result proceeds cold.
+A `legacy` result shows its source and slug before the phase proceeds.
+A `gated`, `ambiguous`, or `error` result stops the phase and shows its payload.
+Advisory findings display with any outcome.
+
+A result with `source: phase-artifact` came from the first readable matching file in this order:
+`.cheese/cure/<slug>.md`, `.cheese/age/<slug>.md`, `.cheese/press/<slug>.md`, then `.cheese/cook/<slug>.md`.
+The handoff preamble parser supplies `phase_slug` from that file.
+The result has outcome `legacy` and is not dispatchable as an authoritative record.
+Show the source and parsed phase slug before using the artifact as context.
+
+## Grounded context
+
+A phase writer accepts one or more `--grounded path[#start-end]` arguments.
+Paths are repository-relative files with optional one-based inclusive line ranges.
+A first revision requires at least one grounded entry.
+The writer accepts at most 16 grounded entries.
+Supplying a grounded list replaces `working_context`; omitting it carries the existing context.
+A `#` inside a file name is legal; the range is anchored on the last `#`.
+`PR#<n>` and URL entries in `working_context` are pointers, not grounded paths; lint skips them.
+The writer anchors relative paths and `.cheese/` at the git toplevel (or `--root`), never at the current directory.
+
+## Writer exit codes
+
+Exit `2` is caller usage: a bad `--grounded` entry or a first revision without one; nothing is written.
+Exit `4` is a kernel failure before the artifact write; nothing is written.
+Exit `5` means the artifact was written but the revision failed; stderr carries `wheypoint: artifact-orphaned <path>` and the next resolve gates on `stale-artifact-link`.
+Every `wheypoint:`-tagged line on stderr is one plain-ASCII line, identical on every host.
+A refusal, exit `2` or exit `4`, is reported as one stderr JSON line, `{"error": <message>, "exit_code": <n>}`, instead.
+A successful write prints `wheypoint: revision work_id=<id> revision_id=<id> revision_number=<n>`.
+A phase writer over an existing record needs `--base <revision_id>`, the revision from the phase-entry `wheypoint-resolve`.
+A missing base is refused as `base-revision-required` and names the current revision; a superseded base is refused as `stale-parent`; both refuse before any file is written.
+The writer accepts an identical write that a caller retries with its original base after a lost response.
+The retry exits `0`, prints the original revision with `replayed=true`, and writes nothing.
+The retry must repeat the orientation, next move, grounded entries, session, and artifact bytes.
+The record must still pin those bytes, and the file must still hold them; otherwise the retry is `stale-parent`.
+A lost genesis response cannot replay, because a genesis write names no base.
+A first write for a work id needs no base.
+The writer never retries a conflict; a conflict at commit time exits `5` and orphans the artifact.
+An unexpected failure always prints a traceback to stderr; set `EASY_CHEESE_DEBUG` or `CHEESE_DEBUG` to add one to deliberate refusals as well.
+
+## Resolve findings
+
+`resolve` validates the record and its links; there is no separate lint command.
+
+`stale-artifact-link` is a gating finding.
+It means a digest-bearing phase-artifact link is missing or no longer matches its recorded digest.
+Stop instead of dispatching when this finding is present.
+
+`schema-version-future` is a gating finding.
+It means a record carries a schema stamp newer than this archive reads.
+Stop and report that the archive is older than the record.
+
+`stale-commit` is advisory.
+It means the recorded repository commit exists but is not an ancestor of the current `HEAD`.
+Display the code and detail with the resolved payload, but do not stop solely for this finding.
+
+`grounded-path-missing` is advisory.
+It means a path named in `working_context` is absolute, escapes the repository root, or is no longer a file; the detail names which.
+Display the code and detail with the resolved payload, but do not stop solely for this finding.
+
+Advisory findings never hide the outcome.
+A gating finding remains a stop even when advisory findings are also present.
+
+## Checkpoint warnings
+
+A checkpoint result carries a `warnings` list.
+`stale-notes` means a decision was added or transitioned and `notes` stayed as they were. The commit stamps `notes_revision_number` when it replaces `notes` and `decisions_revision_number` when it adds or transitions a decision, so a later projection shows the drift as a marker line at the top of `## Notes`. A `supersede` transition names its successor in `target_entry_id`; that entry may be one the same delta adds. The projection omits a superseded entry from its kind section and lists `- <id> -> <successor id>` under `## Superseded`, before `## Identifiers`.
+Rewrite `notes` and checkpoint again when the notes now contradict the decision.
+`unpinned-line-ref` means a context item or artifact link held a bare `path:line` that the checkpoint could not pin, because no checkout or no commit exists, or because the file is untracked, ignored, or absent. The reference stays as written. When `HEAD` holds the file, the checkpoint stores `path:line@<short HEAD sha>` instead and gives no warning. A `path#symbol` ref and an already pinned ref are stored unchanged. A digest for a `repo:` or `xdg:` link covers the whole file; its locator does not change the digest.
+The projection lists each local reference under `## Local references`, before `## Identifiers`, and only when one exists. A local reference is an `xdg:` ref, an absolute path or a `..` or symlink path that leaves the checkout, or a repository path that `git check-ignore` reports, such as `.cheese/`. When `git check-ignore` fails, every repository path counts as local. Outside a checkout only `xdg:` refs and absolute paths count. The reader sees which references need the author's machine.
+
+## Work-graph key in the resolve payload
+
+The resolve payload carries `bridge` beside the outcome.
+
+- `bridge` is `{state, node_ref, wheypoint_ref}`, or `null` when no record resolved.
+- `bridge.state` is `bound`, `bridge-inactive`, or `unbound`, and it never changes `dispatchable`.
+- `matched_by` is `exact`, `prefix`, or `substring`, or `null` when nothing matched. A unique prefix or substring match still dispatches; callers read `matched_by` to see the guess.
+
+A schema-3 link that holds only `path` reads as `repo:<path>` without changing stored bytes.
+The resolve payload does not carry a receipt for this read.

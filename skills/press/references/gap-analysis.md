@@ -1,54 +1,97 @@
-# Gap analysis
+# Press adversarial gap analysis
 
-## What counts as a gap
+## Ownership boundary
 
-| Gap type | Symptom | Example |
+Press does not write first coverage. Cook owns the implementation, its tests, and first acceptance coverage. When that coverage is missing, Press reports `coverage_gap`.
+
+Press attacks the approved contract after Cook. Press writes only tests, fixtures, or test-only harness support.
+
+Report a missing production implementation as a finding. Hand it to Cook as a correction.
+
+Cook dispatches Press automatically inside its Press loop. `/press <slug>` stays callable for a manual re-run that hands off to Age on GREEN.
+
+## The adversarial question
+
+Inspect the acceptance check before you add tests. Then ask:
+
+"Can the user's original complaint still occur while every test passes?"
+
+Select ONE relevant false-success attack. Do not run all four:
+
+- an unexpected coded error
+- a no-op implementation
+- an empty or unusable artifact
+- reported success without the required state change
+
+Record the question, the selected attack, and why it threatens the claim in `.cheese/press/<slug>.md`. Confirm the acceptance check rejects that case. When it accepts the case, the outcome is `coverage_gap`.
+
+## What Press may expose
+
+| Gap type | Evidence | Action |
 | --- | --- | --- |
-| Spec uncovered | A spec bullet has no executable test | "Returns 401 on missing token" with no test for that path |
-| Weak assertion | Test passes for the wrong reason | `expect(result).toBeTruthy()` instead of `expect(result).toEqual(expected)` |
-| Missing boundary | Edge case not exercised | empty input, null, max-length, off-by-one, concurrent access |
-| Integration seam | Cooked code crosses a boundary that is mocked or untested | filesystem write, subprocess, network call, time-dependent logic |
-| Error path | Happy path tested, failure path not | What happens when the dependency throws? |
+| Defect | The approved seam fails on an adversarial input or transition | Report it as a finding with the failing test. Hand off to Cook as a correction. |
+| Coverage gap | First acceptance coverage is missing, or it accepts the selected false success | Report `coverage_gap`. Hand off to Cook to add coverage. |
+| Invalid evidence (`blocked`) | The recorded run does not verify the attack outcome | Stop with `halt: <reason>`. |
+| Production mutation (`blocked`) | A production path changes during a Press interval | Stop with `halt: <reason>`. |
+| Out-of-contract behavior | The approved spec omits a desired behavior | Record it under `## Review follow-ups`. Report `ok-with-concerns` on a GREEN pass. Do not implement it. |
 
-## Mapping changed behaviour to tests
+## Evidence sequence
 
-For each function or module touched by the cooked diff:
+Complete these steps at each Press entry and after each Cook correction:
 
-1. Find existing tests through semantic caller search, following the [shared routing contract](../../cheese/references/code-intelligence-routing.md). With tilth:
-   ```
-   tilth_search(queries: [{query: "<changed-symbol>", kind: "callers"}], scope: "**/*.test.*")
-   ```
-2. Read the test bodies to verify they actually exercise the new behaviour, not just the symbol's existence.
-3. List any spec bullet without a corresponding test.
+1. Run the same adversarial attack. Do not change its test or fixture digest.
+2. Select `green`, `finding`, `coverage_gap`, `invalid_evidence`, or `production_changed`.
+3. For a finding, record the failing test and its digest.
+
+A Cook correction can change production code to make the attack GREEN.
+
+Do not rewrite or weaken the attack. Do not change its expected witness or the tests that it uses.
 
 ## Priority order
 
-**Hard floor — every changed behaviour gets a hardening test.** Before working through the priority list, lock each behaviour in the cooked diff with an executable test that would fail on regression. Even a 3-line off-by-one fix gets a `test_off_by_one_at_boundary`. If press cannot produce a stable hardening test for a changed behaviour, readiness is `blocked`.
+Press closes only adversarial gaps in the approved Cook contract:
 
-Then address remaining gaps in this order — stop when the time-budget runs out:
+1. Keep the production tree unchanged during the Press interval.
+2. Attack approved boundaries, invalid inputs, state transitions, integrations, and error paths.
+3. Verify assertion sensitivity. The attack must fail for an incorrect value, state, or error.
 
-1. **Spec compliance:** every promised behaviour has executable coverage.
-2. **Assertion strength:** tests fail for wrong values, wrong errors, or wrong state.
-3. **Boundary behaviour:** empty, missing, malformed, minimal, maximum.
-4. **Integration seams:** filesystem, subprocess, network, time, dependency failure when in scope.
-5. **Happy path regression:** the primary user path still passes.
+Cook owns first coverage. Press adds a test only for a branch or false success that no existing test catches:
 
-Mapping to readiness:
+1. Before you add a test, name the existing test closest to it. The closest test calls the same function and reaches the same branch.
+2. When that test asserts the same seam and branch, do not add the test.
+3. Record each new test, its closest existing test, and the branch that only the new test catches under `## Test shape`.
+4. Run `test-shape` before the handoff. Fix or justify each finding.
 
-- **`blocked`** — false premise on the cooked contract, hard floor unmet (a changed behaviour has no stable hardening test press can write), an unfixable level-1/2 gap inside cooked scope, or spinning wheels (three attempts at one gap without green).
-- **`follow-up recommended`** — hard floor met. Only level-4/5 gaps remain, plus out-of-scope findings and untouched-code coverage. Cooked contract is review-safe; follow-ups are documented for post-review attention.
-- **`ready for /age`** — hard floor met. Levels 1-3 closed on cooked scope.
+[`../../cheese/references/test-shape.md`](../../cheese/references/test-shape.md) defines the rules that `test-shape` checks.
 
-Spinning-wheels cap: count test-edit + run cycles per gap. On the third failed attempt without green, mark readiness `blocked` with reason `spinning: <gap-description>` and stop.
+Do not add tests for unchanged or out-of-contract code.
 
-## When to fix vs follow-up
+## Routing
+
+- GREEN hands off to `/age`.
+- A finding hands off to Cook as a correction (`next: cook`).
+- A `coverage_gap` hands off to Cook (`next: cook`). Cook adds first acceptance coverage, then Press reruns.
+- A second `coverage_gap` in one Cook run stops with `status: halt: coverage-gap` and `next: done`.
+- Press allows at most 2 Cook corrections for the same attack. A third finding on that attack stops with `status: halt: correction-cap` and `next: done`.
+- Cook counts the rounds and passes the round number and attack identity. Press halts only from that number. A manual run reads prior rounds from `.cheese/press/<slug>.md`.
+- A Cook run allows at most 6 Press rounds in total, on both the linear and fan paths. The sixth round that does not end green halts with `status: halt: press-round-limit`. In the linear path that halt reports `next: done`. In the fan path the orchestrator blocks the curd and routes to Mold.
+- Invalid evidence and production changes stop.
+- That stop is `blocked`. It reports `status: halt: <reason>` and `next: done`.
+
+Baseline failures do not become new Press findings when their tests and signatures match the Cook handoff.
+
+New or changed failures block the route.
+
+## When to fix or follow up
 
 | Situation | Action |
 | --- | --- |
-| Hardening test exposes a bug in cooked code | Fix it now (corrective fix only — no new behaviour). |
-| Hardening test exposes a bug outside cooked scope | Document it in the press report; do not fix. |
-| Coverage gap is in code that cook did not touch | Document it in the press report; do not add tests. |
+| An adversarial test exposes a defect in Cook behavior | Report the finding with its failing test. Hand off to Cook as a correction. |
+| First acceptance coverage is missing | Report `coverage_gap`. Do not write the coverage. |
+| The digest or production snapshot is invalid | Stop with `halt: <reason>`. Report the exact integrity failure. |
+| A third finding exposes the same attack | Stop with `status: halt: correction-cap` and `next: done`. |
+| The attack targets behavior outside the approved spec | Record it under `## Review follow-ups` for `/age`. Do not edit production code. |
 
-## Hard rule — never weaken assertions
+## Hard rule — preserve the attack
 
-If a hardening test reveals that an existing test passes for the wrong reason, **strengthen the existing test**. Do not delete it, do not loosen its assertion, do not skip it. If you must skip it temporarily, the press report says exactly which test and why, and recommends a follow-up issue.
+Never weaken the attack to obtain GREEN. Never change the attack between replays.

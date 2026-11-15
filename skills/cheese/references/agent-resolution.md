@@ -1,16 +1,23 @@
 # Agent resolution
 
-Resolve agent capabilities before dispatch. Agent names are hints; the runnable contract is the requested work, tools, permissions, isolation, minimum power, effort, and topology.
+Resolve agent capabilities before dispatch.
+Agent names are hints.
+The runnable contract defines the work, tools, permissions, isolation, minimum power, effort, and topology.
 
 ## Resolution order
 
 Apply these gates in order for every requested agent:
 
-1. **Capability floor.** Reject candidates missing a required tool, write capability, permission boundary, or isolation property. Missing required tools or required write capability halts the dispatch; do not pretend prompting supplies them.
+1. **Capability floor.** Reject candidates that lack a required tool, write capability, permission boundary, or isolation property.
+   Missing required tools or write capability stops dispatch.
+   Do not pretend that prompting supplies them.
 2. **Minimum power.** Power is `cheap | default | powerful`; effort is `low | medium | high`. Reject a candidate known to be below the requested power. A candidate whose power is unknown is eligible only as the final fallback and sets `degraded: true`.
 3. **Specificity.** Among eligible candidates choose an exact easy-cheese specialist, then a compatible specialist, then a general worker.
 
-A general worker may fill a read-only role when the host cannot restrict tools: make the no-write constraint explicit in the prompt, record `permission_enforcement: prompt-only`, and set `degraded: true`. Prompt-only enforcement never qualifies a worker for a role that requires write capability or stronger isolation than the host provides.
+When the host cannot restrict tools, an eligible specialist or general worker can fill a read-only role only when the caller states an explicit no-write constraint.
+This includes an artifact-capable Explorer under the same explicit no-write constraint.
+Record `permission_enforcement: prompt-only` and set `degraded: true`.
+Prompt-only enforcement cannot satisfy write work or stronger isolation.
 
 ## Required artifact block
 
@@ -43,7 +50,17 @@ agent_resolution:
   permission_enforcement: tool-restricted | prompt-only
 ```
 
-`request.required_tools` and `request.preferred_types` are nonempty. `attempts` is ordered and contains exactly one accepted entry; its type, model, and power match `resolved`. Power ranks `cheap < default < powerful`: known underpowered candidates are rejected, while unknown power may be accepted only as the final attempt and sets `degraded: true`. `fallback_reason` is null when the first preferred type is accepted and a nonempty reason for every lower-specificity selection. `permission_enforcement: prompt-only` requires both `degraded: true` and a read-only request. All artifacts for one dispatch share the same resolution facts; do not rewrite the story differently in a phase report and its handoff.
+`request.required_tools` and `request.preferred_types` are nonempty.
+`attempts` contains exactly one accepted entry.
+Its type, model, and power match `resolved`.
+Power ranks `cheap < default < powerful`.
+Reject known underpowered candidates.
+Accept unknown power only as the final attempt and set `degraded: true`.
+Set `fallback_reason` to null when the resolution accepts the first preferred type.
+Give every lower-specificity selection a nonempty reason.
+`permission_enforcement: prompt-only` requires a read-only request and `degraded: true`.
+All artifacts for one dispatch share the same resolution facts.
+Do not change those facts between a phase report and its handoff.
 
 ## Halt conditions
 
@@ -51,22 +68,59 @@ agent_resolution:
 - Halt when write work has no write-capable candidate.
 - Halt when required worktree or fresh-context isolation is unavailable.
 - Do not turn a known underpowered candidate into a fallback.
-- Use unknown power only after every known-power candidate is rejected, and record the degradation.
+- Use unknown power only after you reject every known-power candidate.
+- Record that degradation.
 
-## Roles x tiers (spawn-primitive effort per role)
+## Roles x tiers (spawn-primitive power and effort per role)
 
-Each role's spawn-primitive `effort` default, harness-agnostic (harness-specific model/tier bindings live in `routing-policy.md`'s Roles x tiers table):
+Each role's spawn-primitive `minimum_power` and `effort` defaults, harness-agnostic (harness-specific model/tier bindings live in `routing-policy.md`'s Roles x tiers table):
 
-| Role | Effort | Notes |
-|---|---|---|
-| explorer | low | judgment-shaped digests stay at a capable-but-cheap tier; schema-constrained scans may go cheaper |
-| researcher | medium | unchanged |
-| coder | medium | gains the ESCALATE contract; delegation IS the downgrade |
-| verifier | low | "verify exactly one claim"; schema-constrained; the cheap severity-filter leg |
-| reviewer | low \| medium \| high (dial) | pinned to a powerful model; count and effort follow the age router |
-| planner / integrator | xhigh (at mold) | never delegated; owns the approval loop |
+| Role | Minimum power | Effort | Notes |
+|---|---|---|---|
+| explorer | default | low | judgment-shaped digests stay at a capable-but-cheap tier; schema-constrained scans may go cheaper |
+| researcher | default | medium | unchanged |
+| coder | default | medium | gains the ESCALATE contract; delegation IS the downgrade |
+| verifier | cheap | low | "verify exactly one claim"; schema-constrained; the cheap severity-filter leg |
+| reviewer | powerful | low \| medium \| high (dial) | pinned to a powerful model; count and effort follow the age router |
+| reviewer (taste-test) | default | medium | seven-lens handoff checklist, one artifact, ≤2 correction rounds; measured fix-rate parity with severity-report at powerful (16% vs 12%, 2026-09 analytics) |
+| gate-runner | cheap | low | runs the recorded gate command in the curd worktree and returns failures plus counts (≤2 KB); never edits; compatible type: whey-drainer |
+| planner / integrator | powerful | high (at mold) | the integrator is parent-owned and never delegated; the planner is a delegated fresh-context worker |
+
+The `planner / integrator` row names two separate jobs at one power and effort setting.
+The **integrator** owns the approval loop and stays with the parent agent.
+Never delegate the integrator.
+The **planner** is a delegated worker.
+Mold dispatches a fresh-context planner on a `PlannerRequest` and validates the returned writer view.
+See [`../../mold/references/curdle.md`](../../mold/references/curdle.md) section Typed planner dispatch.
+Resolve the planner through the resolution order above.
+Record its `agent_resolution` block like any other delegated role.
 
 A local skill table's `Effort` column defaults to this table for the matching role; override only with a stated reason (e.g. a router-driven dial).
+
+## Phases x roles (per-phase model selection)
+
+Select model and effort **per phase** from the phase role.
+Do not inherit them from the dispatching orchestrator.
+Always substitute `{model}` and `{effort}`.
+An unsubstituted `{model}` makes the spawn use the parent model.
+
+| Phase | Role | Minimum power | Effort |
+|---|---|---|---|
+| mold | planner / integrator | powerful | high |
+| cook | coder | default | medium |
+| press | coder | default | medium |
+| age (first and final) | reviewer | powerful | per-assignment `effort`: low \| medium \| high, set by the age router |
+| cure | coder | default | medium |
+| wiring task | coder | default | low — single-file glue, capped at ~20 tool calls |
+| cook / cure taste-test | reviewer (taste-test) | default | medium |
+| mold fork-coherence taste test | reviewer (taste-test) | default | medium |
+| quality gates for a digest | gate-runner | cheap | low |
+
+Resolve each phase against this table.
+Apply the resolution order.
+Record the resolved `model`, `power`, and `effort` in that phase's `agent_resolution` block.
+Different models in consecutive phases are normal.
+An unknown `resolved.model` is a degraded dispatch and requires `degraded: true`.
 
 ## Local skill tables
 

@@ -1,0 +1,296 @@
+"""Pytest config for the packaged Wheypoint runtime.
+
+The builders below assemble a *consistent* promotion -- record, revision, and
+rendered projection whose digests agree -- because every storage and recovery
+assertion is about what happens when exactly one of those three is wrong.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import io
+import json
+import re
+from collections.abc import Callable
+from pathlib import Path
+from typing import TypedDict, cast
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+from attrs import define, evolve  # noqa: E402
+from easy_cheese_schemas import (  # noqa: E402
+    SCHEMA_VERSION,
+    ArtifactLink,
+    Durability,
+    EntryKind,
+    EntryState,
+    NextAction,
+    NextMove,
+    ProtectedEntry,
+    RepositoryProvenance,
+    WheypointRecord,
+    WheypointRevision,
+)
+
+from easy_cheese.shared.wheypoint import canonical, projection, records, storage  # noqa: E402
+
+PLACEHOLDER_DIGEST = "sha256:" + "0" * 64
+WORK_ID = "work-0001"
+
+
+@pytest.fixture(autouse=True)  # noqa: V103 -- autouse isolation fixture
+def no_real_machine_search(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep machine-scope discovery off the real `~`.
+
+    `list --scope machine` walks `$EASY_CHEESE_SEARCH_ROOTS` (default `~`) and
+    always reads `~/.cheese/notes`, so every test gets an empty search root and
+    an empty HOME. A test that needs its own HOME sets it again.
+    """
+    home = tmp_path_factory.mktemp("search-home")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("EASY_CHEESE_SEARCH_ROOTS", str(home))
+
+
+@define(frozen=True)
+class Promotion:
+    """One consistent (record, revision, projection markdown) triple."""
+
+    record: WheypointRecord
+    revision: WheypointRevision
+    markdown: str
+
+
+def _next_action() -> NextAction:
+    return NextAction(
+        move=NextMove.COOK,
+        orientation="Implement the canonical record runtime.",
+        artifact=".cheese/cook/wheypoint-record-store-projection.md",
+    )
+
+
+def _gate_entry() -> ProtectedEntry:
+    return ProtectedEntry(
+        entry_id="q-durability",
+        kind=EntryKind.QUESTION,
+        summary="Should durability default to repo-snapshot?",
+        state=EntryState.ACTIVE,
+        blocks_continuation=True,
+        rationale="Durability decides where the checkpoint survives.",
+    )
+
+
+class _RecordFields(TypedDict):
+    schema_version: int
+    work_id: str
+    slug: str
+    title: str
+    created: str
+    project_key: str
+    revision_id: str
+    revision_number: int
+    revision_digest: str
+    orientation: str
+    working_context: list[str]
+    next_action: NextAction
+    decisions: list[ProtectedEntry]
+    questions: list[ProtectedEntry]
+    artifact_links: list[ArtifactLink]
+
+
+def _record(**overrides: object) -> WheypointRecord:
+    gating = bool(overrides.pop("gating", False))
+    fields: dict[str, object] = {
+        "schema_version": SCHEMA_VERSION,
+        "work_id": WORK_ID,
+        "slug": "wheypoint-continuity-kernel",
+        "title": "Wheypoint continuity kernel",
+        "created": "2026-08-02T00:00:00Z",
+        "project_key": "paulnsorensen-easy-cheese",
+        "revision_id": "rev-0001",
+        "revision_number": 1,
+        "revision_digest": PLACEHOLDER_DIGEST,
+        "orientation": "Wave 2 owns storage and projection.",
+        "working_context": ["src/easy_cheese/shared/wheypoint/storage.py"],
+        "next_action": _next_action(),
+        "decisions": [],
+        "questions": [_gate_entry()] if gating else [],
+        "artifact_links": [],
+    }
+    fields.update(overrides)
+    return WheypointRecord(**cast(_RecordFields, cast(object, fields)))
+
+
+def _promotion(
+    number: int = 1,
+    revision_id: str = "rev-0001",
+    *,
+    parent: str | Promotion | None = None,
+    record: WheypointRecord | None = None,
+    gating: bool = False,
+    additions: list[ProtectedEntry] | None = None,
+) -> Promotion:
+    base = record or _record(
+        revision_id=revision_id, revision_number=number, gating=gating
+    )
+    _, markdown = projection.build_projection(
+        base, durability=Durability.CANONICAL_LOCAL
+    )
+    # A parent given as a Promotion is the real ancestor, so the receipt can pin
+    # its digest the way the commit transaction does; a bare id is the ancestor
+    # a test means to leave unresolvable or unpinned.
+    parent_promotion = parent if isinstance(parent, Promotion) else None
+    revision = WheypointRevision(
+        schema_version=SCHEMA_VERSION,
+        work_id=base.work_id,
+        parent_revision_id=(
+            parent_promotion.revision.revision_id
+            if parent_promotion is not None
+            else cast(str | None, parent)
+        ),
+        parent_revision_digest=(
+            None
+            if parent_promotion is None
+            else records.revision_digest(parent_promotion.revision)
+        ),
+        revision_id=base.revision_id,
+        revision_number=base.revision_number,
+        request_digest=canonical.digest_text(f"request-{number}"),
+        record_digest=records.record_digest(base),
+        applied_additions=list(additions or []),
+        applied_transitions=[],
+        projection_path=f"projections/{base.revision_number}-{base.revision_id}.md",
+        repository=RepositoryProvenance(branch="claude/wheypoint", commit="abc1234"),
+    )
+    # The record's pointer at its receipt is the last thing to settle: the
+    # record digest deliberately excludes it, so this evolve does not
+    # invalidate the digest the revision already quotes.
+    return Promotion(
+        record=evolve(base, revision_digest=records.revision_digest(revision)),
+        revision=revision,
+        markdown=markdown,
+    )
+
+
+@pytest.fixture
+def make_record() -> Callable[..., WheypointRecord]:
+    return _record
+
+
+@pytest.fixture
+def make_promotion() -> Callable[..., Promotion]:
+    return _promotion
+
+
+@pytest.fixture
+def corpus_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A real project_corpus_root(), routed through its own env contract."""
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "cheese"))
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "paulnsorensen-easy-cheese")
+    return tmp_path / "cheese" / "paulnsorensen-easy-cheese"
+
+
+_CODED_ERROR = re.compile(r"([a-z][a-z0-9-]*): (.*)", re.DOTALL)
+
+
+_NOTE_FLAGS = frozenset({"--note-dir", "--no-note"})
+
+
+def _read_base(argv: list[str], stdin: str) -> tuple[list[str], str]:
+    """`argv`/`stdin` for a checkpoint that names the revision it read.
+
+    A well-behaved writer resolves first and writes with the revision it saw.
+    This reads the record the way that writer would and supplies the base, so
+    a test that is not about the base rule still writes like one. A record that
+    does not exist yet gets no base: genesis needs none.
+    """
+    if not argv or argv[0] != "checkpoint" or "--base" in argv:
+        return argv, stdin
+    try:
+        payload = cast(object, json.loads(stdin)) if stdin.strip() else None
+    except ValueError:
+        payload = None
+    work_id = WORK_ID
+    fields = cast(dict[str, object], payload) if isinstance(payload, dict) else {}
+    named = fields.get("work_id")
+    if isinstance(named, str):
+        work_id = named
+    elif "--work-id" in argv:
+        work_id = argv[argv.index("--work-id") + 1]
+    elif len(argv) > 1 and not argv[1].startswith("-") and not Path(argv[1]).exists():
+        work_id = argv[1]
+    try:
+        record = storage.WorkStore.open(work_id).read_record()
+    except (storage.StorageError, ValueError, OSError):
+        return argv, stdin
+    if record is None:
+        return argv, stdin
+    if isinstance(payload, dict) and "base_revision_id" in payload:
+        return argv, stdin
+    flagged = any(
+        arg.startswith("--") and arg not in _NOTE_FLAGS for arg in argv[1:]
+    )
+    if isinstance(payload, dict) and not flagged and not Path(*argv[1:2] or [""]).is_file():
+        return argv, json.dumps({**payload, "base_revision_id": record.revision_id})
+    return [*argv, "--base", record.revision_id], stdin
+
+
+def run_cli(
+    argv: list[str], *, stdin: str = "", read_first: bool = True
+) -> tuple[int, dict[str, object]]:
+    """Run `wheypoint.main` and parse the stream fromargs writes for its status.
+
+    `read_first` makes a checkpoint name the revision it read (see `_read_base`);
+    pass False to exercise the base rule itself.
+
+    Exit 0 prints one JSON document on stdout. Any other status prints nothing
+    on stdout and one JSON line on stderr, `{"error": ..., "exit_code": n}`.
+    A refusal error reads `<code>: <message>`; this helper splits it into
+    `error.code` and `error.message` and keeps the raw text in `error.text`.
+    """
+    from easy_cheese.cli import wheypoint
+
+    if read_first:
+        argv, stdin = _read_base(argv, stdin)
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stderr(err):
+        status = wheypoint.main(argv, stdin=io.StringIO(stdin), stdout=out)
+    if status == 0:
+        assert err.getvalue() == "", err.getvalue()
+        return status, cast(dict[str, object], json.loads(out.getvalue()))
+    assert out.getvalue() == "", f"a failure wrote stdout: {out.getvalue()!r}"
+    lines = err.getvalue().splitlines()
+    assert len(lines) == 1, f"expected one stderr JSON line, got {lines!r}"
+    envelope = cast(dict[str, object], json.loads(lines[0]))
+    assert envelope["exit_code"] == status
+    text = cast(str, envelope["error"])
+    match = _CODED_ERROR.fullmatch(text)
+    code, message = (match.group(1), match.group(2)) if match else ("", text)
+    return status, {
+        **envelope,
+        "error": {"code": code, "message": message, "text": text},
+    }
+
+
+def payload_at(container: object, *path: str) -> object:
+    """Walk `path` through the nested JSON objects of a CLI payload."""
+    value = container
+    for key in path:
+        value = cast(dict[str, object], value)[key]
+    return value
+
+
+def git_marker_ancestor(path: Path) -> Path | None:
+    """Return the nearest ancestor of `path` that holds a `.git` entry.
+
+    Checks `path.parents` only, never `path` itself; returns `None` when no
+    such ancestor exists. Project-scope `list` sweeps notes under that
+    ancestor, so a test that runs below one is not hermetic.
+    """
+    for ancestor in path.parents:
+        if (ancestor / ".git").exists():
+            return ancestor
+    return None

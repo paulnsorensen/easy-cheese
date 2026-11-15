@@ -64,9 +64,11 @@ Spend your review budget on the things linters cannot see.
   skill, not a new section.
 - Workflow skills call source-code capabilities directly through `skills/cheese/references/code-intelligence-routing.md`. Keep the search → fresh bounded read → stale-safe write sequence and degrade cleanly when preferred backends are unavailable.
 - Skills do not invoke other skills programmatically. Documented handoffs
-  (e.g., `/age` → `/cure`, `/cook` → `/press` → `/age`) belong in the
+  (e.g., `/age` → `/cure`, `/cook` → `/age`) belong in the
   README's "Suggested flow" or as explicit user-visible prompts in the
-  skill body — never as silent auto-dispatch.
+  skill body — never as silent auto-dispatch. The one exception is Cook's
+  Press loop: Cook dispatches a fresh-context Press sub-agent inside its own
+  phase, so it is not a phase handoff. `/press <slug>` stays a manual re-run.
 - No intent classification, no automatic routing inside a skill body except
   in `/cheese`, where routing **is** the skill's purpose and dispatch is
   gated through the host routing guide in `skills/cheese/references/handoff-gate.md`.

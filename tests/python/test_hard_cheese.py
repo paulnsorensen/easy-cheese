@@ -153,9 +153,17 @@ def test_hard_flag_mentioned_in_pipeline_skill(skill: str) -> None:
     assert "--hard" in body, f"`--hard` missing from skills/{skill}/SKILL.md"
 
 
-def test_cure_invokes_hard_cheese() -> None:
+def test_cure_forwards_hard_to_plate() -> None:
     body = (SKILLS / "cure" / "SKILL.md").read_text(encoding="utf-8")
-    assert "/hard-cheese" in body, "cure must reference /hard-cheese — it is the gate-firing skill"
+    assert "`/cure --hard` passes `--hard` to `/plate`." in body
+
+
+def test_plate_invokes_hard_cheese_at_publication_boundary() -> None:
+    body = (SKILLS / "plate" / "SKILL.md").read_text(encoding="utf-8")
+    assert (
+        "Accept `--hard` to run `/hard-cheese` immediately before you first "
+        "share the work for review."
+    ) in body
 
 
 def test_cure_documents_auto_puncture() -> None:
@@ -185,24 +193,15 @@ def test_skill_uses_generic_pr_language(skill_body: str) -> None:
 
 
 def test_hard_cheese_skill_does_not_reference_gh() -> None:
-    """The new skill must stay tool-agnostic: no /gh references in SKILL.md
-    or composition.md. The spec's open question #5 explicitly locks generic
-    language — `/gh` is not shipped with easy-cheese.
-
-    Allowed: SKILL.md may mention `/gh` once inside the "Preferred tools" row
-    that explicitly notes it as `n/a` / out of scope, since that row exists
-    to *exclude* gh, not to require it. We pin that to a single occurrence;
-    anything more is a regression.
+    """The skill must stay tool-agnostic: no /gh references in SKILL.md or
+    composition.md. The spec's open question #5 explicitly locks generic
+    language, and no `/gh` skill exists to call.
     """
     skill = (HARD / "SKILL.md").read_text(encoding="utf-8")
     comp = (HARD / "references" / "composition.md").read_text(encoding="utf-8")
-    # composition.md must be entirely free of /gh references
     assert "/gh" not in comp, "composition.md must stay tool-agnostic"
-    # SKILL.md is allowed one mention in the explicit out-of-scope row
-    assert skill.count("/gh") <= 1, (
-        "skills/hard-cheese/SKILL.md should mention /gh at most once "
-        "(in the out-of-scope row of Preferred tools)"
-    )
+    assert "/gh" not in skill, "skills/hard-cheese/SKILL.md must stay tool-agnostic"
+    assert "Do not call a GitHub tool or a pull request tool." in skill
 
 
 # ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 
 Mocks subprocess.run for mergiraf invocations and run_git for staging.
 Covers: unsupported file, missing stages, mergiraf success, conflicts remain,
-mergiraf failure, dry-run vs apply, formatters.
+mergiraf failure, dry-run vs apply.
 """
 
 from __future__ import annotations
@@ -10,12 +10,53 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 from types import ModuleType
+from typing import Protocol, TypedDict, cast
 from unittest.mock import patch
+
+
+class _ResolveResult(TypedDict):
+    path: str
+    supported: bool
+    resolved: bool
+    message: str
+
+
+class _DebugResult(TypedDict):
+    path: str
+    supported: bool
+    tempdir: str | None
+    merged_path: str | None
+    log_path: str | None
+    conflict_markers: int | None
+    exit_code: int | None
+    message: str
+
+
+class _BatchResolveModule(Protocol):
+    subprocess: ModuleType
+    tempfile: ModuleType
+
+    def resolve_file(
+        self, path: str, dry_run: bool = ..., verbose: bool = ...
+    ) -> _ResolveResult: ...
+
+    def debug_file(self, path: str, keep_dir: str | None = ...) -> _DebugResult: ...
+
+    def extract_stages(self, path: str) -> tuple[str | None, str | None, str | None]: ...
+
+    def run_git(
+        self,
+        args: list[str],
+        capture_output: bool = ...,
+        *,
+        cwd: str | Path | None = None,
+        timeout: float | None = None,
+    ) -> subprocess.CompletedProcess[str]: ...
 
 
 def make_completed(
     stdout: str = "", returncode: int = 0, stderr: str = ""
-) -> subprocess.CompletedProcess:
+) -> subprocess.CompletedProcess[str]:
     return subprocess.CompletedProcess(
         args=["x"], returncode=returncode, stdout=stdout, stderr=stderr
     )
@@ -27,22 +68,31 @@ def _merged_path(cmd: list[str]) -> str:
 
 
 class TestResolveFile:
-    def test_unsupported_extension(self, batch_resolve: ModuleType) -> None:
+    def test_unsupported_extension(self, batch_resolve: _BatchResolveModule) -> None:
         result = batch_resolve.resolve_file("Cargo.lock")
         assert result["resolved"] is False
         assert result["supported"] is False
         assert "unsupported" in result["message"]
 
-    def test_missing_stages(self, batch_resolve: ModuleType) -> None:
+    def test_generated_pyz_recommends_source_rebuild(
+        self, batch_resolve: _BatchResolveModule
+    ) -> None:
+        result = batch_resolve.resolve_file("bundle.pyz")
+        assert result["resolved"] is False
+        assert result["supported"] is False
+        assert "source conflicts" in result["message"]
+        assert "rebuild" in result["message"]
+
+    def test_missing_stages(self, batch_resolve: _BatchResolveModule) -> None:
         with patch.object(batch_resolve, "extract_stages", return_value=(None, None, None)):
             result = batch_resolve.resolve_file("foo.py")
         assert result["resolved"] is False
         assert "stages" in result["message"]
 
-    def test_clean_merge_dry_run(self, batch_resolve: ModuleType) -> None:
+    def test_clean_merge_dry_run(self, batch_resolve: _BatchResolveModule) -> None:
         # Mergiraf writes a clean merged file; dry_run means we don't touch the working tree.
-        def fake_run(cmd, **kwargs):  # noqa: ANN001 — match subprocess.run signature
-            Path(_merged_path(cmd)).write_text("clean-merged-output\n")
+        def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            _ = Path(_merged_path(cmd)).write_text("clean-merged-output\n")
             return make_completed()
 
         with (
@@ -55,12 +105,14 @@ class TestResolveFile:
         assert result["message"] == "would resolve cleanly"
         git_mock.assert_not_called()
 
-    def test_clean_merge_apply_stages_file(self, batch_resolve: ModuleType, tmp_path: Path) -> None:
+    def test_clean_merge_apply_stages_file(
+        self, batch_resolve: _BatchResolveModule, tmp_path: Path
+    ) -> None:
         target = tmp_path / "foo.py"
-        target.write_text("# original\n")
+        _ = target.write_text("# original\n")
 
-        def fake_run(cmd, **kwargs):  # noqa: ANN001
-            Path(_merged_path(cmd)).write_text("merged-content\n")
+        def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            _ = Path(_merged_path(cmd)).write_text("merged-content\n")
             return make_completed()
 
         with (
@@ -74,12 +126,12 @@ class TestResolveFile:
         assert "resolved and staged" in result["message"]
         assert target.read_text() == "merged-content\n"
 
-    def test_apply_staging_failure(self, batch_resolve: ModuleType, tmp_path: Path) -> None:
+    def test_apply_staging_failure(self, batch_resolve: _BatchResolveModule, tmp_path: Path) -> None:
         target = tmp_path / "foo.py"
-        target.write_text("orig")
+        _ = target.write_text("orig")
 
-        def fake_run(cmd, **kwargs):  # noqa: ANN001
-            Path(_merged_path(cmd)).write_text("merged\n")
+        def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            _ = Path(_merged_path(cmd)).write_text("merged\n")
             return make_completed()
 
         with (
@@ -93,9 +145,9 @@ class TestResolveFile:
         assert result["resolved"] is False
         assert "staging failed" in result["message"]
 
-    def test_conflicts_remain_after_mergiraf(self, batch_resolve: ModuleType) -> None:
-        def fake_run(cmd, **kwargs):  # noqa: ANN001
-            Path(_merged_path(cmd)).write_text("<<<<<<< x\nA\n=======\nB\n>>>>>>> y\n")
+    def test_conflicts_remain_after_mergiraf(self, batch_resolve: _BatchResolveModule) -> None:
+        def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            _ = Path(_merged_path(cmd)).write_text("<<<<<<< x\nA\n=======\nB\n>>>>>>> y\n")
             return make_completed()
 
         with (
@@ -106,7 +158,7 @@ class TestResolveFile:
         assert result["resolved"] is False
         assert "conflicts remain" in result["message"]
 
-    def test_mergiraf_command_failure(self, batch_resolve: ModuleType) -> None:
+    def test_mergiraf_command_failure(self, batch_resolve: _BatchResolveModule) -> None:
         with (
             patch.object(batch_resolve, "extract_stages", return_value=("B", "O", "T")),
             patch.object(
@@ -120,12 +172,12 @@ class TestResolveFile:
         assert "mergiraf failed" in result["message"]
         assert "boom" in result["message"]
 
-    def test_partial_resolve_with_nonzero_exit(self, batch_resolve: ModuleType) -> None:
+    def test_partial_resolve_with_nonzero_exit(self, batch_resolve: _BatchResolveModule) -> None:
         # Real mergiraf behavior: exits non-zero when conflicts remain, but still
         # writes a merged file. Script should classify as 'conflicts remain', not
         # 'mergiraf failed'.
-        def fake_run(cmd, **kwargs):  # noqa: ANN001
-            Path(_merged_path(cmd)).write_text("a\n<<<<<<< ours\nx\n=======\ny\n>>>>>>> theirs\n")
+        def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            _ = Path(_merged_path(cmd)).write_text("a\n<<<<<<< ours\nx\n=======\ny\n>>>>>>> theirs\n")
             return make_completed(returncode=1)
 
         with (
@@ -139,26 +191,35 @@ class TestResolveFile:
 
 
 class TestDebugFile:
-    def test_unsupported_extension_returns_message(self, batch_resolve: ModuleType) -> None:
+    def test_unsupported_extension_returns_message(self, batch_resolve: _BatchResolveModule) -> None:
         result = batch_resolve.debug_file("Cargo.lock")
         assert result["supported"] is False
         assert result["tempdir"] is None
         assert "unsupported" in result["message"]
 
-    def test_missing_stages_returns_message(self, batch_resolve: ModuleType) -> None:
+    def test_generated_pyz_returns_rebuild_guidance(
+        self, batch_resolve: _BatchResolveModule
+    ) -> None:
+        result = batch_resolve.debug_file("bundle.pyz")
+        assert result["supported"] is False
+        assert result["tempdir"] is None
+        assert "source conflicts" in result["message"]
+        assert "rebuild" in result["message"]
+
+    def test_missing_stages_returns_message(self, batch_resolve: _BatchResolveModule) -> None:
         with patch.object(batch_resolve, "extract_stages", return_value=(None, None, None)):
             result = batch_resolve.debug_file("foo.py")
         assert result["tempdir"] is None
         assert "stages" in result["message"]
 
     def test_clean_merge_captures_artifacts_and_passes_debug_env(
-        self, batch_resolve: ModuleType, tmp_path: Path
+        self, batch_resolve: _BatchResolveModule, tmp_path: Path
     ) -> None:
-        seen = {}
+        seen: dict[str, dict[str, str]] = {}
 
-        def fake_run(cmd, **kwargs):  # noqa: ANN001
-            seen["env"] = kwargs.get("env") or {}
-            Path(_merged_path(cmd)).write_text("clean\n")
+        def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            seen["env"] = cast(dict[str, str], kwargs.get("env") or {})
+            _ = Path(_merged_path(cmd)).write_text("clean\n")
             return make_completed(stderr="debug log line\n")
 
         with (
@@ -175,18 +236,18 @@ class TestDebugFile:
         assert result["supported"] is True
         assert result["conflict_markers"] == 0
         assert result["message"] == "clean merge"
-        assert Path(result["log_path"]).read_text() == "debug log line\n"
-        assert Path(result["merged_path"]).read_text() == "clean\n"
+        assert Path(cast(str, result["log_path"])).read_text() == "debug log line\n"
+        assert Path(cast(str, result["merged_path"])).read_text() == "clean\n"
         # Tempdir is NOT cleaned up — caller can inspect.
-        assert Path(result["tempdir"]).exists()
+        assert Path(cast(str, result["tempdir"])).exists()
 
     def test_conflicts_remain_reports_marker_count(
-        self, batch_resolve: ModuleType, tmp_path: Path
+        self, batch_resolve: _BatchResolveModule, tmp_path: Path
     ) -> None:
         body = "<<<<<<< a\nx\n=======\ny\n>>>>>>> b\n<<<<<<< c\np\n=======\nq\n>>>>>>> d\n"
 
-        def fake_run(cmd, **kwargs):  # noqa: ANN001
-            Path(_merged_path(cmd)).write_text(body)
+        def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            _ = Path(_merged_path(cmd)).write_text(body)
             return make_completed(returncode=1, stderr="")
 
         with (
@@ -203,7 +264,7 @@ class TestDebugFile:
         assert "2 conflict marker(s) remain" in result["message"]
 
     def test_mergiraf_missing_output_file(
-        self, batch_resolve: ModuleType, tmp_path: Path
+        self, batch_resolve: _BatchResolveModule, tmp_path: Path
     ) -> None:
         # mergiraf fails hard and writes no output.
         with (
@@ -222,101 +283,30 @@ class TestDebugFile:
         assert "no merged file" in result["message"]
         assert result["exit_code"] == 2
 
-    def test_format_debug_includes_inspect_block(self, batch_resolve: ModuleType) -> None:
-        d = {
-            "path": "foo.py",
-            "supported": True,
-            "tempdir": "/tmp/dbg",
-            "merged_path": "/tmp/dbg/merged",
-            "log_path": "/tmp/dbg/mergiraf.log",
-            "conflict_markers": 0,
-            "exit_code": 0,
-            "message": "clean merge",
-        }
-        out = batch_resolve.format_debug(d)
-        assert "tempdir: /tmp/dbg" in out
-        assert "merged:" in out
-        assert "log:" in out
-        assert "inspect:" in out
-        assert "cat /tmp/dbg/merged" in out
+class TestBinaryFiles:
+    """A binary file with a mergiraf extension must never reach the text merge path."""
 
-    def test_format_debug_short_circuits_for_unsupported(
-        self, batch_resolve: ModuleType
+    def test_resolve_file_refuses_binary_content_before_stage_extraction(
+        self, batch_resolve: _BatchResolveModule, tmp_path: Path
     ) -> None:
-        out = batch_resolve.format_debug(
-            {"path": "x.lock", "supported": False, "message": "unsupported file type"}
-        )
-        assert "result: unsupported file type" in out
-        assert "inspect:" not in out
+        path = tmp_path / "blob.py"
+        _ = path.write_bytes(b"\x89PNG\x00\xff\xfe")
+        with patch.object(batch_resolve, "extract_stages") as stages:
+            result = batch_resolve.resolve_file(str(path), dry_run=False)
+        stages.assert_not_called()
+        assert result["resolved"] is False
+        assert result["supported"] is False
+        assert "binary file" in result["message"]
+        assert path.read_bytes() == b"\x89PNG\x00\xff\xfe"
 
-    def test_format_debug_short_circuits_when_tempdir_none(
-        self, batch_resolve: ModuleType
+    def test_debug_file_refuses_binary_content(
+        self, batch_resolve: _BatchResolveModule, tmp_path: Path
     ) -> None:
-        d = {
-            "path": "foo.py",
-            "supported": True,
-            "tempdir": None,
-            "merged_path": None,
-            "log_path": None,
-            "conflict_markers": None,
-            "exit_code": None,
-            "message": "could not extract all three stages",
-        }
-        out = batch_resolve.format_debug(d)
-        assert "result: could not extract all three stages" in out
-        assert "inspect:" not in out
-        assert "cat None" not in out
-
-    def test_format_debug_shows_log_but_not_diff_when_merged_path_none(
-        self, batch_resolve: ModuleType
-    ) -> None:
-        d = {
-            "path": "foo.py",
-            "supported": True,
-            "tempdir": "/tmp/dbg",
-            "merged_path": None,
-            "log_path": "/tmp/dbg/mergiraf.log",
-            "conflict_markers": None,
-            "exit_code": 2,
-            "message": "mergiraf produced no merged file (exit 2)",
-        }
-        out = batch_resolve.format_debug(d)
-        assert "inspect:" in out
-        assert "cat /tmp/dbg/mergiraf.log" in out
-        assert "cat None" not in out
-        assert "diff" not in out
-
-
-class TestFormatters:
-    def test_terse_includes_status_and_summary(self, batch_resolve: ModuleType) -> None:
-        results = [
-            {
-                "path": "a.py",
-                "resolved": True,
-                "supported": True,
-                "message": "would resolve cleanly",
-            },
-            {"path": "b.py", "resolved": False, "supported": True, "message": "conflicts remain"},
-        ]
-        out = batch_resolve.format_terse(results, dry_run=True)
-        assert "ok a.py" in out
-        assert "-- b.py" in out
-        assert "1/2 resolved (dry-run)" in out
-        assert "##" not in out  # No markdown headings.
-
-    def test_terse_empty_results(self, batch_resolve: ModuleType) -> None:
-        assert batch_resolve.format_terse([], dry_run=False) == "no conflicts"
-
-    def test_verbose_emits_markdown_sections(self, batch_resolve: ModuleType) -> None:
-        results = [
-            {"path": "a.py", "resolved": True, "supported": True, "message": "ok"},
-            {"path": "b.py", "resolved": False, "supported": True, "message": "fail"},
-        ]
-        out = batch_resolve.format_verbose(results, dry_run=True)
-        assert "## Resolved" in out
-        assert "## Needs Manual Resolution" in out
-        assert "Run with --apply" in out
-        assert "✓" not in out
-        assert "✗" not in out
-        assert "  ok a.py" in out
-        assert "  -- b.py" in out
+        path = tmp_path / "blob.py"
+        _ = path.write_bytes(b"\x00\x01\x02")
+        with patch.object(batch_resolve, "extract_stages") as stages:
+            result = batch_resolve.debug_file(str(path))
+        stages.assert_not_called()
+        assert result["supported"] is False
+        assert result["tempdir"] is None
+        assert "binary file" in result["message"]

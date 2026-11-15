@@ -1,0 +1,21 @@
+Repository: easy-cheese. Trunk: main. Branch: fix/melt-empty-conflict-list. No PR exists for this branch.
+Quality gate: `just check` passed at HEAD (exit 0).
+PR template: .github/PULL_REQUEST_TEMPLATE.md with sections What changed / Why / How to verify / Non-obvious changes / Risk / rollout notes / Checklist.
+
+$ git log --oneline main..HEAD
+3b7e010 fix(melt): treat an empty unmerged-path list as resolved
+
+$ git diff --stat main...HEAD
+ src/easy_cheese/skills/melt/status.py   |  4 +++-
+ tests/python/test_melt_status.py        | 14 ++++++++++++++
+ 2 files changed, 17 insertions(+), 1 deletion(-)
+
+$ git diff main...HEAD -- src/easy_cheese/skills/melt/status.py
+-    if paths is None or len(paths) == 0:
+-        raise ConflictStateError("no unmerged paths")
++    if paths is None:
++        raise ConflictStateError("git status failed")
++    if not paths:
++        return Status.RESOLVED
+
+The new test fails on main and passes at HEAD.

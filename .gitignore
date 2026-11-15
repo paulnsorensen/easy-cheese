@@ -1,6 +1,15 @@
+# Local dotenv. `set dotenv-load := true` in the justfile makes this file an
+# environment source for every recipe, so it must never be committed.
+.env
+.env.*
+!.env.example
+
 # Easy-cheese runtime scratch (research notes, age sidecars, mold state, etc.)
 .cheese/
 
+# Skill archives are build output of src/ (`just wedge-build`). Only the
+# `publish dist` workflow commits them, and only to the dist branch.
+skills/*/scripts/*.pyz
 # Conductor workspace scratch
 .context/
 
@@ -22,12 +31,26 @@
 
 # milknado optional-plugin runtime data (SQLite task graph)
 .milknado/
+# milknado worker brief and node worktrees created inside the project root
+RALPH.md
+milknado-*/
+
+# milknado ultracode workflow, copied in per-session by its SessionStart hook
+.claude/workflows/
 
 # Python
 __pycache__/
 *.pyc
 .venv/
+.venv-typing/
 node_modules/
+tests/fixtures/mold_cook_browser/test-results/
+
+# Browser test artifacts
+/test-results/
+/playwright-report/
+frontend/mold-review/test-results/
+frontend/mold-review/playwright-report/
 
 # OS / editor
 .DS_Store
@@ -41,10 +64,15 @@ tools/skill-overlap/target/
 # Starlight build output and generated docs
 dist/
 .astro/
-src/sidebar.mjs
-src/content/docs/**
-!src/content/docs/
-!src/content/docs/index.md
+website/sidebar.mjs
+website/content/docs/**
+!website/content/docs/
 
 # `just release-preview` staging output (hidden so validate_skills.py skips it)
 .release-preview/
+
+# `scripts/build_schema_site.py --out` output (schemas.easy-cheese.dev tree)
+/dist-schemas/
+
+# `just vendor` output — extracted wheel trees rebuilt from requirements-vendor.txt
+/vendor/

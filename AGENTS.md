@@ -2,11 +2,16 @@
 
 This document is for LLMs, agents, and automation tools working in this repository.
 
+## Tenets
+
+The easy-cheese tenets and the owner's rulings live in one page: [the easy-cheese manifesto](.hallouminate/wiki/easy-cheese-manifesto.md).
+Read it before you change a workflow, the role of a skill, or a contract between skills.
+
 ## Single Quality Gate: `just check`
 
 **Always run `just check` before declaring work done — before any commit, push, PR open, or hand-off.** Treat green from `just check` as the only signal that a change is shippable.
 
-`just check` autofixes lint (markdown, yaml, python via `ruff`) and runs the full local build: skill frontmatter validation (`validate_skills.py`), shell lint, python + bash test suites, and `mkdocs build --strict`. CI runs `just ci` (same checks, no autofixes).
+`just check` autofixes lint (markdown, yaml, python via `ruff`) and runs the full local build: skill frontmatter validation (`validate_skills.py`), the Wedge archive build, python + bash test suites, and `mkdocs build --strict`. CI runs `just ci` (same checks, no autofixes).
 
 ```bash
 just check
@@ -18,11 +23,55 @@ Do NOT commit or push when `just check` fails. If CI fails, pull the branch loca
 
 - [`just`](https://github.com/casey/just) — recipe runner
 - [`uv`](https://github.com/astral-sh/uv) — `lint-py-fix` invokes `uvx ruff` (no global ruff install needed)
-- `yamllint`, `yamlfmt`, `markdownlint-cli2`, `shellcheck`, `bats` — see README for install hints
+- `yamllint`, `yamlfmt`, `markdownlint-cli2`, `bats` — see README for install hints
 
 ## Skills in this repo
 
 This is a skills-only collection following the [Agent Skills spec](https://agentskills.io/specification). Every change either adds, edits, or supports a skill under `skills/<name>/`.
+
+## Skill Python bundle doctrine
+
+This is the target contract. Existing violations are migration work; do not expand
+them while enforcement is implemented separately.
+
+- A skill that executes Python ships exactly one executable archive at
+  `skills/<skill>/scripts/<skill>.pyz`, built by Wedge from
+  `skills/<skill>/wedge.toml` over the shared `skills/wedge.toml`; a skill
+  with no Python ships no archive. Skill prose invokes only its own archive.
+- Runtime Python lives under `src/`. Tests remain under `tests/`; repository
+  build, release, generation, and maintenance programs may live under
+  `scripts/`.
+- Published schemas live in `src/easy_cheese_schemas/`. All non-published
+  runtime code lives under `src/easy_cheese/`, split between
+  `skills/<python_skill_name>/`, `shared/`, and `cli/`. Skill slugs remain
+  kebab-case; Python package segments use underscores.
+- `cli/` holds command surfaces only; it may import `shared/` and schemas.
+  `shared/` code must not import `cli/`.
+- Archives may contain Python modules, bytecode, and immutable package
+  resources. Dependencies must be pure Python and zip-importable. Native
+  extensions, platform-specific libraries, required external executables,
+  runtime package installation, and caller-managed extraction are prohibited.
+- Each archive contains its own skill package and immutable resources, the
+  shared and CLI support it uses, published schemas, and the pure-Python
+  dependency closure pinned by `uv.lock`. It dispatches only its own skill's
+  `COMMANDS`. Runtime use performs no archive download, loader lookup, or
+  sidecar-lock verification. Shiv's transparent cache extraction remains
+  part of the archive runtime; caller-managed extraction is prohibited.
+- Wedge is a build-time dependency only. `main` tracks no archive:
+  `just wedge-build` writes them as ignored build output, and `just test`
+  builds them before any suite executes one. Hand-written Python never lives
+  under `skills/`; archive metadata remains in `wedge.toml`.
+- `dist` is the default branch and the published tree. Each `publish dist`
+  run (push to `main`, hourly schedule, or manual dispatch) builds the archives
+  from the `main` tip and appends one commit that holds the full `main` tree
+  plus those archives. `scripts/publish_dist.py` only fast-forwards `dist`. A
+  source older than the last published one is a no-op (`superseded`). A source
+  that diverges from it is refused. A `dist` tip without a `Source-Commit`
+  trailer is published over with a warning. Branch from `main` and target
+  `main`; never push to or branch from `dist`.
+
+The durable rationale and migration boundary live in
+[the skill Python bundle doctrine](.hallouminate/wiki/architecture/skill-python-bundle-doctrine.md).
 
 ### Workflow skills (the cheese pipeline)
 
@@ -30,12 +79,12 @@ This is a skills-only collection following the [Agent Skills spec](https://agent
 |---|---|
 | `/cheese` | Unified entry — classifies input and routes to the right downstream skill |
 | `/briesearch` | External research router (Context7, Tavily, gh, local code) |
-| `/mold` | Iterative dialogue to converge a fuzzy idea into an approved spec |
-| `/culture` | Deep no-write exploration of a codebase or topic |
+| `/mold` | Iterative dialogue that saves validated parent specs and early curd mini-specs; Cook starts only on a user request |
+| `/culture` | No-code thinking partner that records the session's ideas, decisions, and info to the durable knowledge lane |
 | `/pasteurize` | Hard-bug diagnosis — feedback-loop-first investigation, regression test, minimal fix, then handoff to `/cook` |
 | `/cook` | Single implementation orchestrator: TDD-disciplined single-coder execution or fresh-context fan-out of an approved curd block |
 | `/press` | Adversarial test hardening after `/cook` |
-| `/age` | Ten-dimension code review producing a severity-grouped findings report |
+| `/age` | Twelve-dimension code review producing a severity-grouped findings report |
 | `/affinage` | Triages a PR's review comments and CI failures through the `/age` lens, routes fixes to `/cure`, posts replies |
 | `/cure` | Applies selected `/age` findings as focused fixes |
 | `/plate` | Final durable-artifact gate, safe commit transaction, and ordinary-or-stacked PR publication |
@@ -75,4 +124,5 @@ for the durable-vs-transient boundary and the authoring loop.
 - Source-code work follows `skills/cheese/references/code-intelligence-routing.md`: route by question or edit shape, preserve search → fresh bounded read → stale-safe write sequencing, prefer semantic and anchored backends, and report precision loss when only weaker fallbacks exist. Optional integrations — hallouminate (repo-wiki grounding for `/mold` and `/age`) and milknado (mikado task-graph backend for `/cook`'s fan pathway) — are wired in as optional plugins per `skills/cheese/references/optional-plugins.md`: they degrade gracefully when absent and never block a skill run.
 - SKILL.md files must pass `validate_skills.py` (YAML frontmatter validation).
 - Conventional Commits format for all commits and PR titles (enforced by `validate.yml` for PRs).
+- Merge through the Mergify queue (`@mergifyio queue`); see `.mergify.yml`.
 - Cheese / Dune / Mad Max / LOTR / Princess Bride flavor is welcome in user-facing docs and `SKILL.md` files. Keep commit messages and YAML frontmatter neutral.

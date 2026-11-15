@@ -1,130 +1,176 @@
 ---
 name: press
-description: Harden the test surface after `/cook` — map changed behavior to tests, find weak assertions and missing boundaries, and add focused hardening tests. Use when the user wants the tests strengthened before review or shipping — phrases like "press the changes", "harden this", "check coverage", "strengthen the tests", "are the tests good enough", "press before /age", "/press". Use even when the user wants to "tighten things up" before review. Do NOT use to add broad new behavior — only corrective fixes that hardening tests force.
+description: Run the tests-only adversarial pass that `/cook` dispatches after a behavior change; also callable as a manual re-run. Use this skill when the user says "press the changes", "harden this", "re-run press", or "/press". Do not edit production code.
 license: MIT
 ---
 
 # /press
 
-Press may add or strengthen tests and make tiny corrective fixes only when a test exposes a clear defect in the cooked scope.
+Press is the adversarial pass that Cook dispatches inside its Press loop. `/press <slug>` stays callable for a manual re-run. It reports a GREEN pass to `/age` and a finding or `coverage_gap` to Cook.
 
-## --hard propagation
+Press never edits production code. Cook owns the implementation and first acceptance coverage. Press attacks the approved contract and reports each defect it exposes.
 
-`/press --hard` (propagated from `/cook --hard`) is pass-through only. Press runs no gate. Hand `--hard` forward to `/age` at the handoff so it eventually reaches `/cure`, which is the only pipeline skill that fires the metacognitive vibecheck. See `skills/hard-cheese/SKILL.md`.
+## Phase entry
+
+Run `python3 skills/press/scripts/press.pyz wheypoint-resolve --ref <slug>`.
+`authoritative` uses the record; its `working_context` is the first batched `tilth_read`.
+`not-found` proceeds cold; `legacy` shows its source and slug, then proceeds.
+`gated`, `ambiguous`, and `error` stop and show the payload.
+Show advisory `stale-commit` and `grounded-path-missing` findings.
+Keep its `record.revision_id` as `<base>` ([§ Base revision](../cheese/references/handback-contract.md#base-revision)).
+
+## Inputs
+
+Cook dispatches Press automatically after its taste test on behavior work, so no invocation is needed.
+For a manual re-run, Press accepts this invocation and hands off to Age on GREEN:
+
+```text
+/press <slug> [--auto] [--hard] [--open-pr]
+```
+
+After phase entry, Press reads `.cheese/cook/<slug>.md` for the Cook handoff.
+
+`--auto` selects the autonomous chain. See `## Auto mode`.
+
+`--hard` requests the optional final gate. Press forwards this flag to Age.
+
+`--open-pr` is publication permission. Only the user supplies it. Press forwards this flag to Age. Press never adds it.
+
+Press preserves the Cook `durable_flags:` value without change. Press ignores the Cook `taste_test:` value.
+
+## Adversarial loop
+
+Ask one question: "Can the user's original complaint still occur while every test passes?"
+Select ONE relevant false-success attack, not all four. Record the question, the attack, and why it threatens the claim. Confirm the acceptance check rejects that case.
+[`references/gap-analysis.md`](references/gap-analysis.md) lists the attacks and the evidence sequence.
+
+Press does not write first coverage. When it is missing, Press reports `coverage_gap`.
+Press adds a test only for a branch or false success that no existing test catches. [`../cheese/references/test-shape.md`](../cheese/references/test-shape.md) defines placement, overlap, tables, generated inputs, and seams.
+Replay the same attack after each Cook correction, with the same attack and test digest.
+Invalid evidence and a production tree change stop the run. The outcome table defines the caps.
+
+Press has no global `dispatch: /cook` action.
 
 ## Baseline-aware gates
 
-When the cooked diff's handoff slug carries a recorded `baseline:` block, press re-runs the project's gates but does not re-flag or re-halt on failures identical to that baseline (same test, same signature) — only new or changed failures affect readiness. See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md) for the classification and policy.
+Press preserves baseline-aware readiness for project gates. The Cook `baseline:` line names one artifact. That artifact holds the settled state.
+
+Read the artifact through the `baseline:` path. Do not re-flag a failure when its test and signature match the artifact. New or changed failures block the route.
+
+See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md). Also see [`references/gap-analysis.md`](references/gap-analysis.md).
 
 ## Flow
 
-1. **Read** — load the spec or acceptance criteria and the cooked diff. If `.cheese/glossary/<slug>.md` exists, read it for naming consistency when hardening tests.
-2. **Map** — for each changed behaviour, find the test(s) that cover it through semantic caller search.
-3. **Gap analysis** — identify weak assertions, missing boundaries, and uncovered integration seams. See `references/gap-analysis.md` for what counts as a gap and the priority order.
-4. **Add focused tests** — observe red first when behaviour changes. Apply precise stale-safe edits.
-5. **Corrective fixes** — only for defects the hardening tests expose. No new behaviour.
-6. **Run checks** — narrowest useful tests, then relevant wider gates already in the project. When the handoff carries a `baseline:` block, classify gate failures against it per [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md): identical failures do not affect readiness; only new or changed failures do.
-7. **Report** — write `.cheese/press/<slug>.md` (slug carried from `/cook`, or derived from branch/task) and print the path. Mark readiness: `ready for /age`, `follow-up recommended`, or `blocked`.
-8. **Hand off** — in manual mode, prompt the next step via the shared handoff gate (see `## Handoff` below); in `--auto` mode, chain forward per `## Auto mode`.
+1. **Read** — Load the approved spec, Cook handoff, and baseline block. Use canonical terms from `.cheese/glossary/<slug>.md` when that file exists.
+2. **Inspect** — Read the acceptance check before you add tests.
+3. **Attack** — Add or run only adversarial tests. Do not change production paths. Extend the existing test file for the module. Before you add a test, name the existing test closest to it. Do not add the test when that test asserts the same seam and branch.
+4. **Shape** — On the first run of an attack, run `python3 skills/press/scripts/press.pyz test-shape --base <revision>`. Use the acceptance-evidence revision from the Cook report. Fix each finding in a Press test, or record why it stands. Record a finding on a test that Press did not write under `## Review follow-ups`. The check reads Python tests only. For other tests, apply the rules by hand and record `test-shape: manual`. After a shape fix, run the attack again. Record that outcome and test digest as the attack evidence. A replay uses this final version of the attack and skips this step.
+5. **Classify** — Select `green`, `finding`, `coverage_gap`, `invalid_evidence`, or `production_changed`.
+6. **Report** — Write `.cheese/press/<slug>.md`. Include the question, the selected attack, why it threatens the claim, the attempts, evidence, test shape, and review follow-ups.
+7. **Hand off** — Send GREEN to `/age`. Send a finding or `coverage_gap` to Cook.
 
-## Preferred tools and fallbacks
+Use [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) for source changes.
 
-Call source-code search, read, and edit backends directly according to [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md). For coverage and test discovery, use semantic caller search plus `tilth_deps` when available.
+Use [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md) for portability.
+The reference states that slash commands are host renderings, not the control model.
 
-Portability reference: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
-The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
+Press reports one readiness value. Map `ready for /age` to `status: ok` and `next: age`.
 
-Beyond source-code routing there are press-specific tools:
+Map `follow-up recommended` to `status: ok-with-concerns: <concern>` and `next: age`. Use this status for a GREEN pass that also records a review follow-up. Age owns each recorded concern.
 
-| Need | Prefer | Fallback |
-| --- | --- | --- |
-| Diff review | `delta` | plain `git diff` |
-| Affected execution flows + risk scoring | semantic caller/dependency tracing and `tilth_deps` | manual flow tracing from changed files; note the precision loss |
+Map `finding` to `status: ok-with-concerns: <defect>` and `next: cook`.
+Map `coverage_gap` to `status: ok-with-concerns: coverage-gap: <gap>` and `next: cook`.
 
-If optional tools are missing, press a narrower surface and state the residual risk.
-
-## Output
-
-House style and citation form: [`../cheese/references/formatting.md`](../cheese/references/formatting.md). This section owns the press-report shape.
-
-Write to `.cheese/press/<slug>.md` with a minimum handoff slug at the top so `/cook`'s fan pathway and `/cheese --continue` can chain without re-parsing the report. The full report shape:
-
-```markdown
-status: ok | halt: <one-line reason>
-next: press | age | done
-artifact: <path-if-any>
-baseline: none | <recorded baseline block copied from the cook handoff — see ../cook/references/quality-gates.md>
-<one-line orientation: what press did — e.g., "added 4 boundary tests; no defects exposed">
-
-# Press Report — <slug>
-
-## Orientation
-<one or two factual sentences about what press did this pass — the hardening added, the gaps closed, the readiness verdict. `/cheese --continue` surfaces the slug's orientation line to the user as "where you are", so press's orientation must describe press's own work, not duplicate cook's orientation.>
-
-## Checks run
-- <command>: <pass|fail|skipped with reason>
-
-## Findings
-| Severity | Category | Evidence | Recommendation |
-| --- | --- | --- | --- |
-
-## Coverage
-- Spec coverage:
-- Boundary coverage:
-- Assertion strength:
-
-## Readiness
-<ready for /age | follow-up recommended | blocked>
-
-## Next step
-<ready for /age>:           /age <slug>           — review the cooked + pressed diff
-<follow-up recommended>:    /age <slug>           — review-safe; documented follow-ups addressed after review
-<blocked>:                  resolve blocking issues before proceeding
-```
-
-`status: ok` maps to readiness `ready for /age` or `follow-up recommended`; `status: halt: <reason>` maps to `blocked`. `next:` names the next runnable phase: `age` when review-safe, `press` when blocking issues must be resolved and the hardening phase rerun. Use `next: done` only for true terminal completion, not for a blocked-but-resumable halt. `/ultracook` still stops automatically on any `status: halt`; `next:` is the resume hint for `/cheese --continue`.
-
-When `baseline:` is present, press honors it: identical recorded failures never move readiness off `ready for /age`; only new or changed failures do, per [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
-
-Then print:
-
-```
-Press report: .cheese/press/<slug>.md
-Next step:    /age <slug>                          (when ready for /age or follow-up recommended)
-              blocked — resolve before continuing  (when blocked)
-```
-
-## Handoff
-
-**Pipeline:** culture → mold → cook → **[press]** → age → cure → plate
-
-After the press report is on disk, ask via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md), following its **Standard forward-step menu**. Lead each option with the verb (what the user wants to *do* next); the skill command (with any in-scope `--hard` propagation) is the backing detail. Default options:
-
-- **Review the diff** *(recommended when readiness is `ready for /age` or `follow-up recommended`)* — `/age <slug>`. For `follow-up recommended`, documented follow-ups can be addressed after review.
-- **Plate it** — `/age <slug> --auto --open-pr`: run age → cure, then `/plate` resolves topology and publishes.
-- **Checkpoint & stop** — `/wheypoint`: write a resumable handoff and pause.
-- **Stop** — dispatch none; defer review (use this if you want to harden manually before /age, even though the contract is review-safe).
-
-Pre-select **Review the diff** when ready. If blocked, do not pre-select **Plate it**. Run a non-stop selection immediately.
+Map `blocked` to `status: halt: <reason>` and `next: done`. `blocked` means invalid evidence or a production change.
 
 ## Auto mode
 
-When invoked with `--auto` (propagated from `/cook --auto`):
+`--auto` runs the same adversarial loop. It also selects the next phase without a user prompt.
 
-- Skip the handoff gate entirely.
-- If readiness is `ready for /age` or `follow-up recommended`, invoke `/age <slug> --auto` directly (forward `--open-pr` when it is in scope).
-- If readiness is `blocked`, stop the auto chain and surface the press report to the user. Blocked criteria: defined once in [`references/gap-analysis.md`](references/gap-analysis.md).
+Dispatch `/age <slug> --auto` after `ready for /age` or `follow-up recommended`. Add `--hard` when the user supplied it. Add `--open-pr` when the user supplied it.
 
-### Within cook's own fan pathway
+Stop after `blocked`, `halt: correction-cap`, or `halt: coverage-gap`. Do not dispatch Age.
 
-When `/cook`'s fan pathway (its retired-`/ultracook` mechanics, now self-hosted — see `skills/cook/SKILL.md` `## Fan pathway`) spawns press as a fresh-context sub-agent, it owns the chain itself. When the spawn prompt explicitly says "for THIS PHASE ONLY" and "do not chain forward to the next phase," honour the override: write `.cheese/press/<slug>.md` (with the handoff slug at the top) and stop. Do not invoke `/age <slug> --auto` from inside the sub-agent regardless of readiness. The orchestrator reads the handoff slug and either chains to age (when `status: ok` and `next: age`) or halts (when `status: halt`, regardless of `next:`). `next:` remains the resume hint for `/cheese --continue`.
+Honor the no-chain directive when the caller supplies it. Write the Press handoff and stop. Do not start another phase. Cook's fan pathway owns this directive. The retired `/ultracook` orchestrator previously owned it. Test for the directive itself. Do not test for the source name. See [`../cook/references/auto-mode.md`](../cook/references/auto-mode.md).
+
+## Output
+
+Write `.cheese/press/<slug>.md` at each Press result.
+
+Write the file with `python3 skills/press/scripts/press.pyz write-handoff-artifact`; include one or more `--grounded <path[#start-end]>` arguments. Use the canonical preamble:
+
+```text
+python3 skills/press/scripts/press.pyz write-handoff-artifact \
+  --slug <slug> --status <status> --phase press --next <next> [--base <base>] \
+  --artifact .cheese/cook/<slug>.md --orientation "<one-line orientation>" \
+  --durable-flags "<preserved Cook value>" --baseline "<baseline artifact path>" \
+  --grounded <path[#start-end]> --body-file <body-path>
+```
+
+```markdown
+status: <canonical status field>
+next: age | cook | done
+artifact: .cheese/cook/<slug>.md
+durable_flags: <preserved Cook value>
+baseline: none | <baseline artifact path>
+<one-line orientation>
+```
+
+The handback contract defines the `status:` grammar. The preamble accepts no other keys. Put every Press value in the report body.
+
+`artifact:` names the consumed Cook report. Do not put attack evidence on this line.
+
+`baseline:` names the one artifact that Cook recorded. See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
+
+Write these body sections under the preamble:
+
+- `## Attempts` — one row for each attempt. Give the attempt number and outcome.
+- `## Evidence` — the stable attack identity, the test digest, and the failing test for a finding.
+- `## Test shape` — one row for each new test: the test, the closest existing test, and the branch or false success that only the new test catches. Then the `test-shape` result and the reason for each finding that stands.
+- `## Review follow-ups` — each out-of-contract concern. Write `none` when the run records no concern. Age reads this section.
+
+Map the outcome to the terminal preamble:
+
+| outcome | status | next |
+| --- | --- | --- |
+| GREEN | `ok` | `age` |
+| GREEN with a recorded concern | `ok-with-concerns: <concern>` | `age` |
+| finding (an attack test exposes a defect) | `ok-with-concerns: <defect>` | `cook` |
+| `coverage_gap` | `ok-with-concerns: coverage-gap: <gap>` | `cook` |
+| second `coverage_gap` in one Cook run | `halt: coverage-gap` | `done` |
+| invalid evidence or production change (`blocked`) | `halt: <reason>` | `done` |
+| third finding on the same attack | `halt: correction-cap` | `done` |
+| sixth Press round that does not end green | `halt: press-round-limit` | `done` |
+
+`next: done` is terminal. It never starts another phase.
+
+A `next: cook` handoff is a Cook correction (`correction = true`), for a finding or a `coverage_gap`. Press then replays or reruns the same attack.
+
+Cook counts the rounds. Cook passes the round number and attack identity in the dispatch. Press emits `halt: correction-cap` or `halt: coverage-gap` only from that round number. A manual `/press <slug>` run reads prior rounds from `.cheese/press/<slug>.md`. `references/gap-analysis.md` holds the caps, including the 6-round `press-round-limit`.
+
+## Handoff
+
+**Pipeline:** culture → mold → cook (⇄ press) → age → cure → plate
+
+When Cook dispatched Press, return the handoff to Cook and stop.
+After a manual GREEN re-run, use the shared [handoff gate](../cheese/references/handoff-gate.md). Start the review with `/age <slug>`.
+
+After a finding or `coverage_gap`, hand off to Cook with the failing test or the gap named in the report.
+
+Forward `--hard`, `--auto`, and `--open-pr` to `/age` when the caller supplied them. Never add `--open-pr`.
 
 ## Rules
 
-- Do not weaken assertions.
-- Do not broaden implementation beyond the cooked contract.
-- **Every changed behaviour in the cooked diff leaves press with an executable hardening test that would fail if the change regressed.** If press cannot produce a stable hardening test for a changed behaviour (flaky seam, missing infrastructure, design decision required), readiness is `blocked` — never `ready for /age` or `follow-up recommended`.
-- **Cap iteration at three attempts per gap.** Count test-edit + run cycles. On the third failed cycle on the same gap, mark readiness `blocked` with reason `spinning: <gap-description>` and surface the report. Do not loop indefinitely.
-- Surface medium and high findings explicitly; summarize low findings.
-- If the cooked diff or spec rests on a false premise (the contract is wrong, or the test surface is solving the wrong problem), stop and surface the premise before adding tests; do not harden the wrong angle.
-- Apply the shared voice kernel (lives at `../age/references/voice.md`): lead the press report with the readiness verdict, flag residual risk as `certain | speculating | don't know`, agree when coverage is already sufficient without manufacturing tests.
+- Do not edit production code, production fixtures, or production adapters.
+- Do not create a `test_press_*` file when a test file for the module exists.
+- Do not change the attack between replays.
+- Do not treat out-of-contract behavior as an implementation request. Record it under `## Review follow-ups`. Report the run as `ok-with-concerns` on a GREEN pass.
+- Preserve baseline-aware readiness.
+
+## Discipline
+
+Press uses evidence first. An unverified failure is not a finding.
+
+Name the outcome before each handoff decision. Name the attack digest. Stop if one value is missing. Do not guess.
+
+Generated bundle command inventory: [`references/commands.md`](references/commands.md).

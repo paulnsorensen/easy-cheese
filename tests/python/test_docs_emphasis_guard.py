@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import re
-import shutil
 from pathlib import Path
 
 import pytest
@@ -33,37 +31,12 @@ def test_shared_source_routing_contract_is_linked_and_complete():
         "skills/melt/SKILL.md",
         "skills/mold/SKILL.md",
         "skills/pasteurize/SKILL.md",
+        "skills/plate/SKILL.md",
         "skills/press/SKILL.md",
         "skills/ultracook/SKILL.md",
     )
     for path in routed_docs:
         assert "code-intelligence-routing.md" in (REPO_ROOT / path).read_text(encoding="utf-8"), path
-
-
-def test_documented_single_workflow_install_resolves_shared_routing_contract(tmp_path):
-    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-    _, heading, tail = readme.partition("Install one workflow skill")
-    assert heading, "README must document workflow-skill dependencies"
-    section, next_heading, _ = tail.partition("Pin both skills")
-    assert next_heading
-
-    skills = re.findall(
-        r"gh skill install paulnsorensen/easy-cheese ([\w-]+)", section
-    )
-    assert skills == ["cheese", "cook"]
-
-    installed = tmp_path / "skills"
-    for skill in skills:
-        shutil.copytree(REPO_ROOT / "skills" / skill, installed / skill)
-
-    cook = installed / "cook" / "SKILL.md"
-    links = re.findall(
-        r"\]\(([^)]+code-intelligence-routing\.md)\)",
-        cook.read_text(encoding="utf-8"),
-    )
-    assert links
-    for link in links:
-        assert (cook.parent / link).resolve().is_file(), link
 
 
 def test_harness_portability_reference_is_linked_from_workflow_docs():
@@ -82,7 +55,14 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
         REPO_ROOT / "skills/affinage/SKILL.md",
         REPO_ROOT / "skills/hard-cheese/SKILL.md",
         REPO_ROOT / "skills/pasteurize/SKILL.md",
+        REPO_ROOT / "skills/plate/SKILL.md",
+        REPO_ROOT / "skills/wheypoint/SKILL.md",
     ]
+
+    # The sentence appears both mid-sentence and sentence-initial, so only its
+    # leading letter varies in case. Match case-insensitively; every other
+    # word still has to be exact.
+    portability_line = "slash commands are host renderings, not the control model"
 
     for path in docs:
         text = path.read_text(encoding="utf-8")
@@ -91,35 +71,30 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
             assert "Portable host-capability wording" in text
         elif path == REPO_ROOT / "skills/cheese/SKILL.md":
             assert "references/harness-portability.md" in text, path
-            assert "slash commands are host renderings, not the control model" in text, path
+            assert portability_line in text.lower(), path
         else:
             assert "cheese/references/harness-portability.md" in text, path
-            assert "slash commands are host renderings, not the control model" in text, path
+            assert portability_line in text.lower(), path
 
 
 
     portable_examples = {
-        # /ultracook retired to a stub; its own portable-example CLI
-        # invocations (phase_decision, validate_decomposition, mode,
-        # milknado, worktree create/harvest/teardown) now live inside
-        # cook/SKILL.md's `## Fan pathway`, merged into cook's own entry.
+        # /ultracook retired to a stub; portable mode, tracking, and worktree
+        # commands now live one hop under cook's fan-pathway reference. Legacy
+        # phase-state and decomposition commands are intentionally not live.
         REPO_ROOT / "skills/cook/SKILL.md": (
-            "shared/scripts/artifact_path.py",
-            "shared/scripts/read_handoff_slug.py",
-            "python3 skills/ultracook/scripts/ultracook.pyz phase_decision",
-            "fallback",
-            "python3 skills/ultracook/scripts/ultracook.pyz validate_decomposition",
-            "python3 skills/ultracook/scripts/ultracook.pyz mode",
-            "python3 skills/ultracook/scripts/ultracook.pyz milknado",
-            "python3 skills/ultracook/scripts/ultracook.pyz worktree create",
-            "python3 skills/ultracook/scripts/ultracook.pyz worktree harvest",
-            "python3 skills/ultracook/scripts/ultracook.pyz worktree teardown",
+            "scripts/cook.pyz artifact-path",
+            "scripts/cook.pyz read-handoff-slug",
+            "scripts/cook.pyz mode",
+            "scripts/cook.pyz milknado",
+            "scripts/cook.pyz worktree create",
+            "scripts/cook.pyz worktree harvest",
+            "scripts/cook.pyz worktree teardown",
         ),
         REPO_ROOT / "skills/age/SKILL.md": (
-            "shared/scripts/read_handoff_slug.py",
-            "shared/scripts/write_handoff_artifact.py",
-            "fallback",
-            "src/age/age-html-report.py",
+            "scripts/age.pyz read-handoff-slug",
+            "scripts/age.pyz write-handoff-artifact",
+            "scripts/age.pyz html-report",
         ),
         REPO_ROOT / "skills/affinage/SKILL.md": (
             "python3 skills/affinage/scripts/affinage.pyz pr-status",
@@ -130,8 +105,8 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
             "python3 skills/hard-cheese/scripts/hard-cheese.pyz append-attempt",
         ),
         REPO_ROOT / "skills/mold/SKILL.md": (
-            "python3 skills/mold/scripts/mold.pyz artifact-path",
-            "python3 skills/mold/scripts/mold.pyz gate-graph",
+            "scripts/mold.pyz artifact-path",
+            "scripts/mold.pyz gate-graph",
         ),
         REPO_ROOT / "skills/pasteurize/SKILL.md": (
             "python3 skills/pasteurize/scripts/pasteurize.pyz repro-rerun",
@@ -152,7 +127,6 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
     for path in (
         REPO_ROOT / "skills/affinage/SKILL.md",
         REPO_ROOT / "skills/hard-cheese/SKILL.md",
-        REPO_ROOT / "skills/mold/SKILL.md",
         REPO_ROOT / "skills/pasteurize/SKILL.md",
     ):
         assert "${CLAUDE_SKILL_DIR}/scripts/" not in path.read_text(encoding="utf-8"), path
@@ -203,9 +177,9 @@ def test_question_routing_is_native_first_and_lossless():
         "**Source skill**",
         "id: post-cook-next-step",
         "prompt: What should happen next?",
-        "recommended: harden-tests",
+        "recommended: review-change",
         "multi: false",
-        "description: Strengthen regression coverage before review.",
+        "description: Review the diff after Cook's Press loop passes.",
     ):
         assert required in gate
     assert "question.id = handoff_gate.id" in gate
@@ -315,6 +289,7 @@ def test_question_routing_is_native_first_and_lossless():
         "mold",
         "pasteurize",
         "press",
+        "wheypoint",
     ),
 )
 def test_core_workflow_question_sites_reference_shared_handoff_gate(skill: str):
@@ -342,7 +317,10 @@ def test_core_cheese_questions_use_the_shared_handoff_gate():
 
 
 def test_wheypoint_git_provenance_is_capability_based_and_optional():
-    body = (REPO_ROOT / "skills/wheypoint/SKILL.md").read_text(encoding="utf-8")
+    # `checkpoint` now routes the common path. The guard follows the provenance prose.
+    body = (REPO_ROOT / "skills/wheypoint/references/provenance-fields.md").read_text(
+        encoding="utf-8"
+    )
 
     assert "callable, read-only git inspection capability" in body
     assert "git status --short --branch" in body

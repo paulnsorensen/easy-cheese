@@ -1,0 +1,11 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/labels-sync. No PR exists for this branch.
+Quality gate: `just check` passed at HEAD and at each commit (exit 0 each).
+Installed stack tools: gh stack (enabled). 
+PR template: .github/PULL_REQUEST_TEMPLATE.md with sections What changed / Why / How to verify / Non-obvious changes / Risk / rollout notes / Checklist.
+
+$ git log --oneline --reverse main..HEAD
+d01 feat(schemas): add labels manifest contract              +190 lines
+d02 feat(labels-as-code): sync labels from the manifest      +410 lines, imports the d01 contract
+d03 docs(labels-as-code): document the sync command          +85 lines
+
+The commits form clean dependent layers. Each passes the gate on its parent.

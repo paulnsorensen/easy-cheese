@@ -1,0 +1,239 @@
+#!/usr/bin/env python3
+"""Git subprocess wrappers and conflict-marker helpers."""
+
+from __future__ import annotations
+
+import subprocess
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Literal, TypedDict
+
+
+# Conflict-marker prefixes (diff3 adds the ||||||| base marker). Single source
+# for marker checks here and in importers (conflict-pick).
+MARKER_OURS = "<<<<<<<"
+MARKER_BASE = "|||||||"
+MARKER_SEP = "======="
+MARKER_THEIRS = ">>>>>>>"
+CONFLICT_MARKERS = (MARKER_OURS, MARKER_BASE, MARKER_SEP, MARKER_THEIRS)
+# Loose 6-char forms for context scans (match markers anywhere in a line).
+_MARKER_FRAGMENTS = tuple(m[:6] for m in CONFLICT_MARKERS)
+
+# Git classifies a blob as binary when a NUL byte occurs in its first 8000 bytes.
+_BINARY_SNIFF_BYTES = 8000
+_GENERATED_ARCHIVE_SUFFIXES = frozenset({".pyz"})
+_GENERATED_ARCHIVE_GUIDANCE = (
+    "generated archive; resolve the source conflicts and rebuild the archive"
+)
+_BINARY_GUIDANCE = (
+    "binary file; select one side with `git checkout --ours|--theirs -- <path>` "
+    "or regenerate the file"
+)
+
+
+def run_git(
+    args: list[str],
+    capture_output: bool = True,
+    *,
+    cwd: str | Path | None = None,
+    timeout: float | None = None,
+    env: Mapping[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    command = ["git"]
+    if cwd is not None:
+        command += ["-C", str(cwd)]
+    command += args
+    if timeout is None:
+        return subprocess.run(
+            command,
+            capture_output=capture_output,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+        )
+    return subprocess.run(
+        command,
+        capture_output=capture_output,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=timeout,
+        env=env,
+    )
+
+
+
+
+def get_conflicted_files() -> list[str]:
+    result = run_git(["diff", "--name-only", "--diff-filter=U"])
+    if result.returncode != 0:
+        return []
+    return [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]
+
+
+def extract_stages(path: str) -> tuple[str | None, str | None, str | None]:
+    """Returns (base, ours, theirs) from git stage slots; None for any unavailable stage."""
+    base = ours = theirs = None
+
+    # Stage 1 = common ancestor (base)
+    result = run_git(["show", f":1:{path}"])
+    if result.returncode == 0:
+        base = result.stdout
+
+    # Stage 2 = current branch (ours/HEAD)
+    result = run_git(["show", f":2:{path}"])
+    if result.returncode == 0:
+        ours = result.stdout
+
+    # Stage 3 = incoming branch (theirs)
+    result = run_git(["show", f":3:{path}"])
+    if result.returncode == 0:
+        theirs = result.stdout
+
+    return base, ours, theirs
+
+
+def get_file_extension(path: str) -> str:
+    return Path(path).suffix.lstrip(".")
+
+
+def is_binary_file(path: str | Path) -> bool:
+    """Apply Git's binary heuristic to a working-tree file. An unreadable path is not binary."""
+    try:
+        with Path(path).open("rb") as handle:
+            return b"\0" in handle.read(_BINARY_SNIFF_BYTES)
+    except OSError:
+        return False
+
+
+def binary_conflict_guidance(path: str) -> str | None:
+    """Return resolution guidance when text conflict tools must not touch `path`.
+
+    Every Melt text tool decodes and rewrites a conflicted file as text. That
+    operation corrupts a binary file. A generated archive also has no valid
+    side to select, because its sources define its content.
+    """
+    if Path(path).suffix.lower() in _GENERATED_ARCHIVE_SUFFIXES:
+        return _GENERATED_ARCHIVE_GUIDANCE
+    if is_binary_file(path):
+        return _BINARY_GUIDANCE
+    return None
+
+
+def is_mergiraf_supported(path: str) -> bool:
+    ext = get_file_extension(path)
+    # Languages supported by mergiraf (Tree-sitter based)
+    supported_extensions = {
+        "rs",
+        "go",
+        "py",
+        "ts",
+        "tsx",
+        "js",
+        "jsx",
+        "java",
+        "scala",
+        "c",
+        "cc",
+        "cpp",
+        "cxx",
+        "h",
+        "hpp",
+        "hxx",
+        "rb",
+        "php",
+        "cs",
+        "swift",
+        "md",
+    }
+    return ext.lower() in supported_extensions
+
+
+class ConflictHunk(TypedDict):
+    start_line: int
+    end_line: int | None
+    ours: list[str]
+    base: list[str]
+    theirs: list[str]
+    marker_ours: str
+    marker_theirs: str | None
+
+
+_HunkSection = Literal["ours", "base", "theirs"]
+
+
+def parse_conflict_hunks(content: str) -> list[ConflictHunk]:
+    """Handles both diff3 (with ||||||| base) and standard (without base) conflict markers."""
+    lines = content.split("\n")
+    hunks: list[ConflictHunk] = []
+    current_hunk: ConflictHunk | None = None
+    section: _HunkSection | None = None
+
+    for i, line in enumerate(lines, 1):
+        if line.startswith(MARKER_OURS):
+            current_hunk = {
+                "start_line": i,
+                "end_line": None,
+                "ours": [],
+                "base": [],
+                "theirs": [],
+                "marker_ours": line,
+                "marker_theirs": None,
+            }
+            section = "ours"
+        elif line.startswith(MARKER_BASE) and current_hunk:
+            section = "base"
+        elif line.startswith(MARKER_SEP) and current_hunk:
+            section = "theirs"
+        elif line.startswith(MARKER_THEIRS) and current_hunk:
+            current_hunk["end_line"] = i
+            current_hunk["marker_theirs"] = line
+            hunks.append(current_hunk)
+            current_hunk = None
+            section = None
+        elif current_hunk and section:
+            _ = current_hunk[section].append(line)
+
+    return hunks
+
+
+def get_surrounding_context(
+    content: str, start_line: int, end_line: int, context_lines: int = 3
+) -> tuple[list[str], list[str]]:
+    lines = content.split("\n")
+
+    # Before context (avoiding conflict markers)
+    before_start = max(0, start_line - context_lines - 1)
+    before: list[str] = []
+    for i in range(before_start, start_line - 1):
+        line = lines[i]
+        if not any(fragment in line for fragment in _MARKER_FRAGMENTS):
+            before.append(f"{i + 1}: {line}")
+
+    after_end = min(len(lines), end_line + context_lines)
+    after: list[str] = []
+    for i in range(end_line, after_end):
+        line = lines[i]
+        if not any(fragment in line for fragment in _MARKER_FRAGMENTS):
+            after.append(f"{i + 1}: {line}")
+
+    return before, after
+
+
+def detect_lockfile_type(path: str) -> str | None:
+    filename = Path(path).name.lower()
+
+    lockfile_map = {
+        "cargo.lock": "cargo",
+        "package-lock.json": "npm",
+        "yarn.lock": "yarn",
+        "pnpm-lock.yaml": "pnpm",
+        "poetry.lock": "poetry",
+        "pipfile.lock": "pipenv",
+        "uv.lock": "uv",
+        "gemfile.lock": "bundler",
+        "go.sum": "go",
+    }
+
+    return lockfile_map.get(filename)

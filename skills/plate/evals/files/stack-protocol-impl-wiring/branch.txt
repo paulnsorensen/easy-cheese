@@ -1,0 +1,20 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/handback-v2. No PR exists for this branch.
+Quality gate: `just check` passed at HEAD and at each commit below (exit 0 each).
+Installed stack tools: gh stack (repository preflight returns 200, enabled). Graphite and Git Town are absent.
+PR template: .github/PULL_REQUEST_TEMPLATE.md with sections What changed / Why / How to verify / Non-obvious changes / Risk / rollout notes / Checklist.
+
+$ git log --oneline --reverse main..HEAD
+a1f0c11 feat(schemas): add handback v2 contract with typed evidence rows
+b2e9d47 feat(cook): emit handback v2 from the coder dispatch
+c3d8a90 feat(cure): consume handback v2 and drop the v1 reader
+
+$ git diff --stat per commit
+a1f0c11  src/easy_cheese_schemas/handback.py (+142), tests/python/test_handback_schema.py (+61)            203 lines
+b2e9d47  src/easy_cheese/skills/cook/dispatch.py (+188 -40), skills/cook/references/fan-path.md (+31 -12),
+         tests/python/test_cook_handback.py (+174), skills/cook/scripts/cook.pyz (binary)                   445 lines
+c3d8a90  src/easy_cheese/skills/cure/intake.py (+66 -91), skills/cure/SKILL.md (+9 -14),
+         tests/python/test_cure_intake.py (+48 -30), skills/cure/scripts/cure.pyz (binary)                  258 lines
+
+Dependencies: b2e9d47 imports HandbackV2 from a1f0c11. c3d8a90 reads the files b2e9d47 writes.
+Each commit builds and passes the gate alone on top of its parent.
+The schema commit is a public contract: a reviewer must approve its field names before the producers matter.

@@ -3,8 +3,8 @@
 Mold records the non-obvious decisions of a session as Architecture Decision
 Records (ADRs). The approved spec and its ADRs are **durable** project records:
 the spec keeps the implementation contract, while ADRs preserve the rationale a
-future session would otherwise re-derive. Write them at Curdle, after the two-key
-handshake, in phase one's local atomic write.
+future session would otherwise re-derive. Write them at Curdle, after the coherence
+self-check, in phase one's local atomic write.
 
 ## What earns an ADR
 
@@ -21,12 +21,11 @@ spec body already states plainly.
 ## Decision ledger
 
 Mold's per-round decision ledger (`Decided / Asking / [AGENT-DECIDED]`, see
-`../SKILL.md` § Rules) persists **here at curdle**: each `[AGENT-DECIDED]` call
-that had a real alternative the user could have vetoed earns an ADR — it is
-exactly the kind of decision a future reader would otherwise reverse-engineer.
-Minor calls with no surviving alternative ride the spec's one-line decision-log
-(`curdle.md` § Spec template) instead of a full ADR; the ledger keeps no separate
-file (ADR-004).
+`../SKILL.md` § Rules) persists **here at curdle**: each consequential decision
+(per the leverage line in `../../age/references/voice.md`) earns an ADR — it is exactly the kind of decision a future reader would
+otherwise reverse-engineer. `[AGENT-DECIDED]` calls ride the spec's one-line
+decision-log (`curdle.md` § Spec template) with their vetoable alternative,
+never a full ADR; the ledger keeps no separate file (ADR-004).
 
 ## Resolution — where ADRs land (portable, never hardcoded)
 
@@ -37,7 +36,7 @@ never hardcoded — there is no `easy-cheese:wiki` baked into a runtime path.
 adr_target():
   # 1. Probe for a hallouminate wiki at the CONSUMER's root repo.
   #    Shape-match the corpus, never exact-match a placeholder — the repo name is
-  #    dynamic (matches grounding.md and paths.py's domain_model_target()).
+  #    dynamic (the bundle command uses the same shape-match).
   corpus = first(c for c in hallouminate.list_corpora()
                  if c.startswith("repo:") and c.endswith(":wiki"))   # dynamic; their repo, not ours
   if corpus:

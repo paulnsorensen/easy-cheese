@@ -2,7 +2,7 @@
 
 This retained legacy-manifest template is consumed by `/cook`'s fan-path internals when they need the run-manifest decomposition. It is not a live `/ultracook` phase. Substitute `{spec_text}`, `{slug}`, and `{quality_gate}` before dispatch.
 
-> **Scope note:** this template produces the legacy manifest schema (`seed[]`/`curds[]` with `id`/`behavior`/`retry_count`, `wiring[]`), validated by `validate_manifest` — NOT the curd-block schema (`curds[]`/`waves[]`/`decomposer{}`) validated by `validate_curd_block`. Curd-block producers must use [`../../cheese/references/decomposer.md`](../../cheese/references/decomposer.md).
+> **Scope note:** this template produces the legacy manifest schema (`seed.items[]`/`curds[]` with `id`/`behavior`/`retry_count`, `wiring[]`), validated by `validate_manifest`.
 
 ````text
 You are the legacy-manifest decomposer sub-agent for /cook's fan-path run: {slug}
@@ -78,8 +78,7 @@ trivial curd standalone when folding would violate criterion 4
 criterion.
 
 ## Validation
-The orchestrator will run `${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz validate_manifest` on your output for required
-sections and field shapes, then `${CLAUDE_SKILL_DIR}/scripts/ultracook.pyz validate_decomposition` against the checks
+The `/cook` orchestrator validates your output with its internal `validate_manifest` and `validate_decomposition` commands against the checks
 below. Your output will be rejected on any failure:
 
 - **Behaviour overlap**, **Spec coverage**, **Test target**, **File disjointness** — enforce criteria 1–4 above.

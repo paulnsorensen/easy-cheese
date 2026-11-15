@@ -2,6 +2,7 @@
 
 ## Log
 
+- 2026-09-27 · wedge-migration · merged · architecture/pyz-bundling-pipeline.md, architecture/skill-python-bundle-doctrine.md, tooling.md, architecture.md, architecture/bundle-command-dispatch.md, architecture/ultracook-runtime-retirement.md, gotchas/stacked-pr-restack.md · wedge replaces the committed Shiv archives: launcher + lock per skill, assets on the `wedge` release, gates in scripts/runtime_gates.py; pyz-pipeline-contracts ADRs and spec marked superseded
 - 2026-07-22 · cook+age:baseline-repair-pathway · merged · adr/baseline-repair-pathway-004.md · dispatch-brief-level override (chain forward with `--auto --open-pr` via prompt instruction, not a SKILL.md edit) added to the Decision bullet.
 - 2026-07-22 · cook+age:baseline-repair-pathway · merged · adr/plate-publication-boundary-001.md · new pre-check ahead of New-PR topology policy: a `worktree-agent-repair-*` branch resolves through the repair pathway's mechanical file-overlap check first.
 
@@ -39,3 +40,93 @@
 - 2026-07-28 · 68af0b0391e6bbd2 · merged · adr/skill-size-ratchet-003.md · ADR-003a brings .agents/skills/ into validate_skills.py (narrow dot-filter allowance, frontmatter + size ratchet in scope, reference-topology checks out of scope); validator now reports 18 files; markdownlint globs widened to .agents/**/*.md in justfile and CI. Closes both accepted-cost gaps from cheese-kernel-shared-refs ADR-001a. Nested allowlist 20 to 19 as real cleanup from the skill-authoring unlink.
 - 2026-07-28 · 68af0b0391e6bbd2 · merged · log.md · final .agents naming settled: python-authoring (H1 "Authoring Python") and skill-authoring, both with name matching their directory, both now validated and linted.
 
+
+
+- 2026-08-02 · wiki-harvest · curated · architecture.md, workflow-invariants.md · corrected stale present-tense framing that listed `/ultracook` as an active pipeline skill. `/ultracook` was retired to a redirect stub (PR #317) with fan-path ownership moved to `/cook` (PR #316): the pipeline-table row and auto-chain prose now attribute the fan pathway and the `cook → press → age → cure → age → cure → age` `--auto` chain to `/cook`, and the stale `skills/cook/SKILL.md:132` citation was corrected to `:134`. Aligns the two foundational pages with architecture/ultracook-agent-topology.md, fanout-engine-entities.md, and this log.
+- 2026-08-06 · ea414a8dc98ddb4e · new-page · architecture/workflow-contract-map.md · recovered planner/curdler ownership, distinguished current CurdBlock behavior from target CurdPlan contracts, recorded Cook/Cure and Age/Pasteurize seams as design work, and ordered schema self-consumption before Milknado import.
+- 2026-08-08 · wiki-curator:outer-tdd-gates · curated · adr/outer-tdd-gates-001.md, adr/outer-tdd-gates-002.md, adr/outer-tdd-gates-003.md, adr/outer-tdd-gates-004.md, adr/outer-tdd-gates-005.md, domain-model.md · recorded the accepted outer-TDD boundary decisions alongside PR #396: phase-neutral GateReceipt evidence, Cut ownership, Press corrective continuations, Mold Test Contracts, and explicit applicability.
+
+- 2026-08-08 · wiki-curator:wheypoint-continuity-kernel · curated · adr/wheypoint-continuity-kernel-001.md, adr/wheypoint-continuity-kernel-002.md, adr/wheypoint-continuity-kernel-003.md, adr/wheypoint-provenance-schema-001.md, domain-model.md · recovered the continuity-kernel ADR set omitted from implementation PR #384; recorded WheypointRecord as continuity authority, immutable delta/revision semantics, projection-only Markdown, and the dedicated runtime boundary.
+- 2026-08-09 · wiki-harvest · curated · domain-model.md · resolved a committed 3-way merge conflict landed by PR #398: `<<<<<<< ours`/`||||||| original`/`=======`/`>>>>>>> theirs` markers were live in the tree around the `## Outside-in RED gating` section. Took the `ours` side (the section PR #396 added); the other two sides carried only a duplicate `_Code_: NEW ENTITY` line. `validate_wiki.py` is structural-only, so it passed the gate green — see tooling.md.
+- 2026-08-09 · wiki-harvest · curated · architecture.md, workflow-invariants.md · added `/cut` to the pipeline. PR #396 inserted the outside-in RED phase between mold and cook (`culture → mold → cut → cook → press → age → cure → plate`), and both foundational pages still printed the seven-phase order. Recorded the non-obvious parts: Cut cannot be skipped by starting at `/cook` (cook's GateReceipt preflight invokes it synchronously), and `--auto`'s chain is now receipt-shaped — a closed `not-applicable` receipt skips Press because Press has no contract to attack, not for speed. Noted that culture/age/cure/affinage footers still print the pre-Cut string.
+- 2026-08-09 · wiki-harvest · curated · tooling.md, architecture.md · corrected the `.pyz` story. The bundle roster was six skills; it is thirteen plus a fanned-out `common.pyz` (`SKILLS`/`COMMON_CONSUMERS` in `scripts/build_pyz.py`). More importantly, `build-pyz.yml` no longer rebuilds and commits bundles — it runs read-only and *verifies* them via `check_bundles.py` (CRC comparison, since ZIP_DEFLATED output varies by zlib build), so a stale bundle reds the PR instead of self-healing. The `justfile:39` comment still claims the old behavior. Also added the missing `publish-pypi`, `docs-retry`, and `skill-overlap` workflows and the `cargo`-dependent `test-skill-overlap` leg of `just check`.
+
+- 2026-08-23 · 95363c78068f772a · merged · architecture/workflow-contract-map.md · ingested durable orchestration ownership, ingress, review-correlation, and curd-identity details; newer accepted plan and schema decisions supersede conflicting July claims.
+- 2026-08-23 · 95363c78068f772a · merged · specs/milknado-executor-recovery.md · preserved append-only checkpoint history and self-contained terminal outcomes under the later locked recovery protocol.
+- 2026-08-23 · 95363c78068f772a · skipped-near-duplicate · — · omitted duplicate, superseded, unresolved, and transient handoff/environment material from the tracked July checkpoint.
+
+- 2026-08-24 · mold:enforceable-skill-boundaries · approved · specs/enforceable-skill-boundaries.md, adr/skill-boundary-protocol-001.md, adr/skill-boundary-normalization-002.md, adr/skill-bundle-authority-003.md, adr/legacy-adapter-lifecycle-004.md, domain-model.md, architecture/workflow-contract-map.md · recorded the nine-curd Mold → Cook boundary plan, pointer-last publication, BAML-informed generous writer ingress, strict canonical acceptance, layout-derived one-skill bundles, and exact sunset-bound legacy adapters.
+
+
+- 2026-08-28 · cd6ee3e392a91bbd · merged · adr/pyz-pipeline-contracts-002.md · marked the unimplemented `just check` and prek bundle-currency proposal superseded; dedicated bundle rebuild and comparison remain authoritative.
+- 2026-08-28 · cd6ee3e392a91bbd · merged · adr/pyz-pipeline-contracts-003.md · marked the unimplemented generated source-map and source-banner proposal superseded by the package layout and architecture documentation.
+- 2026-08-28 · cd6ee3e392a91bbd · merged · architecture/pyz-bundling-pipeline.md · corrected canonical archive comparison: validate bootstrap members, canonicalize environment and wrapper shebangs, and exclude RECORD only from canonical comparison.
+- 2026-08-28 · cd6ee3e392a91bbd · merged · wiki-conventions.md · adopted the Google developer documentation style guide after repository-specific guidance and recorded its core editorial conventions.
+- 2026-08-28 · 21598ff6fb766b9f · merged · architecture/pyz-bundling-pipeline.md · incorporated PR #501's static `Command` manifests, lazy direct dispatch, command-local argument contract, stdout/stderr channels, and integer status returns.
+
+
+- 2026-09-04 · 499c49c7b67d5eb6 · new-page · architecture/handoff-preamble-grammar.md · preamble key set, single-line `baseline:`, `artifact:` meaning, `--body-file` trap, phase-registry gate, findings tag order, dispatch-text-only `--open-pr`/`--hard`, ask-user-question `other:` mapping (source: 117 r014-megamerge `.cheese` notes removed from PR #614).
+- 2026-09-04 · 499c49c7b67d5eb6 · new-page · gotchas/age-review-lock-invariants.md · textconv/ext-diff/hooks disabled, whole-tree digest with unborn HEAD, top-level root and O_NOFOLLOW, digest-bound freshness, no pass counter in Age.
+- 2026-09-04 · 499c49c7b67d5eb6 · new-page · architecture/publication-gateway-invariants.md · file-only pointers, bounded reads, replay `operation_id`, receipt identity equality, ambiguity-rejecting quote repair, one resolver, POSIX-only durability gap, exact legacy migration; supersedes review-time open-hole claims.
+- 2026-09-04 · 499c49c7b67d5eb6 · new-page · decisions/skill-review-round-r014.md · cure-node scope rule, ten settled disagreements, pinned prose strings, release 0.14 spec-format/contract-version/CI policies; supersedes "Relational level 3" and the retired `next: cut` ban.
+- 2026-09-04 · 499c49c7b67d5eb6 · new-page · gotchas/wheypoint-resume-traps.md · legacy resolver scope, dropped checkpoint fields, enforced lineage and compaction ordering, promote-after-mirror, checkpoint vs commit; supersedes review-time "unenforced" claims.
+- 2026-09-04 · 499c49c7b67d5eb6 · new-page · architecture/hard-cheese-gate-contract.md · Plate-only invocation, dispatch-text `--hard`, ERROR fail-open vs publication policy, SOLO level mapping, untrusted judge input, digest freshness.
+- 2026-09-04 · 499c49c7b67d5eb6 · new-page · architecture/briesearch-mold-research-seam.md · 4-6 word slugs enforced, sidechain invocation, URL redaction, resolver-owned spec paths and slug split, publish bypass on Mold's normal path, fabricated grounding rows, single document validator, exact corpus selection.
+- 2026-09-04 · 499c49c7b67d5eb6 · merged · architecture/skill-python-bundle-doctrine.md · decorator-only command discovery, check_bundles fix, schemas-as-source compile chain, never hand-edit generated regions, renderer gaps, document_rules regeneration.
+- 2026-09-04 · 499c49c7b67d5eb6 · merged · domain-model.md · CureDiagnosisBinding full-plan coverage, PlannerRequest kind rules, three-backend domain-model target.
+- 2026-09-04 · 499c49c7b67d5eb6 · merged · workflow-invariants.md · pointer from "Handoff gates between phases" to the preamble-grammar page.
+- 2026-09-04 · 499c49c7b67d5eb6 · skipped-near-duplicate · — · handback `status:` vs `halt:` rule, disposition-based routing, and the handoff-gate block structure already live in workflow-invariants.md; per-finding ledgers, commit lists, CI status, and the 897-line skill-review-cure.md status table were transient and dropped.
+- 2026-09-04 · 499c49c7b67d5eb6 · retrieval-warning · gotchas/wheypoint-resume-traps.md · exact probe "Wheypoint resume traps" ranks 2 (0.0579) behind architecture/handoff-preamble-grammar.md (0.0584) after one lead revision and one citation revision; all natural probes pass; page kept, no rollback.
+
+
+
+- 2026-09-05 · bef0ae510984cffd · new-page · research/language-reviewability-evidence.md · promoted research report: diff size beats language choice (200–400 LOC), Ray et al. overturned by Berger et al., ~15% typed-JS bug catch, memory-safety class elimination, 19% faster defect finding with full-word identifiers, Python/TS/Go tiering, easy-cheese skill touchpoints.
+
+- 2026-09-10 · session-analytics:fan-out · new-page · research/subagent-model-selection-portability.md · per-harness model-selection bindings (Claude Code, Cursor, Copilot, Codex, OMP); Agent Skills spec has no model field; bind `cheap|default|powerful` once in routing-policy.md.
+- 2026-09-10 · session-analytics:fan-out · new-page · analytics/fanout-patterns-2026-09-10.md · no parallel fan-out, coder chains are continuations, age absorbs cure (67 coders), reviewer mode gate never fires, taste-test fix-rate parity → `reviewer (taste-test)` and `gate-runner` tier rows; time-ordered attribution gotcha.
+
+
+- 2026-09-19 · pr-702-forgiving-cli · new-page · architecture/bundle-command-dispatch.md · runtime dispatch of skill archives: top-level help, exact-name and close-match guidance with the `_` alias, the `--json`/`--full`-only hoist rule, the quote-repair rule and its `cli.run` boundary, one argv for the age gate, `LEAVES`, and the generated `bundle_command_index`.
+
+- 2026-09-20 · cdfe10a30b682635 · merged · gotchas/wheypoint-resume-traps.md · PR710 recovery publication ownership, serialized idempotency, immutable first-checkpoint evidence, and explicit-root corpus selection.
+
+- 2026-09-20 · 4a9b7570d7f195e2 · merged · architecture/ultracook-agent-topology.md · replace legacy fan ordering and manifest authority with progress-aware scope identity, OS run locking, completed-observation replay, and contained-low selection.
+
+- 2026-09-20 · 4045ae852414459a · merged · gotchas/age-review-lock-invariants.md · record source/evidence identity separation, narrow late-packet refresh, stable snapshots, and streaming no-follow evidence hashing.
+
+
+- 2026-09-28 · pr-729-direct-archives-a · merged · architecture/skill-python-bundle-doctrine.md, architecture/pyz-bundling-pipeline.md, tooling.md, architecture.md and deployment references · User-approved A keeps committed per-skill .pyz archives. Wedge is build-time only. Remove proposed loaders, sidecar locks, and first-run downloads. Issue #732 assesses release-only option B separately.
+
+
+- 2026-09-28 · 274eda970621f14a · merged · architecture/pyz-bundling-pipeline.md, architecture/skill-python-bundle-doctrine.md, tooling.md, red-gate-environment-gotchas.md · PR #729 ownership correction removes the temporary test-archive pipeline and duplicate workflow. Tests execute committed archives after Wedge checks freshness. Focused tests require an explicit rebuild after source changes.
+
+
+
+- 2026-10-14 · a0554c4dd929e3f6 · merged · adr/culture-wheypoint-collaboration-001.md · Record the Culture problem-altitude prototype and its existing handoff ownership. Exact and natural retrieval probes return the page at rank 1.
+
+
+- 2026-10-15 · 5d06dbb1e665716c · merged · adr/culture-wheypoint-collaboration-001.md · Replace explicit altitude selection with user-approved conversational navigation. Frozen identity and natural-language probes return the page at rank 1.
+
+
+
+- 2026-10-18 · 6d02516f78fb5bc0 · new-page · research/behavioral-acceptance-ears-loops.md · promoted dotfiles research on behavioral acceptance: EARS plus BDD examples, false-success and known-working controls, test-admission question, acceptance-repair versus optimization loops, constraints as non-compensating gates; visual summary and call manifests under research/artifacts/behavioral-acceptance-ears-loops/. Exact and natural probes rank 1-2.
+- 2026-10-18 · 6d02516f78fb5bc0 · new-page · research/behavioral-acceptance-easy-cheese-suggestions.md · seven candidate changes for Mold, Cook, Press, Age, loops, doctrine tests, and skill experiments, grounded at 336258e0; records wiki drift where /cut and GateReceipt still read as live. Exact and natural probes rank 1.
+- 2026-10-18 · 6d02516f78fb5bc0 · new-page · sources/index.md and 14 sources/*.md pages · one retrieval-spine page per cited source (EARS, Gherkin, BDD, BDD myths, Google testing and mutation, Hypothesis stateful, Anthropic evals and agents, Self-Refine, holdout reuse, ICLR and TACL self-correction, ArchUnit). Three paper titles verified by fetch on 2026-10-18. All exact-title and central-claim probes in top 3.
+- 2026-10-18 · 9014418ab9a8e937 · merged · ideas/minimal-easy-cheese.md · Prepare the manifesto discussion for review: separate assistant proposals, state evidence limits, and add measurable next steps. Publication does not approve a rewrite.
+- 2026-10-22 · tenet-reconciliation-rulings · curated · easy-cheese-manifesto.md, ideas/minimal-easy-cheese.md, adr/codex-omp-portability-002.md, adr/deterministic-fanout-sizing-005.md, adr/workflow-contract-milknado-seam-007.md, adr/workflow-contract-milknado-seam-008.md, adr/hard-cheese-retained-002.md, adr/workflow-contract-milknado-seam-006.md · Fold the owner's fork and tension rulings into the canonical manifesto; record forks A, B, C, I, and J as ADRs; mark seam-006 superseded in part; replace measure-first next steps with the ruled change-first order.
+
+- 2026-10-19 · 410a1f3752f7508b · new-page · research/c4-model-evaluation.md · C4 is a good default for static structure; Context + Container suffice for most teams; alternatives table; easy-cheese draws C4 in Mermaid flowchart (diagrams.md, diagram-templates.md).
+- 2026-10-19 · 410a1f3752f7508b · new-page · research/c4-models-as-code-tools.md · LikeC4 best-supported OSS alternative; Structurizr now Apache-2.0 with one committer; every tool has a CLI; local render test ranks C4-PlantUML first, Mermaid C4 last.
+- 2026-10-19 · 410a1f3752f7508b · new-page · sources/c4-model-site.md, sources/mermaid-c4-diagrams.md, sources/structurizr-export.md, sources/likec4-cli.md · source pages with retrieval spine for the two research pages; all 13 frozen probes passed.
+
+
+- 2026-10-19 · affinage:pr-838 · curated · research/c4-model-evaluation.md, research/c4-models-as-code-tools.md, sources/*.md · review fixes: linked the workingsoftware.dev source, dropped checkout-local evidence paths, gave source pages topic H1s and the sources index lane prose, split long and passive sentences.
+
+
+
+- 2026-11-01 · d80e803c48823793 · merged · adr/mold-review-canvas-008.md · recorded persistent settled/draft EARS requirements, independent fork batches, agent-only prerequisite settlement, and separate phone scroll panes; all frozen retrieval probes rank the ADR first.
+- 2026-11-01 · affinage:pr-848 · merged · adr/mold-review-canvas-008.md · phone panes keep usable minimum heights and the page scrolls (screens showed 0-1 px panes at 375x667 under a long goal); drafts list before settled requirements.
+
+- 2026-11-01 · affinage:pr-848 · curated · adr/mold-review-canvas-010.md, adr/mold-review-canvas-008.md, adr/index.md · review fixes: moved the requirements, fork-settlement, and phone-pane decisions into amending ADR 010; made `settled_fork_ids` cumulative; named waiting and dependency-error states in the canvas contract.
+- 2026-11-02 · affinage:pr-848 · curated · adr/mold-review-canvas-010.md · the phone shapes minimum now applies to the shape content below the tabs (it measured 106 px at 375x667 and 124 px at 844x390); recomputed test citations.
+- 2026-11-02 · cook:issue-849 · curated · adr/mold-review-canvas-010.md · `review publish` returns non-blocking `warnings` for malformed, missing, open-and-settled, and cyclic fork dependencies and for dropped requirement IDs; it warns and does not reject, so ADR 008 stays true and the browser defence stays testable.

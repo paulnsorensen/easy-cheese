@@ -9,16 +9,22 @@ would fail CI on every unrelated rebuild.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Protocol
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-SHARED_SCRIPTS = REPO_ROOT / "shared" / "scripts"
+SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
+
+
+class _HtmlReportModule(Protocol):
+    def render(self, markdown: str, *, title: str) -> str: ...
 
 
 def _load(name: str, path: Path) -> ModuleType:
@@ -38,51 +44,51 @@ def hr() -> ModuleType:
 
 
 class TestBlockTypes:
-    def test_atx_heading_levels(self, hr: ModuleType) -> None:
+    def test_atx_heading_levels(self, hr: _HtmlReportModule) -> None:
         out = hr.render("# One\n\n### Three", title="t")
         assert "<h1>One</h1>" in out
         assert "<h3>Three</h3>" in out
 
-    def test_hash_without_space_is_not_a_heading(self, hr: ModuleType) -> None:
+    def test_hash_without_space_is_not_a_heading(self, hr: _HtmlReportModule) -> None:
         # ATX headings require '#' + space; '#foo' is prose, not a heading.
         out = hr.render("#foo", title="t")
         assert "<h1>" not in out
         assert "<p>#foo</p>" in out
 
-    def test_paragraph(self, hr: ModuleType) -> None:
+    def test_paragraph(self, hr: _HtmlReportModule) -> None:
         assert "<p>hello world</p>" in hr.render("hello world", title="t")
 
-    def test_unordered_list(self, hr: ModuleType) -> None:
+    def test_unordered_list(self, hr: _HtmlReportModule) -> None:
         out = hr.render("- alpha\n- beta", title="t")
         assert "<ul><li>alpha</li><li>beta</li></ul>" in out
 
-    def test_ordered_list(self, hr: ModuleType) -> None:
+    def test_ordered_list(self, hr: _HtmlReportModule) -> None:
         out = hr.render("1. first\n2. second", title="t")
         assert "<ol><li>first</li><li>second</li></ol>" in out
 
-    def test_nested_list_one_level(self, hr: ModuleType) -> None:
+    def test_nested_list_one_level(self, hr: _HtmlReportModule) -> None:
         # A fixed 2-space indent unit nests the sub-item inside its parent <li>.
         out = hr.render("- top\n  - child", title="t")
         assert "<ul><li>top<ul><li>child</li></ul></li></ul>" in out
 
-    def test_blockquote(self, hr: ModuleType) -> None:
+    def test_blockquote(self, hr: _HtmlReportModule) -> None:
         assert "<blockquote>quoted</blockquote>" in hr.render("> quoted", title="t")
 
-    def test_horizontal_rule(self, hr: ModuleType) -> None:
+    def test_horizontal_rule(self, hr: _HtmlReportModule) -> None:
         assert "<hr>" in hr.render("---", title="t")
 
-    def test_fenced_code_block(self, hr: ModuleType) -> None:
+    def test_fenced_code_block(self, hr: _HtmlReportModule) -> None:
         out = hr.render("```\nx = 1\n```", title="t")
         assert "<pre><code>x = 1</code></pre>" in out
 
-    def test_fenced_code_content_is_not_block_processed(self, hr: ModuleType) -> None:
+    def test_fenced_code_content_is_not_block_processed(self, hr: _HtmlReportModule) -> None:
         # A '# ' line inside a fence is literal text, never an <h1>.
         out = hr.render("```\n# not a heading\n- not a list\n```", title="t")
         assert "<pre><code># not a heading\n- not a list</code></pre>" in out
         assert "<h1>" not in out
         assert "<ul>" not in out
 
-    def test_pipe_table(self, hr: ModuleType) -> None:
+    def test_pipe_table(self, hr: _HtmlReportModule) -> None:
         md = "| A | B |\n| --- | --- |\n| 1 | 2 |"
         out = hr.render(md, title="t")
         assert "<table><thead><tr><th>A</th><th>B</th></tr></thead>" in out
@@ -90,7 +96,7 @@ class TestBlockTypes:
 
 
 class TestInline:
-    def test_bold_italic_link_code(self, hr: ModuleType) -> None:
+    def test_bold_italic_link_code(self, hr: _HtmlReportModule) -> None:
         out = hr.render("**b** *i* _j_ [t](http://x) `c`", title="t")
         assert "<strong>b</strong>" in out
         assert "<em>i</em>" in out
@@ -98,14 +104,14 @@ class TestInline:
         assert '<a href="http://x">t</a>' in out
         assert "<code>c</code>" in out
 
-    def test_code_span_first_keeps_bold_literal(self, hr: ModuleType) -> None:
+    def test_code_span_first_keeps_bold_literal(self, hr: _HtmlReportModule) -> None:
         # The inline-order gotcha: bold markup inside a code span must stay literal,
         # not become <strong> -- code spans are resolved before bold.
         out = hr.render("`**x**`", title="t")
         assert "<code>**x**</code>" in out
         assert "<strong>" not in out
 
-    def test_link_url_with_underscores_not_emphasized(self, hr: ModuleType) -> None:
+    def test_link_url_with_underscores_not_emphasized(self, hr: _HtmlReportModule) -> None:
         # Report artifacts routinely link to underscored GitHub blob paths; running
         # the italic pass over the URL would splice <em> into the href and silently
         # point it at garbage. The href must survive verbatim.
@@ -114,7 +120,7 @@ class TestInline:
         assert "<em>" not in out
         assert "<strong>" not in out
 
-    def test_nul_token_collision_is_sanitized(self, hr: ModuleType) -> None:
+    def test_nul_token_collision_is_sanitized(self, hr: _HtmlReportModule) -> None:
         # Link placeholders use NUL sentinels internally; source NUL bytes must not
         # collide with that private token format or leak into HTML.
         out = hr.render("before \x000\x00 after [x](https://example.com)", title="t")
@@ -122,19 +128,19 @@ class TestInline:
         assert "\x00" not in out
         assert '<a href="https://example.com">x</a>' in out
 
-    def test_link_url_special_chars_escaped(self, hr: ModuleType) -> None:
+    def test_link_url_special_chars_escaped(self, hr: _HtmlReportModule) -> None:
         # A URL carrying &, <, or " must be html-escaped inside the href so it cannot
         # break out of the attribute or inject markup.
         out = hr.render('[q](https://x/p?a=1&b=2_c="<z>")', title="t")
         assert 'href="https://x/p?a=1&amp;b=2_c=&quot;&lt;z&gt;&quot;"' in out
 
-    def test_link_text_still_gets_inline_formatting(self, hr: ModuleType) -> None:
+    def test_link_text_still_gets_inline_formatting(self, hr: _HtmlReportModule) -> None:
         # The visible link text must still render inline emphasis while the URL is
         # left untouched -- protecting the URL must not disable text formatting.
         out = hr.render("[**bold** text](http://x/a_b)", title="t")
         assert '<a href="http://x/a_b"><strong>bold</strong> text</a>' in out
 
-    def test_dangerous_scheme_rendered_as_plain_text(self, hr: ModuleType) -> None:
+    def test_dangerous_scheme_rendered_as_plain_text(self, hr: _HtmlReportModule) -> None:
         # Report bodies can quote untrusted content; a javascript: URL must never
         # become a clickable href. It degrades to the visible link text.
         out = hr.render("[x](javascript:alert(1))", title="t")
@@ -142,25 +148,86 @@ class TestInline:
         assert 'href="javascript' not in out
         assert "<p>x)</p>" in out
 
+    def test_dangerous_scheme_with_ascii_control_is_plain_text(
+        self, hr: _HtmlReportModule
+    ) -> None:
+        out = hr.render("[x](java\tscript:alert(1))", title="t")
+        assert "href=" not in out
+        assert "<p>x)</p>" in out
+
 
 class TestEscaping:
-    def test_prose_angle_and_amp_escaped(self, hr: ModuleType) -> None:
+    def test_prose_angle_and_amp_escaped(self, hr: _HtmlReportModule) -> None:
         out = hr.render("a < b & c > d", title="t")
         assert "a &lt; b &amp; c &gt; d" in out
         # Raw, unescaped angle brackets from source must never pass through.
         assert "a < b" not in out
 
-    def test_code_span_content_escaped(self, hr: ModuleType) -> None:
+    def test_code_span_content_escaped(self, hr: _HtmlReportModule) -> None:
         out = hr.render("`<script>&`", title="t")
         assert "<code>&lt;script&gt;&amp;</code>" in out
 
-    def test_emitted_tags_not_escaped(self, hr: ModuleType) -> None:
+    def test_emitted_tags_not_escaped(self, hr: _HtmlReportModule) -> None:
         # We escape source text, never the tags we emit ourselves.
         assert "<h1>Title</h1>" in hr.render("# Title", title="t")
 
 
+class TestClosedSubsetContract:
+    """Pins the deliberately-not-CommonMark boundary (#517, docs/adr/html-report-renderer-001.md).
+
+    Keeping the hand-rolled renderer is a decision, so the two properties that
+    decision rests on are asserted here: raw HTML never reaches the document,
+    and constructs outside the documented subset degrade to literal text rather
+    than raising or half-rendering. A drift toward CommonMark fails these.
+    """
+
+    def test_raw_html_block_is_escaped_not_passed_through(self, hr: _HtmlReportModule) -> None:
+        out = hr.render("<script>alert(1)</script>", title="t")
+        assert "<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>" in out
+        assert "<script" not in out
+
+    def test_raw_html_inline_is_escaped_while_subset_markup_still_renders(
+        self, hr: _HtmlReportModule
+    ) -> None:
+        out = hr.render("<div>raw **x**</div>", title="t")
+        assert "<p>&lt;div&gt;raw <strong>x</strong>&lt;/div&gt;</p>" in out
+
+    def test_setext_heading_stays_a_paragraph(self, hr: _HtmlReportModule) -> None:
+        out = hr.render("Title\n=====", title="t")
+        assert "<p>Title\n=====</p>" in out
+        assert "<h1>" not in out
+
+    def test_setext_h2_underline_is_read_as_a_horizontal_rule(
+        self, hr: _HtmlReportModule
+    ) -> None:
+        # '---' is the subset's horizontal rule; it never promotes the line above.
+        out = hr.render("Title\n---", title="t")
+        assert "<p>Title</p>\n<hr>" in out
+        assert "<h2>" not in out
+
+    def test_reference_link_stays_literal(self, hr: _HtmlReportModule) -> None:
+        out = hr.render("See [text][ref].\n\n[ref]: https://example.com", title="t")
+        assert "<p>See [text][ref].</p>" in out
+        assert "<p>[ref]: https://example.com</p>" in out
+        assert "<a href=" not in out
+
+    def test_image_stays_literal(self, hr: _HtmlReportModule) -> None:
+        out = hr.render("![img](a.png)", title="t")
+        assert "<p>![img](a.png)</p>" in out
+        assert "<a " not in out
+        assert "<img" not in out
+
+    def test_strikethrough_and_definition_list_stay_literal(
+        self, hr: _HtmlReportModule
+    ) -> None:
+        out = hr.render("~~gone~~\n\nTerm\n: definition", title="t")
+        assert "<p>~~gone~~</p>" in out
+        assert "<p>Term\n: definition</p>" in out
+        assert "<del>" not in out and "<dl>" not in out
+
+
 class TestTablePipes:
-    def test_escaped_pipe_is_literal_cell_content(self, hr: ModuleType) -> None:
+    def test_escaped_pipe_is_literal_cell_content(self, hr: _HtmlReportModule) -> None:
         # '\|' is a literal pipe inside a cell, not a column delimiter.
         md = "| A | B |\n| --- | --- |\n| x \\| y | z |"
         out = hr.render(md, title="t")
@@ -169,13 +236,13 @@ class TestTablePipes:
 
 
 class TestMermaid:
-    def test_mermaid_fence_emits_pre_and_one_script(self, hr: ModuleType) -> None:
+    def test_mermaid_fence_emits_pre_and_one_script(self, hr: _HtmlReportModule) -> None:
         out = hr.render("```mermaid\ngraph TD; A-->B;\n```", title="t")
         assert '<pre class="mermaid">graph TD; A--&gt;B;</pre>' in out
         assert out.count('<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>') == 1
         assert out.count("mermaid.initialize") == 1
 
-    def test_no_mermaid_fence_emits_no_script(self, hr: ModuleType) -> None:
+    def test_no_mermaid_fence_emits_no_script(self, hr: _HtmlReportModule) -> None:
         # A report with no mermaid stays fully offline: zero script tags.
         out = hr.render("# heading\n\n```\ncode\n```", title="t")
         assert "<script" not in out
@@ -183,7 +250,7 @@ class TestMermaid:
 
 
 class TestDeterminism:
-    def test_same_input_yields_identical_bytes(self, hr: ModuleType) -> None:
+    def test_same_input_yields_identical_bytes(self, hr: _HtmlReportModule) -> None:
         # Determinism matters because CI diffs committed HTML bundles; a
         # non-deterministic renderer would fail CI on every unrelated rebuild.
         md = "# Report\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n```mermaid\ngraph TD;\n```\n"
@@ -193,7 +260,7 @@ class TestDeterminism:
 
 
 class TestDocumentShape:
-    def test_complete_self_contained_document(self, hr: ModuleType) -> None:
+    def test_complete_self_contained_document(self, hr: _HtmlReportModule) -> None:
         out = hr.render("# Hi", title="My <Report>")
         assert out.startswith("<!DOCTYPE html>\n")
         assert out.rstrip().endswith("</html>")
@@ -205,7 +272,7 @@ class TestDocumentShape:
 class TestHtmlReportCli:
     def test_rejects_windows_drive_designator_in_out_name(self, tmp_path: Path) -> None:
         report = tmp_path / "report.md"
-        report.write_text("# Report\n", encoding="utf-8")
+        _ = report.write_text("# Report\n", encoding="utf-8")
         env = os.environ.copy()
         env["PYTHONPATH"] = os.pathsep.join([str(SHARED_SCRIPTS), env.get("PYTHONPATH", "")])
 
@@ -226,4 +293,4 @@ class TestHtmlReportCli:
         )
 
         assert result.returncode == 2
-        assert "rejects path traversal" in result.stderr
+        assert "rejects path traversal" in json.loads(result.stderr)["error"]

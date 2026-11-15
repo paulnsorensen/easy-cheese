@@ -36,7 +36,7 @@ HANDOFF_GATE_REF = "handoff-gate.md"
 # user", "question transport", lettered-option prompts, "handoff gate".
 QUESTION_KEYWORDS = re.compile(
     r"ask (?:the )?user|ask one|ask via|AskUserQuestion|structured question|"
-    r"confirm with the user|question transport|handoff gate",
+    + r"confirm with the user|question transport|handoff gate",
     re.I,
 )
 
@@ -65,10 +65,13 @@ ROUTED_FILES = {
     "skills/culture/SKILL.md",
     "skills/cure/SKILL.md",
     "skills/melt/SKILL.md",
+    "skills/mold/references/early-curds.md",
     "skills/mold/references/evals.md",
+    "skills/mold/references/gate-graph.md",
+    "skills/mold/references/mini-spec-mode.md",  # direct Cook consent question
     "skills/mold/SKILL.md",
     "skills/pasteurize/SKILL.md",
-    "skills/plate/SKILL.md",
+    "skills/plate/SKILL.md",  # the gate-`ERROR` ask before publication
     "skills/press/SKILL.md",
     "skills/wheypoint/SKILL.md",
 }
@@ -77,42 +80,60 @@ ROUTED_FILES = {
 # exemption reason. Pinned by literal snippet so a rewrite forces re-audit.
 EXEMPT_SITES: list[tuple[str, str, str]] = [
     (
+        "skills/plate/references/topology.md",
+        "Plate decides the review shape. It does not ask the user.",
+        "negative instruction: Plate decides topology without a question, so "
+        + "the file has no live question site",
+    ),
+    (
         "skills/age/references/dimensions.md",
         'Confirm with the user that Y is intentional',
         "rhetorical example string inside report-template guidance, not a "
-        "live question site",
+        + "live question site",
     ),
     (
         "skills/briesearch/references/safety.md",
         "When unsure, ask the user before sending the query.",
         "mechanical yes/no privacy gate — qualifies for the freshness "
-        "policy's mechanical fast-path, no design tradeoff to discuss first",
+        + "policy's mechanical fast-path, no design tradeoff to discuss first",
+    ),
+    (
+        "skills/cook/references/prototype-mode.md",
+        "If the working tree is dirty, stop and ask the user to commit or stash first.",
+        "mechanical stop/ask gate before setup runs, no design tradeoff to "
+        + "discuss first",
+    ),
+    (
+        "skills/culture/references/problem-altitudes.md",
+        "Offer a useful zoom direction and ask one conversational question.",
+        "Culture keeps exploration conversational; its SKILL.md routes "
+        + "session-end handoffs through the shared transport",
     ),
     (
         "skills/briesearch/references/unavailable.md",
         "Stop and ask the user when:",
         "describes refusal trigger conditions; the actual ask transport is "
-        "routed via skills/briesearch/SKILL.md's ask-user-question.md link "
-        "in the same skill",
+        + "routed via skills/briesearch/SKILL.md's ask-user-question.md link "
+        + "in the same skill",
     ),
     (
         "skills/cheese/references/classification.md",
         "Ask one question. Re-enter",
         "mechanical single clarifying question (clarify branch); deferred to "
-        "cure/reviewer territory, not this pass",
+        + "cure/reviewer territory, not this pass",
     ),
     (
         "skills/cheese/references/classification.md",
         "If still tied, clarify.",
         "mechanical single clarifying question; deferred to cure/reviewer "
-        "territory, not this pass",
+        + "territory, not this pass",
     ),
     (
         "skills/cheese/references/coherence-check.md",
         "the gate already exists, so swap its options",
         "internal mechanism note describing the same handoff gate cheese/"
-        "SKILL.md already routes through; deferred to cure/reviewer territory, "
-        "not this pass",
+        + "SKILL.md already routes through; deferred to cure/reviewer territory, "
+        + "not this pass",
     ),
     (
         "skills/cheese/references/optional-plugins.md",
@@ -123,40 +144,70 @@ EXEMPT_SITES: list[tuple[str, str, str]] = [
         "skills/affinage/references/handoff-templates.md",
         "Read this when rendering either handoff gate",
         "internal mechanism note for the gates affinage/SKILL.md already "
-        "routes through handoff-gate.md; not a transport site itself",
+        + "routes through handoff-gate.md; not a transport site itself",
     ),
     (
         "skills/cheese/references/escalation.md",
         "it inserts a handoff gate before the final dispatch",
         "internal mechanism note describing the gate cheese/SKILL.md "
-        "already routes through; deferred to cure/reviewer territory, "
-        "not this pass",
+        + "already routes through; deferred to cure/reviewer territory, "
+        + "not this pass",
     ),
     (
         "skills/cure/references/auto-mode.md",
         "the handoff gate",
         "internal auto-mode mechanism note; cure/SKILL.md's own ask site "
-        "already routes through handoff-gate.md",
+        + "already routes through handoff-gate.md",
     ),
     (
         "skills/cure/references/selection.md",
-        "invoke `/age --scope <touched-paths> --auto` directly (no handoff gate)",
+        "invoke `/age <slug> --scope <touched-path> --auto` directly "
+        + "(no handoff gate)",
         "internal auto-mode mechanism note; cure/SKILL.md's own ask site "
-        "already routes through handoff-gate.md",
+        + "already routes through handoff-gate.md",
     ),
     (
         "skills/easy-cheese-setup/SKILL.md",
-        "Show the report as evidence, confirm with the user",
+        "Ask the user for confirmation.",
         "mechanical yes/no confirm immediately after the dry-run report is "
-        "shown — mechanical fast-path, no undiscussed design option",
+        + "shown — mechanical fast-path, no undiscussed design option",
+    ),
+    (
+        "skills/briesearch/references/routing.md",
+        "Is the question about a library API, configuration, or migration?",
+        "decision-tree label for capability routing, not a live question site",
+    ),
+    (
+        "skills/briesearch/references/synthesis.md",
+        "when the question warranted a deep look",
+        "report-shape description, not a live question site",
+    ),
+    (
+        "skills/briesearch/references/evals.md",
+        "That run does not ask the user a question.",
+        "a rule that forbids a question in a sidechain run, not a question-"
+        + "asking site",
+    ),
+    (
+        "skills/hard-cheese/references/composition.md",
+        "Ask the user before you publish. The fail-open divergence applies.",
+        "a mirror of the Plate publication policy; the ask itself lives in "
+        + "plate/SKILL.md, which routes through the transport chokepoint",
+    ),
+    (
+        "skills/mold/references/grounding.md",
+        "blocks the first structured question until the ledger carries a "
+        + "probe outcome",
+        "precondition on when a question may fire, not a question-asking site "
+        + "— the ask itself stays in mold/SKILL.md, which routes through the "
+        + "transport chokepoint",
     ),
     (
         "skills/mold/references/handshake.md",
-        "ask the user to choose the action: **create/link now** or "
-        "**leave prepared**",
+        "The user must select any external **create/link now** action.",
         "mechanical fast-path: create/link-now vs leave-prepared is the "
-        "operational disposition of an already-approved follow-up unit, "
-        "intelligible without prior-session context",
+        + "operational disposition of an already-approved follow-up unit, "
+        + "intelligible without prior-session context",
     ),
 ]
 
@@ -166,7 +217,7 @@ def _read(rel_path: str) -> str:
 
 
 def test_routed_files_link_transport_chokepoint() -> None:
-    missing = []
+    missing: list[str] = []
     for rel in sorted(ROUTED_FILES):
         text = _read(rel)
         if HANDOFF_GATE_REF not in text and TRANSPORT_REF not in text:
@@ -199,7 +250,7 @@ def _unaccounted_sites(
     """Core sweep logic, factored out so a synthetic fixture can exercise
     it directly (see test_sweep_catches_new_bare_site_in_new_file) instead
     of relying only on today's real-repo census staying bare."""
-    unaccounted = []
+    unaccounted: list[str] = []
     for path in candidates:
         rel = str(path.relative_to(repo_root))
         if rel in sibling_owned:
@@ -268,7 +319,7 @@ def test_sweep_catches_new_bare_site_in_new_file(tmp_path: Path) -> None:
     tomorrow."""
     skill_dir = tmp_path / "skills" / "newskill"
     skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text(
+    _ = (skill_dir / "SKILL.md").write_text(
         "# New Skill\n\nBefore running, ask the user to pick an option.\n",
         encoding="utf-8",
     )
@@ -285,7 +336,7 @@ def test_sweep_skips_sibling_owned_and_accounted_files(tmp_path: Path) -> None:
     actually suppress the same bare content, not just an empty one."""
     skill_dir = tmp_path / "skills" / "newskill"
     skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text(
+    _ = (skill_dir / "SKILL.md").write_text(
         "Before running, ask the user to pick an option.\n", encoding="utf-8"
     )
     candidates = list((tmp_path / "skills").glob("*/SKILL.md"))

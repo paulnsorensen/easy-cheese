@@ -1,0 +1,5 @@
+# Build this skill's direct archive from the shared runtime package.
+# The selected paths preserve package namespaces while excluding foreign skills.
+name = "easy-cheese-setup"
+entry = "easy_cheese.skills.easy_cheese_setup.commands:main"
+source_paths = ["__init__.py", "skills/__init__.py", "skills/easy_cheese_setup", "shared", "cli"]

@@ -16,7 +16,7 @@ A skill is a directory whose shape encodes progressive disclosure
 skills/<skill-name>/
 ├── SKILL.md          # required: YAML frontmatter (name + description) + body
 ├── references/       # optional: detail pulled in on demand
-├── scripts/          # optional: executable helpers (often a .pyz bundle)
+├── scripts/          # optional: self-contained executable .pyz archive
 └── assets/           # optional: templates / static resources
 ```
 
@@ -39,12 +39,12 @@ is referenced by sibling-relative path (`../cheese/references/<file>.md`
 from a `SKILL.md`, `../../cheese/references/<file>.md` from a
 `references/*.md`) (`README.md:53`).
 
-Skills that depend on `shared/scripts/` ship a pre-bundled `.pyz` so the
-shared helpers are self-contained at install time — invoked as
-`python3 ${CLAUDE_SKILL_DIR}/scripts/<skill>.pyz <subcommand>`
-(`skills/mold/SKILL.md:22`). Bundles exist for affinage, briesearch,
-cook, melt, mold, and ultracook; `build-pyz.yml` rebuilds them on
-every relevant push to `main`.
+Python skills ship one self-contained archive, invoked as
+`python3 skills/<skill>/scripts/<skill>.pyz <subcommand>`.
+Wedge builds that archive; startup does not download it.
+Applications start at `src/easy_cheese/skills/<skill>/commands.py`.
+Each manifest selects its own skill package, shared support, CLI support, schemas, and pinned dependencies.
+See [tooling](./tooling.md) and the [bundle doctrine](./architecture/skill-python-bundle-doctrine.md) for the build contract.
 
 
 
@@ -66,28 +66,33 @@ this repo, and the CI ratchet live in
 ## The cheese pipeline
 
 The workflow skills compose into one pipeline, ordered
-**culture → mold → cook → press → age → cure → plate**
-(`skills/mold/SKILL.md:125`, `skills/cook/SKILL.md:90`):
+**culture → mold → cook (⇄ press) → age → cure → plate**.
+Cook dispatches Press automatically inside its own loop for behavior
+work, so Press is not a user-selected step
+([adr/acceptance-demonstration-press-fold-001](./adr/acceptance-demonstration-press-fold-001.md)):
 
 | Skill | Role in the pipeline |
 |---|---|
 | `/cheese` | Front door — classifies input, routes to the right skill |
 | `/culture` | No-write thinking / exploration |
 | `/mold` | Converge a fuzzy idea into an approved spec |
-| `/cook` | TDD-disciplined implementation of a spec |
-| `/press` | Adversarial test hardening |
+| `/cook` | Implementation of a spec; owns first acceptance coverage and the Press loop |
+| `/press` | Adversarial pass that Cook dispatches after its taste test (one false-success attack per round); `/press <slug>` stays for a manual re-run |
 | `/age` | Ten-dimension review → severity-grouped findings |
 | `/cure` | Apply selected findings as focused fixes |
 | `/plate` | Write and verify final artifacts, validate, commit, and publish one PR or a stack |
-| `/ultracook` | Pipeline a spec in fresh-context isolation; parallel mode fans file-disjoint curds → PRs |
+| `/ultracook` | Retired (PR #317) — a compatibility redirect to `/cook`. The fresh-context isolation and file-disjoint parallel fan it once ran now live in `/cook`'s fan pathway |
 
 Workflow skills call source-code backends directly through the shared
 `skills/cheese/references/code-intelligence-routing.md` contract. The retired
 code-intelligence wrapper skills previously sat beneath the pipeline; their
-policy now lives in that shared reference. `/ultracook` chains cook → press →
-age → cure non-interactively in fresh-context isolation; its parallel mode
+policy now lives in that shared reference. `/cook`'s fan pathway — which
+absorbed the now-retired `/ultracook` (PR #316 moved ownership; PR #317
+retired the entry point to a redirect stub) — chains cook (with a per-curd Press loop) → age ↔ cure, then an
+integrated acceptance check → age ↔ cure non-interactively in fresh-context isolation; its parallel mode
 (formerly `/cheese-factory`) fans file-disjoint curds through `src/fanout/`
-into reviewable PRs (`AGENTS.md:42-49`).
+into reviewable PRs (`AGENTS.md:42-49`; see
+[architecture/ultracook-agent-topology](./architecture/ultracook-agent-topology.md)).
 
 ## Portability is the design center
 
@@ -116,4 +121,6 @@ the other pipeline invariants.
 
 
 _Source: /briesearch on Agent Skill sizing (progressive-disclosure load levels) · Updated: 2026-07-27_
+
+_Source: [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729), approved A correction · Updated: 2026-09-28 · Supersedes: proposed runtime loaders and release-only archive assets._
 

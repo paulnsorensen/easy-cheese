@@ -19,3 +19,6 @@ tokenizers = { version = "=0.22.2", optional = true }
 
 [features]
 model = ["dep:fastembed", "dep:reqwest", "dep:tokenizers"]
+
+[dev-dependencies]
+tempfile = "3"

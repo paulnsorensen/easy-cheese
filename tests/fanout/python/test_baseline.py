@@ -1,27 +1,25 @@
 """Tests for src/fanout/baseline.py -- classify() baseline diff classifier.
 
-Covers the taxonomy /ultracook's baseline-aware quality gate (#298) needs:
+Covers the taxonomy /cook's baseline-aware quality gate needs:
 an unchanged baseline must let the run continue (no false regressions), and
 a new regression must still surface as `new` so the three-way policy can
-bound-fix or halt on it. `baseline.py` is not yet registered in ultracook.pyz's
-SKILLS map (a separate wiring task), so these tests import the module
-directly from src/fanout/ rather than through the built bundle.
+bound-fix or halt on it. These tests import the shared module directly.
 """
 from __future__ import annotations
 
-import argparse
 import io
 import json
 import sys
 from pathlib import Path
 
+import fromargs
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_ROOT / "shared" / "scripts"))  # cli.py
 sys.path.insert(0, str(REPO_ROOT / "src" / "fanout"))
 
-import baseline  # noqa: E402
+from easy_cheese.shared.fanout import baseline  # noqa: E402
+from easy_cheese.shared.fanout.baseline import classify_cmd  # noqa: E402
 
 
 def _record(suite: str, test_id: str, signature: str) -> baseline.FailureRecord:
@@ -202,63 +200,67 @@ class TestBucketsAreMutuallyExclusiveAndOrdered:
         assert len(seen) == len(set(seen))
 
 
-class TestCmdClassify:
-    """The CLI seam (`_cmd_classify`) has no coverage until the wiring curd
+class TestClassifyCmd:
+    """The CLI seam (`classify_cmd`) has no coverage until the wiring curd
     registers baseline.py in the .pyz bundle -- lock the stdin-JSON-in /
     JSON-out contract directly here so that wiring lands against a tested
     seam."""
 
-    def test_reads_stdin_and_emits_classification_json(self, monkeypatch, capsys) -> None:
+    def test_reads_stdin_and_returns_classification(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         payload = {
             "baseline": [_record("unit", "test_a", "AssertionError: boom")],
             "current": [_record("unit", "test_a", "AssertionError: boom")],
         }
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
-        baseline._cmd_classify(argparse.Namespace())
-        emitted = json.loads(capsys.readouterr().out)
-        assert emitted == baseline.classify(payload["baseline"], payload["current"])
+        result = classify_cmd()
+        assert result == baseline.classify(payload["baseline"], payload["current"])
 
-    def test_missing_keys_default_to_empty_lists(self, monkeypatch, capsys) -> None:
+    def test_missing_keys_default_to_empty_lists(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setattr(sys, "stdin", io.StringIO("{}"))
-        baseline._cmd_classify(argparse.Namespace())
-        emitted = json.loads(capsys.readouterr().out)
-        assert emitted == {"identical": [], "new": [], "changed": [], "resolved": []}
+        result = classify_cmd()
+        assert result == {"identical": [], "new": [], "changed": [], "resolved": []}
 
-    def test_malformed_stdin_raises_cli_error(self, monkeypatch) -> None:
+    def test_malformed_stdin_raises_cli_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Invalid JSON must hit the same CliError -> exit-2 contract every
         # other seam honours, not a raw traceback.
         monkeypatch.setattr(sys, "stdin", io.StringIO("not json"))
-        with pytest.raises(baseline.cli.CliError, match="expected a JSON object"):
-            baseline._cmd_classify(argparse.Namespace())
+        with pytest.raises(fromargs.CliError, match="expected a JSON object"):
+            _ = classify_cmd()
 
-    def test_non_object_stdin_raises_cli_error(self, monkeypatch) -> None:
+    def test_non_object_stdin_raises_cli_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # A top-level list/scalar parses as valid JSON but has no .get --
         # must still surface as CliError, not an AttributeError traceback.
         monkeypatch.setattr(sys, "stdin", io.StringIO("[1, 2, 3]"))
-        with pytest.raises(baseline.cli.CliError, match="expected a JSON object"):
-            baseline._cmd_classify(argparse.Namespace())
+        with pytest.raises(fromargs.CliError, match="expected a JSON object"):
+            _ = classify_cmd()
 
-    def test_wrong_typed_baseline_raises_cli_error(self, monkeypatch) -> None:
+    def test_wrong_typed_baseline_raises_cli_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # A well-formed JSON object whose "baseline" value is the wrong type
         # must raise CliError before reaching classify(), not a raw TypeError.
         monkeypatch.setattr(
             sys, "stdin", io.StringIO(json.dumps({"baseline": "notalist", "current": []}))
         )
-        with pytest.raises(baseline.cli.CliError, match="baseline must be a list"):
-            baseline._cmd_classify(argparse.Namespace())
+        with pytest.raises(fromargs.CliError, match="baseline must be a list"):
+            _ = classify_cmd()
 
-    def test_wrong_typed_current_raises_cli_error(self, monkeypatch) -> None:
+    def test_wrong_typed_current_raises_cli_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             sys, "stdin", io.StringIO(json.dumps({"baseline": [], "current": "notalist"}))
         )
-        with pytest.raises(baseline.cli.CliError, match="current must be a list"):
-            baseline._cmd_classify(argparse.Namespace())
+        with pytest.raises(fromargs.CliError, match="current must be a list"):
+            _ = classify_cmd()
 
-    def test_malformed_record_missing_keys_raises_cli_error(self, monkeypatch) -> None:
+    def test_malformed_record_missing_keys_raises_cli_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # A record shaped like {"foo": 1} parses fine but lacks the required
         # keys classify() indexes -- must raise CliError, not KeyError.
         monkeypatch.setattr(
             sys, "stdin", io.StringIO(json.dumps({"baseline": [{"foo": 1}], "current": []}))
         )
-        with pytest.raises(baseline.cli.CliError, match=r"baseline\[0\] missing required key"):
-            baseline._cmd_classify(argparse.Namespace())
+        with pytest.raises(fromargs.CliError, match=r"baseline\[0\] missing required key"):
+            _ = classify_cmd()

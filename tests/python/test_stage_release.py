@@ -1,13 +1,9 @@
-"""The staged release tree is exactly the shippable surface: every skill carries
-its built <skill>.pyz and its SKILL.md, no raw .py sources leak in, and dev-only
-scaffolding (src/, shared/, scripts/, tests/, docs/, .github/) is left behind.
-These are the invariants that, when violated silently, shipped the empty v0.5.1.
-"""
+"""The staged release tree contains one executable archive per Python skill."""
 
 from __future__ import annotations
 
 import sys
-import zipfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -15,35 +11,49 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-import build_pyz  # noqa: E402
+import runtime_gates  # noqa: E402
 import stage_release  # noqa: E402
-from ref_extraction import relative_md_refs  # noqa: E402
+from ref_extraction import relative_md_refs  # noqa: E402  # pyright: ignore[reportImplicitRelativeImport]
 
 
 @pytest.fixture(scope="module")
-def staged(tmp_path_factory) -> Path:
-    return stage_release.stage(tmp_path_factory.mktemp("release") / "tree")
+def staged(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
+    yield stage_release.stage(tmp_path_factory.mktemp("release") / "tree")
 
 
-def test_every_skill_ships_its_bundle(staged: Path) -> None:
-    for skill in build_pyz.SKILLS:
-        pyz = staged / "skills" / skill / "scripts" / f"{skill}.pyz"
-        assert pyz.is_file(), f"missing bundle for {skill}"
-        # A real zipapp, not an empty placeholder: it carries the dispatcher.
-        with zipfile.ZipFile(pyz) as zf:
-            assert "__main__.py" in zf.namelist()
+def _fake_tree(root: Path, *, without_archive: str | None = None) -> Path:
+    """A minimal tree that passes _verify unless one archive is withheld."""
+    for skill in runtime_gates.SKILLS:
+        scripts = root / "skills" / skill / "scripts"
+        scripts.mkdir(parents=True)
+        _ = (root / "skills" / skill / "SKILL.md").write_text(f"# {skill}\n")
+        if skill != without_archive:
+            archive = scripts / f"{skill}.pyz"
+            _ = archive.write_bytes(b"#!/usr/bin/env python3\n")
+            archive.chmod(0o755)
+    return root
+
+
+def test_every_skill_ships_its_archive(staged: Path) -> None:
+    for skill in runtime_gates.SKILLS:
+        archive = staged / "skills" / skill / "scripts" / f"{skill}.pyz"
+        assert archive.is_file(), f"missing archive for {skill}"
+        assert archive.stat().st_mode & 0o111, f"archive for {skill} is not executable"
 
 
 def test_skill_metadata_ships(staged: Path) -> None:
-    for skill in build_pyz.SKILLS:
+    for skill in runtime_gates.SKILLS:
         assert (staged / "skills" / skill / "SKILL.md").is_file()
+    assert (staged / "skills/mold/scripts/mold.dot").is_file()
 
 
-def test_no_raw_python_under_skills(staged: Path) -> None:
-    """The release ships the .pyz, never the loose .py — the whole point of the
-    src/ relocation. A stray .py here means a skill leaked its sources."""
-    stray = sorted(p.relative_to(staged) for p in (staged / "skills").rglob("*.py"))
-    assert stray == [], f"raw python leaked into release: {stray}"
+def test_no_source_or_build_config_under_skills(staged: Path) -> None:
+    stray = sorted(
+        str(p.relative_to(staged))
+        for pattern in ("*.py", "wedge.toml")
+        for p in (staged / "skills").rglob(pattern)
+    )
+    assert stray == [], f"build inputs leaked into release: {stray}"
 
 
 @pytest.mark.parametrize("dev_dir", ["src", "shared", "scripts", "tests", "docs", ".github"])
@@ -59,20 +69,61 @@ def test_top_level_metadata_present(staged: Path) -> None:
 @pytest.mark.parametrize("danger", ["/", str(REPO_ROOT), str(REPO_ROOT.parent)])
 def test_stage_refuses_to_wipe_dangerous_paths(danger: str) -> None:
     """rmtree on --out must never touch the filesystem root, the repo, or an
-    ancestor — accidental data loss is the irreversible failure mode here."""
+    ancestor: accidental data loss is the irreversible failure mode here."""
     with pytest.raises(SystemExit, match="refusing to wipe"):
-        stage_release.stage(Path(danger))
+        _ = stage_release.stage(Path(danger))
 
 
-def test_verify_rejects_missing_bundle(tmp_path: Path) -> None:
-    """_verify is the publish gate — it must reject a tree whose bundles are absent."""
+def test_verify_rejects_missing_archive(tmp_path: Path) -> None:
+    """_verify is the publish gate; it must reject a tree without an archive."""
     fake = tmp_path / "tree"
     (fake / "skills" / "affinage").mkdir(parents=True)
-    (fake / "skills" / "affinage" / "SKILL.md").write_text("# affinage\n")
-    with pytest.raises(SystemExit, match="missing bundle"):
-        stage_release._verify(fake)
+    _ = (fake / "skills" / "affinage" / "SKILL.md").write_text("# affinage\n")
+    with pytest.raises(SystemExit, match="missing archive"):
+        stage_release._verify(fake)  # pyright: ignore[reportPrivateUsage]
 
 
+def test_verify_rejects_missing_skill_archive(tmp_path: Path) -> None:
+    fake = _fake_tree(tmp_path / "tree", without_archive="cook")
+    with pytest.raises(SystemExit, match=r"missing archive .*cook\.pyz"):
+        stage_release._verify(fake)  # pyright: ignore[reportPrivateUsage]
+
+
+def test_verify_rejects_stray_source(tmp_path: Path) -> None:
+    fake = _fake_tree(tmp_path / "tree")
+    _ = (fake / "skills" / "cook" / "scripts" / "helper.py").write_bytes(b"x")
+    with pytest.raises(SystemExit, match="unexpected generated artifacts"):
+        stage_release._verify(fake)  # pyright: ignore[reportPrivateUsage]
+
+
+
+@pytest.mark.parametrize(
+    ("relative", "message"),
+    [
+        ("skills/cook/scripts/cook", "unexpected generated artifacts"),
+        ("skills/cook/scripts/cook.wedge.json", "unexpected generated artifacts"),
+        ("skills/cook/scripts/extra.pyz", "unexpected generated artifacts"),
+    ],
+)
+def test_verify_rejects_legacy_or_extra_artifacts(
+    tmp_path: Path, relative: str, message: str
+) -> None:
+    fake = _fake_tree(tmp_path / "tree")
+    artifact = fake / relative
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    _ = artifact.write_bytes(b"legacy")
+    with pytest.raises(SystemExit, match=message):
+        stage_release._verify(fake)  # pyright: ignore[reportPrivateUsage]
+
+
+def test_verify_accepts_a_complete_tree(tmp_path: Path) -> None:
+    stage_release._verify(_fake_tree(tmp_path / "tree"))  # pyright: ignore[reportPrivateUsage]
+
+
+def test_verify_accepts_output_beneath_scripts_ancestor(tmp_path: Path) -> None:
+    stage_release._verify(  # pyright: ignore[reportPrivateUsage]
+        _fake_tree(tmp_path / "scripts" / "tree")
+    )
 
 
 def test_relative_refs_resolve_in_staged_tree(staged: Path) -> None:
@@ -96,7 +147,7 @@ _MOVED_DOC_NAMES = (
 
 
 def test_moved_cheese_kernel_docs_ship_with_zero_vendoring(staged: Path) -> None:
-    """The four shared docs move with the wholesale skills/ copy — no dedicated
+    """The four shared docs move with the wholesale skills/ copy; no dedicated
     vendoring step exists or is needed. Locks the ship location explicitly so a
     future denylist/exclude change to stage_release can't silently drop them
     while test_relative_refs_resolve_in_staged_tree stays green (that test only
@@ -118,7 +169,16 @@ def test_release_workflow_validates_staged_tree_after_transformations() -> None:
     assert "working-directory: ${{ runner.temp }}/release" in workflow[stage:validate]
 
 
-def test_release_workflow_pins_checkout_to_v7_0_0() -> None:
+def test_release_workflow_builds_archives_before_staging() -> None:
+    """Main tracks no archives, so the tag workflow builds them from the tagged source."""
+    workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert workflow.index("just wedge-build") < workflow.index("python3 scripts/stage_release.py")
+    assert "requirements-build.txt" not in workflow
+    assert "build_pyz" not in workflow
+    assert "shiv" not in workflow.lower()
+
+
+def test_release_workflow_pins_checkout_to_v7_0_1() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 
-    assert "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0" in workflow
+    assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1" in workflow

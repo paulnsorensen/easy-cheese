@@ -1,0 +1,1231 @@
+from __future__ import annotations
+
+
+import attrs
+import pytest
+
+from easy_cheese_schemas.manifest import PlateLayout, plate_layout_for
+
+from easy_cheese_schemas.contracts import (
+    MAX_ARTIFACT_BYTES,
+    AgentWriterView,
+    ArtifactRef,
+    BoundedContext,
+    BoundedScope,
+    ContractVersion,
+    CoverageDisposition,
+    Criterion,
+    CriterionDisposition,
+    CriterionResult,
+    CriterionResultWriterView,
+    CriterionWriterView,
+    CurdDisposition,
+    CurdPlan,
+    CurdPlanWriterView,
+    CurdResult,
+    CurdResultWriterView,
+    DiagnosisCause,
+    DiagnosisDisposition,
+    DiagnosisHypothesis,
+    DiagnosisHypothesisWriterView,
+    DiagnosisRequest,
+    DiagnosisResult,
+    DiagnosisResultWriterView,
+    EntryKind,
+    EntryState,
+    EvidenceKind,
+    EvidenceRef,
+    FixCostNow,
+    HypothesisDisposition,
+    IdentityAction,
+    IdentityLineage,
+    Landing,
+    LandingShape,
+    MAX_COLLECTION_ITEMS,
+    PerLayerGreen,
+    ReviewFixes,
+    landing_layer_errors,
+    landing_mapping,
+    parse_landing_mapping,
+    PlannerDisposition,
+    PlannerRequest,
+    PlannerRequestKind,
+    PlannerResult,
+    PlannerResultWriterView,
+    PlannerUncertainty,
+    PlannerUncertaintyWriterView,
+    ProposedEntry,
+    ProtectedEntry,
+    Reproduction,
+    ReproductionDisposition,
+    ReproductionWriterView,
+    ReviewCoverage,
+    ReviewDisposition,
+    ReviewDimension,
+    ReviewFinding,
+    ReviewFindingWriterView,
+    ReviewKind,
+    ReviewRequest,
+    ReviewResult,
+    ReviewResultWriterView,
+    ReviewSeverity,
+    SemanticCurd,
+    SemanticCurdWriterView,
+    SourceCurdRef,
+    SourceLocation,
+    SourcePlanRef,
+    UncertaintyScope,
+    WriterViewKind,
+    canonical_digest,
+    contract,
+    curd_plan_digest,
+    derive_curd_disposition,
+)
+from easy_cheese_schemas.contracts import (
+    __all__ as CONTRACT_EXPORTS,
+)
+
+DIGEST = f"sha256:{'a' * 64}"
+VERSION = ContractVersion(
+    schema_uri="https://schemas.easy-cheese.dev/curd-plan",
+    major="1",
+    minor="0",
+)
+
+
+def artifact(artifact_id: str = "artifact-1") -> ArtifactRef:
+    return ArtifactRef(
+        artifact_id=artifact_id,
+        role="source",
+        uri=f"repo://artifacts/{artifact_id}",
+        digest=DIGEST,
+        size_bytes=12,
+        media_type="text/plain",
+    )
+
+
+def evidence(evidence_id: str = "evidence-1") -> EvidenceRef:
+    return EvidenceRef(
+        evidence_id=evidence_id,
+        kind=EvidenceKind.SOURCE,
+        artifact=artifact(),
+        summary="Grounded source evidence",
+    )
+
+
+def criterion(criterion_id: str = "criterion-1") -> Criterion:
+    return Criterion(
+        criterion_id=criterion_id,
+        description="The behavior is observable",
+        check="uv run pytest tests/test_behavior.py",
+    )
+
+
+def curd(
+    curd_id: str = "curd-1",
+    *,
+    dependencies: list[str] | None = None,
+    criteria: list[Criterion] | None = None,
+    lineage: IdentityLineage | None = None,
+) -> SemanticCurd:
+    return SemanticCurd(
+        curd_id=curd_id,
+        outcome=f"Complete {curd_id}",
+        scope=BoundedScope(paths=[f"src/{curd_id}.py"]),
+        inputs=[artifact()],
+        outputs=[f"Implemented {curd_id}"],
+        dependencies=[] if dependencies is None else dependencies,
+        criteria=[criterion()] if criteria is None else criteria,
+        lineage=lineage or IdentityLineage(IdentityAction.NEW),
+    )
+
+
+def plan(*curds: SemanticCurd) -> CurdPlan:
+    planned = tuple(curds) or (curd(),)
+    return CurdPlan.signed(
+        contract_version=VERSION,
+        plan_id="plan-1",
+        revision=1,
+        objective="Ship the approved behavior",
+        curds=planned,
+        context=BoundedContext(
+            shared_inputs=[artifact()],
+            constraints=["Keep the public contract stable"],
+            invariants=["Every criterion has one result"],
+        ),
+    )
+
+
+def reproduction(
+    status: ReproductionDisposition = ReproductionDisposition.REPRODUCED,
+) -> Reproduction:
+    return Reproduction(
+        status=status,
+        steps=["Run the focused reproducer"],
+        observed="The failure is deterministic",
+        evidence=[evidence()],
+    )
+
+
+def cause() -> DiagnosisCause:
+    return DiagnosisCause(
+        summary="The parser drops the final item",
+        evidence=[evidence()],
+        location=SourceLocation(
+            artifact_id="artifact-1",
+            path="src/parser.py",
+            start_line=40,
+            end_line=44,
+        ),
+    )
+
+
+def source_plan_ref() -> SourcePlanRef:
+    return SourcePlanRef(plan_id="plan-1", revision=1, digest=DIGEST)
+
+
+def source_curd_ref() -> SourceCurdRef:
+    return SourceCurdRef(curd_id="curd-1", digest=DIGEST)
+
+
+def criterion_result(
+    disposition: CriterionDisposition = CriterionDisposition.PASSED,
+) -> CriterionResult:
+    if disposition in {CriterionDisposition.PASSED, CriterionDisposition.FAILED}:
+        return CriterionResult(
+            criterion_id="criterion-1",
+            disposition=disposition,
+            evidence=[evidence()],
+        )
+    return CriterionResult(
+        criterion_id="criterion-1",
+        disposition=disposition,
+        reason="Execution never reached this criterion",
+    )
+
+
+def curd_result(
+    disposition: CurdDisposition = CurdDisposition.PASSED,
+    row: CriterionResult | None = None,
+) -> CurdResult:
+    return CurdResult(
+        contract_version=VERSION,
+        result_id="result-1",
+        source_plan_ref=source_plan_ref(),
+        source_curd_ref=source_curd_ref(),
+        disposition=disposition,
+        expected_criterion_ids=["criterion-1"],
+        criterion_results=[row or criterion_result()],
+        deliverables=[artifact("artifact-output")],
+    )
+
+
+@pytest.mark.parametrize("slug", [1, " \t\n"])
+def test_contract_rejects_invalid_slugs_at_decorator_construction(
+    slug: object,
+) -> None:
+    with pytest.raises(ValueError, match=r"^contract slug must be a non-empty string$"):
+        _ = contract(slug)  # pyright: ignore[reportArgumentType]
+
+
+def test_canonical_contracts_are_deeply_frozen() -> None:
+    paths = ["src/curd-1.py"]
+    scope = BoundedScope(paths=paths)
+    value = plan()
+
+    paths.append("src/escaped.py")
+    assert scope.paths == ("src/curd-1.py",)
+    assert isinstance(value.curds, tuple)
+    with pytest.raises(AttributeError, match="append"):
+        value.curds.append(curd("escaped"))  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
+    with pytest.raises(attrs.exceptions.FrozenInstanceError):
+        value.revision = 2  # pyright: ignore[reportAttributeAccessIssue]
+
+
+def test_artifact_size_is_bounded() -> None:
+    with pytest.raises(ValueError, match="at most"):
+        _ = ArtifactRef(
+            artifact_id="artifact-large",
+            role="source",
+            uri="repo://artifacts/large",
+            digest=DIGEST,
+            size_bytes=MAX_ARTIFACT_BYTES + 1,
+            media_type="text/plain",
+        )
+
+
+def test_curd_disposition_precedence_has_one_canonical_producer() -> None:
+    failed = attrs.evolve(
+        criterion_result(CriterionDisposition.FAILED), criterion_id="failed"
+    )
+    blocked = attrs.evolve(
+        criterion_result(CriterionDisposition.BLOCKED), criterion_id="blocked"
+    )
+    skipped = attrs.evolve(
+        criterion_result(CriterionDisposition.SKIPPED), criterion_id="skipped"
+    )
+    assert derive_curd_disposition((failed, blocked, skipped)) is CurdDisposition.FAILED
+    assert derive_curd_disposition((blocked, skipped)) is CurdDisposition.BLOCKED
+    assert derive_curd_disposition((skipped,)) is CurdDisposition.SKIPPED
+
+
+@pytest.mark.parametrize(
+    ("scope", "message"),
+    [
+        (lambda: BoundedScope(paths=[]), "paths must be a non-empty list"),
+        (
+            lambda: BoundedScope(paths=["src/a.py"], excluded_paths=["src/a.py"]),
+            "paths and excluded_paths must not overlap",
+        ),
+        (
+            lambda: BoundedScope(paths=[f"src/{index}.py" for index in range(65)]),
+            "paths must be at most 64 items",
+        ),
+    ],
+)
+def test_bounded_scope_rejects_unbounded_or_contradictory_paths(
+    scope: object, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        scope()  # pyright: ignore[reportCallIssue]
+
+
+def test_curd_plan_rejects_unknown_dependencies() -> None:
+    with pytest.raises(
+        ValueError,
+        match=r"curds\[1\].dependencies references undeclared curd 'missing'",
+    ):
+        _ = plan(curd(dependencies=["missing"]))
+
+
+def test_curd_plan_rejects_dependency_cycles() -> None:
+    first = curd("curd-1", dependencies=["curd-2"])
+    second = curd(
+        "curd-2",
+        dependencies=["curd-1"],
+        criteria=[criterion("criterion-2")],
+    )
+
+    with pytest.raises(ValueError, match="curd dependencies must be acyclic"):
+        _ = plan(first, second)
+
+
+def test_curd_plan_rejects_duplicate_criterion_identity() -> None:
+    first = curd("curd-1")
+    second = curd("curd-2")
+
+    with pytest.raises(ValueError, match="criterion_id 'criterion-1' must be unique"):
+        _ = plan(first, second)
+
+
+def test_curd_plan_refuses_a_digest_that_does_not_cover_its_content() -> None:
+    signed = plan()
+
+    with pytest.raises(
+        ValueError,
+        match=f"CurdPlan digest mismatch: expected {signed.digest}, got {DIGEST}",
+    ):
+        _ = attrs.evolve(signed, digest=DIGEST)
+
+
+def test_curd_plan_signed_digest_covers_every_field_but_the_digest() -> None:
+    signed = plan()
+
+    assert signed.digest == curd_plan_digest(signed)
+    assert signed.digest == canonical_digest(
+        {
+            "contract_version": signed.contract_version,
+            "plan_id": signed.plan_id,
+            "revision": signed.revision,
+            "objective": signed.objective,
+            "curds": signed.curds,
+            "context": signed.context,
+            "parent_plan_ref": signed.parent_plan_ref,
+        }
+    )
+    revised = CurdPlan.signed(
+        contract_version=signed.contract_version,
+        plan_id=signed.plan_id,
+        revision=signed.revision + 1,
+        objective=signed.objective,
+        curds=signed.curds,
+        context=signed.context,
+        parent_plan_ref=signed.parent_plan_ref,
+    )
+    assert revised.digest != signed.digest
+    assert revised.digest == curd_plan_digest(revised)
+
+
+def test_curd_plan_digest_refuses_a_value_that_is_not_a_plan() -> None:
+    with pytest.raises(TypeError, match="curd_plan_digest expects CurdPlan, not str"):
+        _ = curd_plan_digest(DIGEST)
+
+
+def _layers(*groups: list[str]) -> Landing:
+    return Landing(shape=LandingShape.STACKED_LINEAR, layers=[list(group) for group in groups])
+
+
+def _curd(curd_id: str, *dependencies: str) -> SemanticCurd:
+    return curd(
+        curd_id,
+        dependencies=list(dependencies),
+        criteria=[criterion(f"{curd_id}-criterion")],
+    )
+
+
+def test_landing_layer_errors_empty_layers_means_unset() -> None:
+    assert landing_layer_errors(plan(curd("c1")), Landing(shape=LandingShape.SINGLE)) == ()
+
+
+def test_landing_layer_errors_flags_forward_dependency() -> None:
+    errors = landing_layer_errors(
+        plan(_curd("c1", "c2"), _curd("c2")),
+        _layers(["c1"], ["c2"]),
+    )
+    assert errors == (
+        "landing-layer-order curd 'c1' in layer 1 depends on 'c2' in layer 2",
+    )
+
+
+def test_landing_layer_errors_flags_missing_and_unknown_layer_curds() -> None:
+    errors = landing_layer_errors(plan(_curd("c1"), _curd("c2")), _layers(["c1"], ["c3"]))
+    assert errors == (
+        "landing-layer-unknown-curd landing.layers names unknown curd 'c3'",
+        "landing-layer-missing-curd curd 'c2' is missing from landing.layers",
+    )
+
+
+def test_landing_layer_errors_accepts_backward_and_same_layer_dependencies() -> None:
+    assert (
+        landing_layer_errors(
+            plan(_curd("c1"), _curd("c2", "c1"), _curd("c3", "c2")),
+            _layers(["c1"], ["c2", "c3"]),
+        )
+        == ()
+    )
+
+def test_landing_layer_errors_rejects_writer_keys_as_canonical_ids() -> None:
+    errors = landing_layer_errors(plan(_curd("canonical-curd")), _layers(["writer-key"]))
+
+    assert errors == (
+        "landing-layer-unknown-curd landing.layers names unknown curd 'writer-key'",
+        "landing-layer-missing-curd curd 'canonical-curd' is missing from landing.layers",
+    )
+
+
+def test_landing_layer_errors_empty_group_reports_curd_missing() -> None:
+    errors = landing_layer_errors(plan(curd("c1")), _layers([]))
+    assert errors == ("landing-layer-missing-curd curd 'c1' is missing from landing.layers",)
+
+
+def test_landing_layer_errors_every_message_carries_its_own_token() -> None:
+    errors = landing_layer_errors(
+        plan(_curd("c1", "c2"), _curd("c2")),
+        _layers(["c1"], ["c2", "c3"]),
+    )
+    assert [error.split(" ", 1)[0] for error in errors] == [
+        "landing-layer-unknown-curd",
+        "landing-layer-order",
+    ]
+
+
+def test_parse_landing_mapping_reports_every_unknown_key_once() -> None:
+    with pytest.raises(ValueError) as info:
+        _ = parse_landing_mapping({"shape": "single", "extra": 1, "bogus": 2})
+    assert str(info.value) == "landing-closed-class landing.'bogus', landing.'extra' is not allowed"
+
+
+def test_parse_landing_mapping_requires_shape_and_escapes_echoed_values() -> None:
+    with pytest.raises(ValueError, match="^landing-closed-class landing.shape is required$"):
+        _ = parse_landing_mapping({})
+    with pytest.raises(ValueError) as info:
+        _ = parse_landing_mapping({"shape": "\x1b[31msideways"})
+    assert r"landing.shape '\x1b[31msideways' is not a recognized shape" in str(info.value)
+    assert "\x1b" not in str(info.value)
+    with pytest.raises(ValueError) as info:
+        _ = parse_landing_mapping({"shape": "single", "evil\nERROR: fabricated": 1})
+    assert "\n" not in str(info.value)
+    assert r"landing.'evil\nERROR: fabricated' is not allowed" in str(info.value)
+
+
+def test_parse_landing_mapping_applies_defaults_and_bounds() -> None:
+    landing = parse_landing_mapping({"shape": "stacked_linear", "layers": [["c1"], ["c2"]]})
+    assert landing.per_layer_green is PerLayerGreen.REQUIRED
+    assert landing.review_fixes is ReviewFixes.FOLD
+    assert landing.layers == (("c1",), ("c2",))
+    too_many = [[f"c{index}"] for index in range(MAX_COLLECTION_ITEMS + 1)]
+    with pytest.raises(ValueError, match="^landing-closed-class "):
+        _ = parse_landing_mapping({"shape": "stacked_linear", "layers": too_many})
+    with pytest.raises(ValueError, match="^landing-closed-class landing must be a mapping$"):
+        _ = parse_landing_mapping(None)
+
+
+def test_landing_layer_messages_name_the_offending_id_and_position() -> None:
+    with pytest.raises(ValueError) as bad_id:
+        _ = parse_landing_mapping({"shape": "stacked_linear", "layers": [["ok"], ["not an id"]]})
+    assert "layers[1][0]" in str(bad_id.value)
+    assert str(bad_id.value).startswith("landing-closed-class ")
+    with pytest.raises(ValueError) as duplicate:
+        _ = parse_landing_mapping({"shape": "stacked_linear", "layers": [["ok"], ["ok"]]})
+    assert "landing-layer-curd-ids-must-be-unique: 'ok' appears twice" in str(duplicate.value)
+
+
+def test_landing_total_ids_across_layers_bounded_at_max_collection_items() -> None:
+    first_group = [f"c{index}" for index in range(129)]
+    second_group = [f"d{index}" for index in range(128)]
+    with pytest.raises(ValueError, match="^layers must be at most 256 ids total$"):
+        _ = Landing(shape=LandingShape.STACKED_LINEAR, layers=[first_group, second_group])
+    accepted = Landing(
+        shape=LandingShape.STACKED_LINEAR,
+        layers=[first_group[:-1], second_group],
+    )
+    assert sum(len(group) for group in accepted.layers) == MAX_COLLECTION_ITEMS
+
+
+def test_parse_landing_mapping_rejects_257_groups_before_item_inspection() -> None:
+    too_many_groups = [[1] for _ in range(MAX_COLLECTION_ITEMS + 1)]
+    with pytest.raises(
+        ValueError, match="^landing-closed-class landing.layers must be at most 256 groups$"
+    ):
+        _ = parse_landing_mapping({"shape": "stacked_linear", "layers": too_many_groups})
+
+
+def test_landing_rejects_a_string_passed_as_layers() -> None:
+    with pytest.raises(ValueError, match="^landing.layers must be a list of lists of strings$"):
+        _ = Landing(shape=LandingShape.STACKED_LINEAR, layers="abc")
+
+
+def test_parse_landing_mapping_rejects_non_string_unknown_keys_without_a_typeerror() -> None:
+    with pytest.raises(
+        ValueError,
+        match=r"^landing-closed-class landing\.'zz', landing\.1 is not allowed$",
+    ):
+        _ = parse_landing_mapping({"shape": "single", 1: "x", "zz": "y"})
+
+
+def test_landing_mapping_round_trips_parse_landing_mapping_with_defaults_filled() -> None:
+    raw = {"shape": "stacked_linear", "layers": [["c1"], ["c2"]]}
+    landing = parse_landing_mapping(raw)
+    assert landing_mapping(landing) == {
+        "shape": "stacked_linear",
+        "layers": [["c1"], ["c2"]],
+        "per_layer_green": "required",
+        "review_fixes": "fold",
+    }
+
+
+@pytest.mark.parametrize(
+    ("shape", "expected"),
+    [
+        (LandingShape.SINGLE, PlateLayout.SINGLE),
+        (LandingShape.ORTHOGONAL_FLAT, PlateLayout.STACKED),
+        (LandingShape.STACKED_LINEAR, PlateLayout.STACKED),
+        (LandingShape.DIAMOND_STACK, PlateLayout.STACKED),
+    ],
+)
+def test_plate_layout_for_maps_single_and_stacked_shapes(
+    shape: LandingShape, expected: PlateLayout
+) -> None:
+    assert plate_layout_for(shape) is expected
+
+
+def test_landing_layers_required_for_stacked_shape_via_constructor_and_parse() -> None:
+    with pytest.raises(ValueError, match="^landing-layers-required-for-stacked-shape$"):
+        _ = Landing(shape=LandingShape.STACKED_LINEAR, layers=[])
+    with pytest.raises(
+        ValueError,
+        match="^landing-closed-class landing-layers-required-for-stacked-shape$",
+    ):
+        _ = parse_landing_mapping({"shape": "stacked_linear"})
+
+
+def test_identity_lineage_enforces_new_retain_and_derive_rules() -> None:
+    with pytest.raises(ValueError, match="new lineage must not name source curds"):
+        _ = IdentityLineage(IdentityAction.NEW, ["old-curd"])
+    with pytest.raises(
+        ValueError, match="retain lineage must name exactly one source curd"
+    ):
+        _ = IdentityLineage(IdentityAction.RETAIN)
+    with pytest.raises(
+        ValueError, match="derive lineage must name at least one source curd"
+    ):
+        _ = IdentityLineage(IdentityAction.DERIVE)
+    with pytest.raises(
+        ValueError, match="retain lineage must preserve curd_id 'curd-1'"
+    ):
+        _ = curd(lineage=IdentityLineage(IdentityAction.RETAIN, ["different-curd"]))
+
+
+@pytest.mark.parametrize(
+    ("disposition", "plan_value", "unresolved", "reason", "message"),
+    [
+        (
+            PlannerDisposition.COMPLETE,
+            None,
+            [],
+            None,
+            "complete planner result must carry a plan",
+        ),
+        (
+            PlannerDisposition.COMPLETE,
+            plan(),
+            [],
+            "An unnecessary explanation",
+            "complete planner result must not include a reason",
+        ),
+        (
+            PlannerDisposition.PARTIAL,
+            plan(),
+            [],
+            None,
+            "partial planner result must describe omitted work",
+        ),
+        (
+            PlannerDisposition.NO_WORK,
+            plan(),
+            [],
+            "Nothing remains",
+            "no_work planner result must not carry a plan",
+        ),
+        (
+            PlannerDisposition.BLOCKED,
+            None,
+            [],
+            "A blocker exists",
+            "blocked planner result must describe unresolved work",
+        ),
+    ],
+)
+def test_planner_result_disposition_invariants(
+    disposition: PlannerDisposition,
+    plan_value: CurdPlan | None,
+    unresolved: list[PlannerUncertainty],
+    reason: str | None,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        _ = PlannerResult(
+            contract_version=VERSION,
+            request_id="request-1",
+            disposition=disposition,
+            plan=plan_value,
+            unresolved_work=unresolved,
+            reason=reason,
+        )
+
+
+def test_partial_planner_result_rejects_uncertainty_in_emitted_work() -> None:
+    uncertainty = PlannerUncertainty(
+        description="The emitted dependency might be wrong",
+        scope=UncertaintyScope.DEPENDENCY,
+        evidence=[evidence()],
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="partial planner result uncertainty must concern omitted work only",
+    ):
+        _ = PlannerResult(
+            contract_version=VERSION,
+            request_id="request-1",
+            disposition=PlannerDisposition.PARTIAL,
+            plan=plan(),
+            unresolved_work=[uncertainty],
+        )
+
+
+def test_planner_request_kind_controls_source_plan_and_evidence() -> None:
+    with pytest.raises(
+        ValueError, match="decompose request must not name a source plan"
+    ):
+        _ = PlannerRequest(
+            contract_version=VERSION,
+            request_id="request-1",
+            kind=PlannerRequestKind.DECOMPOSE,
+            objective="Split the work",
+            source_plan_ref=source_plan_ref(),
+        )
+    with pytest.raises(ValueError, match="remediate request must carry evidence"):
+        _ = PlannerRequest(
+            contract_version=VERSION,
+            request_id="request-2",
+            kind=PlannerRequestKind.REMEDIATE,
+            objective="Address the findings",
+            source_plan_ref=source_plan_ref(),
+        )
+
+
+def test_clean_review_requires_complete_coverage() -> None:
+    coverage = [
+        ReviewCoverage(
+            target="correctness",
+            disposition=CoverageDisposition.NOT_COVERED,
+            reason="The dependency was unavailable",
+        )
+    ]
+
+    with pytest.raises(
+        ValueError, match="clean review result requires complete coverage"
+    ):
+        _ = ReviewResult(
+            contract_version=VERSION,
+            review_id="review-1",
+            disposition=ReviewDisposition.CLEAN,
+            findings=[],
+            coverage=coverage,
+        )
+
+
+def test_review_findings_disposition_requires_a_finding() -> None:
+    with pytest.raises(
+        ValueError, match="findings review result must include at least one finding"
+    ):
+        _ = ReviewResult(
+            contract_version=VERSION,
+            review_id="review-1",
+            disposition=ReviewDisposition.FINDINGS,
+            findings=[],
+            coverage=[ReviewCoverage("correctness", CoverageDisposition.COVERED)],
+        )
+
+
+def test_blocked_review_rejects_findings_at_both_contract_boundaries() -> None:
+    finding = ReviewFinding(
+        finding_id="finding-1",
+        dimension=ReviewDimension.CORRECTNESS,
+        severity=ReviewSeverity.HIGH,
+        summary="The failure path loses data",
+        evidence=[evidence()],
+        fix_cost_now=FixCostNow.CONTAINED,
+    )
+
+    with pytest.raises(
+        ValueError, match="blocked review result must not include findings"
+    ):
+        _ = ReviewResult(
+            contract_version=VERSION,
+            review_id="review-1",
+            disposition=ReviewDisposition.BLOCKED,
+            findings=[finding],
+            coverage=[],
+            reason="The review could not complete",
+        )
+
+
+def test_review_request_and_result_accept_typed_evidence() -> None:
+    request = ReviewRequest(
+        contract_version=VERSION,
+        review_id="review-1",
+        subject=artifact(),
+        coverage_targets=["correctness"],
+        evidence=[evidence()],
+    )
+    assert request.review_kind is None
+    finding = ReviewFinding(
+        finding_id="finding-1",
+        dimension=ReviewDimension.CORRECTNESS,
+        severity=ReviewSeverity.HIGH,
+        summary="The failure path loses data",
+        location=SourceLocation(
+            artifact_id="artifact-1",
+            path="src/parser.py",
+            start_line=40,
+            end_line=44,
+        ),
+        evidence=[evidence()],
+        fix_cost_now=FixCostNow.CONTAINED,
+    )
+    result = ReviewResult(
+        contract_version=VERSION,
+        review_id=request.review_id,
+        disposition=ReviewDisposition.FINDINGS,
+        findings=[finding],
+        coverage=[ReviewCoverage("correctness", CoverageDisposition.COVERED)],
+    )
+
+    assert result.findings == (finding,)
+    assert result.coverage == (
+        ReviewCoverage("correctness", CoverageDisposition.COVERED),
+    )
+
+
+def test_review_request_accepts_typed_review_kind_and_rejects_invalid_values() -> None:
+    request = ReviewRequest(
+        contract_version=VERSION,
+        review_id="review-1",
+        subject=artifact(),
+        coverage_targets=["correctness"],
+        review_kind=ReviewKind.AGE,
+    )
+    assert request.review_kind is ReviewKind.AGE
+
+    request = ReviewRequest(
+        contract_version=VERSION,
+        review_id="review-1",
+        subject=artifact(),
+        coverage_targets=["correctness"],
+        review_kind=ReviewKind.TASTE_TEST,
+    )
+    assert request.review_kind is ReviewKind.TASTE_TEST
+
+    with pytest.raises(TypeError, match="'review_kind' must be"):
+        _ = ReviewRequest(
+            contract_version=VERSION,
+            review_id="review-1",
+            subject=artifact(),
+            coverage_targets=["correctness"],
+            review_kind="not_a_review_kind",  # pyright: ignore[reportArgumentType]
+        )
+
+
+def test_protected_entry_rejects_non_enum_kind_and_state() -> None:
+    with pytest.raises(TypeError, match="'kind' must be"):
+        _ = ProtectedEntry(
+            entry_id="d-1",
+            kind="decision",  # pyright: ignore[reportArgumentType]
+            summary="a decision",
+            state=EntryState.ACTIVE,
+            blocks_continuation=False,
+        )
+
+    with pytest.raises(TypeError, match="'state' must be"):
+        _ = ProtectedEntry(
+            entry_id="d-1",
+            kind=EntryKind.DECISION,
+            summary="a decision",
+            state="active",  # pyright: ignore[reportArgumentType]
+            blocks_continuation=False,
+        )
+
+
+def test_proposed_entry_rejects_non_enum_kind() -> None:
+    with pytest.raises(TypeError, match="'kind' must be"):
+        _ = ProposedEntry(
+            kind="question",  # pyright: ignore[reportArgumentType]
+            summary="why?",
+        )
+
+
+def test_protected_entry_rejects_cross_enum_and_none() -> None:
+    # EntryKind and EntryState are both `str, Enum`; the validator must reject a
+    # member of the sibling enum, not just a plain string.
+    with pytest.raises(TypeError, match="'kind' must be"):
+        _ = ProtectedEntry(
+            entry_id="d-1",
+            kind=EntryState.ACTIVE,  # pyright: ignore[reportArgumentType]
+            summary="a decision",
+            state=EntryState.ACTIVE,
+            blocks_continuation=False,
+        )
+
+    with pytest.raises(TypeError, match="'state' must be"):
+        _ = ProtectedEntry(
+            entry_id="d-1",
+            kind=EntryKind.DECISION,
+            summary="a decision",
+            state=EntryKind.DECISION,  # pyright: ignore[reportArgumentType]
+            blocks_continuation=False,
+        )
+
+    with pytest.raises(TypeError, match="'kind' must be"):
+        _ = ProtectedEntry(
+            entry_id="d-1",
+            kind=None,  # pyright: ignore[reportArgumentType]
+            summary="a decision",
+            state=EntryState.ACTIVE,
+            blocks_continuation=False,
+        )
+
+
+def test_proposed_entry_rejects_cross_enum_kind() -> None:
+    with pytest.raises(TypeError, match="'kind' must be"):
+        _ = ProposedEntry(
+            kind=EntryState.ACTIVE,  # pyright: ignore[reportArgumentType]
+            summary="why?",
+        )
+
+
+def test_confirmed_diagnosis_requires_reproduction_cause_and_regression_seam() -> None:
+    with pytest.raises(
+        ValueError,
+        match="confirmed diagnosis must include a confirmed cause",
+    ):
+        _ = DiagnosisResult(
+            contract_version=VERSION,
+            diagnosis_id="diagnosis-1",
+            disposition=DiagnosisDisposition.CONFIRMED,
+            symptom="The final item disappears",
+            reproduction=reproduction(),
+            hypotheses=[],
+        )
+
+
+def test_inconclusive_diagnosis_cannot_dispatch_a_confirmed_cause() -> None:
+    with pytest.raises(
+        ValueError, match="inconclusive diagnosis must not include a confirmed cause"
+    ):
+        _ = DiagnosisResult(
+            contract_version=VERSION,
+            diagnosis_id="diagnosis-1",
+            disposition=DiagnosisDisposition.INCONCLUSIVE,
+            symptom="The final item disappears",
+            reproduction=reproduction(),
+            hypotheses=[
+                DiagnosisHypothesis(
+                    hypothesis_id="hypothesis-1",
+                    statement="The parser drops the item",
+                    disposition=HypothesisDisposition.UNRESOLVED,
+                )
+            ],
+            confirmed_cause=cause(),
+            unresolved_evidence=[evidence()],
+        )
+
+
+def test_diagnosis_contract_rejects_remediation_fields() -> None:
+    request = DiagnosisRequest(
+        contract_version=VERSION,
+        diagnosis_id="diagnosis-1",
+        symptom="The final item disappears",
+        subject=artifact(),
+        evidence=[evidence()],
+    )
+
+    with pytest.raises(TypeError, match="unexpected keyword argument 'remediation'"):
+        _ = DiagnosisResult(
+            contract_version=VERSION,
+            diagnosis_id=request.diagnosis_id,
+            disposition=DiagnosisDisposition.CONFIRMED,
+            symptom=request.symptom,
+            reproduction=reproduction(),
+            hypotheses=[],
+            confirmed_cause=cause(),
+            regression_seam=cause().location,
+            remediation="Rewrite the parser",  # pyright: ignore[reportCallIssue]
+        )
+
+    assert set(attrs.fields_dict(DiagnosisResult)) == {
+        "contract_version",
+        "diagnosis_id",
+        "disposition",
+        "symptom",
+        "reproduction",
+        "hypotheses",
+        "confirmed_cause",
+        "regression_seam",
+        "unresolved_evidence",
+        "reason",
+    }
+
+
+@pytest.mark.parametrize(
+    ("disposition", "evidence_value", "reason", "message"),
+    [
+        (
+            CriterionDisposition.PASSED,
+            [],
+            None,
+            "passed criterion result must include evidence",
+        ),
+        (
+            CriterionDisposition.FAILED,
+            [],
+            None,
+            "failed criterion result must include evidence",
+        ),
+        (
+            CriterionDisposition.BLOCKED,
+            [],
+            None,
+            "blocked criterion result must include a reason",
+        ),
+        (
+            CriterionDisposition.SKIPPED,
+            [],
+            None,
+            "skipped criterion result must include a reason",
+        ),
+    ],
+)
+def test_criterion_result_disposition_invariants(
+    disposition: CriterionDisposition,
+    evidence_value: list[EvidenceRef],
+    reason: str | None,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        _ = CriterionResult(
+            criterion_id="criterion-1",
+            disposition=disposition,
+            evidence=evidence_value,
+            reason=reason,
+        )
+
+
+def test_curd_result_requires_exact_criterion_coverage() -> None:
+    with pytest.raises(
+        ValueError,
+        match="criterion_results must cover expected_criterion_ids exactly",
+    ):
+        _ = CurdResult(
+            contract_version=VERSION,
+            result_id="result-1",
+            source_plan_ref=source_plan_ref(),
+            source_curd_ref=source_curd_ref(),
+            disposition=CurdDisposition.PASSED,
+            expected_criterion_ids=["criterion-1", "criterion-2"],
+            criterion_results=[criterion_result()],
+        )
+
+
+def test_curd_result_disposition_is_derived_from_criterion_rows() -> None:
+    with pytest.raises(
+        ValueError,
+        match="disposition must be failed for the supplied criterion_results",
+    ):
+        _ = curd_result(
+            disposition=CurdDisposition.PASSED,
+            row=criterion_result(CriterionDisposition.FAILED),
+        )
+
+
+def test_contract_version_source_references_are_typed() -> None:
+    assert source_plan_ref() == SourcePlanRef("plan-1", 1, DIGEST)
+    assert source_curd_ref() == SourceCurdRef("curd-1", DIGEST)
+
+
+def test_agent_writer_view_cannot_supply_host_owned_plan_fields() -> None:
+    assert set(attrs.fields_dict(CurdPlanWriterView)) == {
+        "objective",
+        "curds",
+        "context",
+    }
+
+    view = AgentWriterView(
+        kind=WriterViewKind.CURD_PLAN,
+        payload=CurdPlanWriterView(
+            objective="Ship the approved behavior",
+            curds=[
+                SemanticCurdWriterView(
+                    key="contract-core",
+                    outcome="Define the contract core",
+                    scope=BoundedScope(paths=["src/contracts.py"]),
+                    outputs=["Canonical contracts"],
+                    criteria=[
+                        CriterionWriterView(
+                            description="Contracts reject invalid values",
+                            check="uv run pytest tests/test_contracts.py",
+                        )
+                    ],
+                )
+            ],
+        ),
+    )
+    assert view.kind is WriterViewKind.CURD_PLAN
+
+    with pytest.raises(
+        ValueError, match="curd_result writer view payload must be CurdResultWriterView"
+    ):
+        _ = AgentWriterView(kind=WriterViewKind.CURD_RESULT, payload=view.payload)
+
+
+@pytest.mark.parametrize("component", [1, "", "01", "one", "-1"])
+def test_contract_version_requires_numeric_string_components(component: object) -> None:
+    with pytest.raises(ValueError, match="version component"):
+        _ = ContractVersion(
+            schema_uri="https://schemas.easy-cheese.dev/curd-plan",
+            major=component,  # pyright: ignore[reportArgumentType]
+            minor="0",
+        )
+
+
+@pytest.mark.parametrize("value", ["ab", {"a", "b"}, {"a": "b"}])
+def test_collection_converter_rejects_non_sequence_inputs(value: object) -> None:
+    with pytest.raises(TypeError, match="list or tuple"):
+        _ = BoundedScope(paths=value)  # pyright: ignore[reportArgumentType]
+
+
+def test_semantic_string_collections_use_their_declared_validators() -> None:
+    with pytest.raises(ValueError, match="opaque identifier"):
+        _ = IdentityLineage(IdentityAction.RETAIN, source_curd_ids=["not an id"])
+
+    with pytest.raises(ValueError, match="opaque identifier"):
+        _ = ReviewRequest(
+            contract_version=VERSION,
+            review_id="review-1",
+            subject=artifact(),
+            coverage_targets=["not an id"],
+        )
+def test_bounded_context_accepts_the_documented_context_limit() -> None:
+    text = "x" * 5_000
+    context = BoundedContext(constraints=[text])
+    assert context.constraints == (text,)
+
+
+def test_writer_views_expose_only_agent_authored_fields() -> None:
+    assert set(attrs.fields_dict(SemanticCurdWriterView)) == {
+        "key",
+        "outcome",
+        "scope",
+        "outputs",
+        "criteria",
+        "input_keys",
+        "dependencies",
+    }
+    assert set(attrs.fields_dict(ReviewFindingWriterView)) == {
+        "severity",
+        "dimension",
+        "summary",
+        "evidence_keys",
+        "fix_cost_now",
+        "location",
+    }
+    assert set(attrs.fields_dict(ReviewResultWriterView)) == {
+        "disposition",
+        "findings",
+        "reason",
+    }
+    assert set(attrs.fields_dict(DiagnosisHypothesisWriterView)) == {
+        "statement",
+        "disposition",
+        "evidence_keys",
+    }
+    assert set(attrs.fields_dict(DiagnosisResultWriterView)) == {
+        "disposition",
+        "reproduction",
+        "hypotheses",
+        "confirmed_cause",
+        "regression_seam",
+        "unresolved_evidence_keys",
+        "reason",
+    }
+    assert set(attrs.fields_dict(CriterionResultWriterView)) == {
+        "criterion_id",
+        "disposition",
+        "evidence_keys",
+        "reason",
+    }
+    assert set(attrs.fields_dict(CurdResultWriterView)) == {
+        "criterion_results",
+        "deliverables",
+        "unresolved_work",
+    }
+    assert {name for name in CONTRACT_EXPORTS if "Writer" in name} == {
+        "AgentWriterView",
+        "BoundedContextWriterView",
+        "CriterionResultWriterView",
+        "CriterionWriterView",
+        "CurdPlanWriterView",
+        "CurdResultWriterView",
+        "DeliverableWriterView",
+        "DiagnosisCauseWriterView",
+        "DiagnosisHypothesisWriterView",
+        "DiagnosisResultWriterView",
+        "PlannerResultWriterView",
+        "PlannerUncertaintyWriterView",
+        "RemediationCureWriterView",
+        "ReproductionWriterView",
+        "ReviewFindingWriterView",
+        "ReviewResultWriterView",
+        "SemanticCurdWriterView",
+        "SourceLocationWriterView",
+        "WriterPayload",
+        "WriterViewKind",
+    }
+
+
+def test_planner_writer_view_rejects_no_work_with_unresolved_work() -> None:
+    with pytest.raises(
+        ValueError,
+        match="no_work planner writer view must not carry unresolved work",
+    ):
+        _ = PlannerResultWriterView(
+            disposition=PlannerDisposition.NO_WORK,
+            unresolved_work=[
+                PlannerUncertaintyWriterView(
+                    description="A dependency is unresolved",
+                    scope=UncertaintyScope.DEPENDENCY,
+                    evidence_keys=[],
+                )
+            ],
+            reason="No work can be emitted",
+        )
+
+
+def test_review_writer_view_enforces_disposition() -> None:
+    finding_fields = attrs.fields_dict(ReviewFindingWriterView)
+    finding_kwargs: dict[str, object] = {
+        "dimension": ReviewDimension.CORRECTNESS,
+        "severity": ReviewSeverity.HIGH,
+        "summary": "The implementation violates the contract",
+        "evidence_keys": ["evidence-1"],
+        "fix_cost_now": FixCostNow.CONTAINED,
+    }
+    if "evidence" in finding_fields:
+        finding_kwargs["evidence"] = [evidence()]
+        del finding_kwargs["evidence_keys"]
+
+    result_kwargs: dict[str, object] = {
+        "disposition": ReviewDisposition.CLEAN,
+        "findings": [ReviewFindingWriterView(**finding_kwargs)],  # pyright: ignore[reportArgumentType]
+    }
+    if "coverage" in attrs.fields_dict(ReviewResultWriterView):
+        result_kwargs["coverage"] = [
+            ReviewCoverage("contract", CoverageDisposition.COVERED)
+        ]
+
+    with pytest.raises(
+        ValueError, match="clean review writer view must not include findings"
+    ):
+        _ = ReviewResultWriterView(**result_kwargs)  # pyright: ignore[reportArgumentType]
+
+
+def test_diagnosis_writer_view_enforces_confirmed_disposition() -> None:
+    kwargs: dict[str, object] = {
+        "disposition": DiagnosisDisposition.CONFIRMED,
+        "reproduction": ReproductionWriterView(
+            status=ReproductionDisposition.REPRODUCED,
+            steps=["Run the focused reproducer"],
+            observed="The failure is deterministic",
+            evidence_keys=["evidence-1"],
+        ),
+        "hypotheses": [],
+    }
+    if "symptom" in attrs.fields_dict(DiagnosisResultWriterView):
+        kwargs["symptom"] = "The parser drops the final item"
+
+    with pytest.raises(
+        ValueError,
+        match="confirmed diagnosis writer view must include a confirmed cause",
+    ):
+        _ = DiagnosisResultWriterView(**kwargs)  # pyright: ignore[reportArgumentType]
+
+
+def test_diagnosis_hypothesis_writer_view_requires_evidence_for_a_verdict() -> None:
+    kwargs: dict[str, object] = {
+        "statement": "The parser drops the final item",
+        "disposition": HypothesisDisposition.CONFIRMED,
+        "evidence_keys": [],
+    }
+    if "evidence" in attrs.fields_dict(DiagnosisHypothesisWriterView):
+        kwargs["evidence"] = []
+        del kwargs["evidence_keys"]
+
+    with pytest.raises(ValueError, match="confirmed hypothesis must include evidence"):
+        _ = DiagnosisHypothesisWriterView(**kwargs)  # pyright: ignore[reportArgumentType]
+
+
+def test_criterion_writer_view_enforces_disposition() -> None:
+    kwargs: dict[str, object] = {
+        "criterion_id": "criterion-1",
+        "disposition": CriterionDisposition.PASSED,
+        "evidence_keys": [],
+    }
+    if "evidence" in attrs.fields_dict(CriterionResultWriterView):
+        kwargs["evidence"] = []
+        del kwargs["evidence_keys"]
+
+    with pytest.raises(
+        ValueError, match="passed criterion result must include evidence"
+    ):
+        _ = CriterionResultWriterView(**kwargs)  # pyright: ignore[reportArgumentType]

@@ -9,53 +9,102 @@ Covers the four spec quality gates that the module backs:
     gate nodes (a gate cannot be silently dropped from prose);
   - portability: no hardcoded corpus name in mold's runtime source.
 
-The module is imported from the built mold.pyz via the `gate_graph` fixture, so
-these also exercise the bundled artifact, not just the source tree.
+The `gate_graph` fixture imports the source module; TestBuiltArchiveFreshness runs
+the built mold archive so the packaged artifact is exercised too.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Callable, Protocol, cast
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HANDSHAKE = REPO_ROOT / "skills" / "mold" / "references" / "handshake.md"
 MOLD_DOT = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.dot"
-MOLD_PYZ = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
-MOLD_SRC_DIR = REPO_ROOT / "src" / "mold"
+MOLD_SRC_DIR = REPO_ROOT / "src" / "easy_cheese" / "skills" / "mold"
+
+
+class _Node(Protocol):
+    id: str
+    label: str
+    kind: str
+
+
+class _Edge(Protocol):
+    src: str
+    dst: str
+    label: str
+
+
+class _GateModel(Protocol):
+    nodes: tuple[_Node, ...]
+    edges: tuple[_Edge, ...]
+
+    def by_kind(self, kind: str) -> tuple[_Node, ...]: ...
+    def ids(self) -> set[str]: ...
+
+
+class _GateGraphModule(Protocol):
+    GATE_MODEL: _GateModel
+    HANDSHAKE: _Node
+    TYPED_PLANNER: _Node
+    COHERENCE_GATES: tuple[str, ...]
+    RenderError: type[Exception]
+    subprocess: ModuleType
+
+    def to_dot(self) -> str: ...
+    def to_mermaid(self) -> str: ...
+    def render(
+        self, target: str, *, dot_present: bool | None = None
+    ) -> tuple[str, bytes]: ...
+    def dot_available(self) -> bool: ...
+    def main(self, argv: list[str] | None = None) -> int: ...
+    def gate_id(self, checklist_label: str) -> str: ...
+
+
+@pytest.fixture
+def gate_graph(gate_graph: ModuleType) -> _GateGraphModule:
+    return cast(_GateGraphModule, cast(object, gate_graph))
+
+
+def _dot_id(module: _GateGraphModule, node_id: str) -> str:
+    fn = cast(Callable[[str], str], getattr(module, "_dot_id"))
+    return fn(node_id)
 
 
 class TestToDot:
-    def test_is_a_valid_digraph(self, gate_graph: ModuleType) -> None:
+    def test_is_a_valid_digraph(self, gate_graph: _GateGraphModule) -> None:
         dot = gate_graph.to_dot()
         assert dot.startswith("digraph mold_gates {")
         assert dot.rstrip().endswith("}")
 
-    def test_contains_every_node(self, gate_graph: ModuleType) -> None:
+    def test_contains_every_node(self, gate_graph: _GateGraphModule) -> None:
         dot = gate_graph.to_dot()
         for node in gate_graph.GATE_MODEL.nodes:
             assert node.label in dot, node.label
 
-    def test_contains_the_curdle_edge_with_label(self, gate_graph: ModuleType) -> None:
+    def test_contains_the_curdle_edge_with_label(self, gate_graph: _GateGraphModule) -> None:
         dot = gate_graph.to_dot()
-        assert 'handshake -> curdle [label="both keys"]' in dot
+        assert 'handshake -> curdle [label="coherence check"]' in dot
 
-    def test_is_deterministic(self, gate_graph: ModuleType) -> None:
+    def test_is_deterministic(self, gate_graph: _GateGraphModule) -> None:
         assert gate_graph.to_dot() == gate_graph.to_dot()
 
 
 class TestToMermaid:
-    def test_is_a_fenced_mermaid_block(self, gate_graph: ModuleType) -> None:
+    def test_is_a_fenced_mermaid_block(self, gate_graph: _GateGraphModule) -> None:
         mermaid = gate_graph.to_mermaid()
         assert mermaid.startswith("```mermaid\nflowchart LR")
         assert mermaid.rstrip().endswith("```")
 
-    def test_contains_every_node(self, gate_graph: ModuleType) -> None:
+    def test_contains_every_node(self, gate_graph: _GateGraphModule) -> None:
         mermaid = gate_graph.to_mermaid()
         for node in gate_graph.GATE_MODEL.nodes:
             expected = (
@@ -65,18 +114,18 @@ class TestToMermaid:
             )
             assert expected in mermaid, node.label
 
-    def test_labels_have_no_unescaped_brackets(self, gate_graph: ModuleType) -> None:
+    def test_labels_have_no_unescaped_brackets(self, gate_graph: _GateGraphModule) -> None:
         # In Mermaid flowchart grammar `[`/`]` are node-shape delimiters; a literal
         # bracket inside an id["..."] label span breaks the parser. The substring
         # presence check above passes even when the block is unrenderable, so guard
         # the *syntax*: every quoted label span must be bracket-free.
         mermaid = gate_graph.to_mermaid()
-        spans = re.findall(r'\["(.*?)"\]', mermaid)
+        spans = cast(list[str], re.findall(r'\["(.*?)"\]', mermaid))
         assert spans, "no mermaid label spans found"
         offenders = [s for s in spans if "[" in s or "]" in s]
         assert not offenders, f"literal brackets inside mermaid label spans break parsing: {offenders}"
 
-    def test_bracketed_labels_are_escaped(self, gate_graph: ModuleType) -> None:
+    def test_bracketed_labels_are_escaped(self, gate_graph: _GateGraphModule) -> None:
         # The two checklist gates whose labels carry [TBD]/[BLOCKED]/[?] must reach
         # the mermaid output as HTML entities, not dropped or left literal.
         mermaid = gate_graph.to_mermaid()
@@ -88,35 +137,35 @@ class TestToMermaid:
             )
             assert escaped in mermaid, f"label not escaped/present in mermaid: {node.label!r}"
 
-    def test_derives_from_same_node_set_as_dot(self, gate_graph: ModuleType) -> None:
+    def test_derives_from_same_node_set_as_dot(self, gate_graph: _GateGraphModule) -> None:
         # Both targets enumerate the same node ids — the no-drift guarantee.
-        dot_ids = {gate_graph._dot_id(n.id) for n in gate_graph.GATE_MODEL.nodes}
+        dot_ids = {_dot_id(gate_graph, n.id) for n in gate_graph.GATE_MODEL.nodes}
         mermaid = gate_graph.to_mermaid()
         for nid in dot_ids:
             assert re.search(rf"\b{re.escape(nid)}\b", mermaid), nid
 
 
 class TestRenderDegrade:
-    def test_dot_target_never_needs_binary(self, gate_graph: ModuleType) -> None:
+    def test_dot_target_never_needs_binary(self, gate_graph: _GateGraphModule) -> None:
         target, payload = gate_graph.render("dot", dot_present=False)
         assert target == "dot"
         assert payload.decode("utf-8") == gate_graph.to_dot()
 
-    def test_mermaid_target_never_needs_binary(self, gate_graph: ModuleType) -> None:
+    def test_mermaid_target_never_needs_binary(self, gate_graph: _GateGraphModule) -> None:
         target, payload = gate_graph.render("mermaid", dot_present=False)
         assert target == "mermaid"
         assert payload.decode("utf-8") == gate_graph.to_mermaid()
 
-    def test_svg_degrades_to_mermaid_without_dot(self, gate_graph: ModuleType) -> None:
+    def test_svg_degrades_to_mermaid_without_dot(self, gate_graph: _GateGraphModule) -> None:
         target, payload = gate_graph.render("svg", dot_present=False)
         assert target == "mermaid"
         assert payload.decode("utf-8") == gate_graph.to_mermaid()
 
-    def test_png_degrades_to_mermaid_without_dot(self, gate_graph: ModuleType) -> None:
+    def test_png_degrades_to_mermaid_without_dot(self, gate_graph: _GateGraphModule) -> None:
         target, _ = gate_graph.render("png", dot_present=False)
         assert target == "mermaid"
 
-    def test_svg_renders_binary_when_dot_present(self, gate_graph: ModuleType) -> None:
+    def test_svg_renders_binary_when_dot_present(self, gate_graph: _GateGraphModule) -> None:
         # Only when Graphviz is actually installed — otherwise the degrade path
         # above is the real-world case and is covered.
         if not gate_graph.dot_available():
@@ -125,13 +174,13 @@ class TestRenderDegrade:
         assert target == "svg"
         assert b"<svg" in payload
 
-    def test_unknown_target_raises(self, gate_graph: ModuleType) -> None:
+    def test_unknown_target_raises(self, gate_graph: _GateGraphModule) -> None:
         with pytest.raises(gate_graph.RenderError):
-            gate_graph.render("jpeg", dot_present=True)
+            _ = gate_graph.render("jpeg", dot_present=True)
 
 
 class TestDotSnapshot:
-    def test_committed_dot_matches_model(self, gate_graph: ModuleType) -> None:
+    def test_committed_dot_matches_model(self, gate_graph: _GateGraphModule) -> None:
         # mold.dot is the canonical committed snapshot; it must equal to_dot() so
         # the `.dot` source of truth and the model can't diverge.
         assert MOLD_DOT.exists(), f"missing committed snapshot: {MOLD_DOT}"
@@ -145,7 +194,7 @@ class TestGateProseSync:
     def _checklist_labels(self) -> list[str]:
         body = HANDSHAKE.read_text(encoding="utf-8")
         block = re.search(
-            r"```\nCoherence self-check before curdle:\n(.*?)```",
+            r"```\nCoherence self-check before Cook handoff:\n(.*?)```",
             body,
             re.DOTALL,
         )
@@ -155,7 +204,7 @@ class TestGateProseSync:
     def test_checklist_block_is_present(self) -> None:
         assert self._checklist_labels(), "no checklist items parsed"
 
-    def test_gate_nodes_match_checklist_items(self, gate_graph: ModuleType) -> None:
+    def test_gate_nodes_match_checklist_items(self, gate_graph: _GateGraphModule) -> None:
         prose_ids = {gate_graph.gate_id(label) for label in self._checklist_labels()}
         model_ids = {n.id for n in gate_graph.GATE_MODEL.by_kind("gate")}
         missing_from_model = prose_ids - model_ids
@@ -163,8 +212,47 @@ class TestGateProseSync:
         assert not missing_from_model, f"in handshake.md but not the gate model: {missing_from_model}"
         assert not missing_from_prose, f"in gate model but dropped from handshake.md: {missing_from_prose}"
 
-    def test_count_matches(self, gate_graph: ModuleType) -> None:
+    def test_count_matches(self, gate_graph: _GateGraphModule) -> None:
         assert len(self._checklist_labels()) == len(gate_graph.GATE_MODEL.by_kind("gate"))
+
+
+class TestGateTopology:
+    def test_taste_gate_routes_through_typed_planner(
+        self, gate_graph: _GateGraphModule
+    ) -> None:
+        taste_id = gate_graph.gate_id("Fork taste test passed:")
+        outgoing = [
+            edge.dst for edge in gate_graph.GATE_MODEL.edges if edge.src == taste_id
+        ]
+        assert outgoing == [gate_graph.TYPED_PLANNER.id]
+        assert gate_graph.TYPED_PLANNER.id in gate_graph.GATE_MODEL.ids()
+        assert [
+            edge.dst
+            for edge in gate_graph.GATE_MODEL.edges
+            if edge.src == gate_graph.TYPED_PLANNER.id
+        ] == [gate_graph.HANDSHAKE.id]
+        assert not any(
+            edge.src == taste_id and edge.dst == gate_graph.HANDSHAKE.id
+            for edge in gate_graph.GATE_MODEL.edges
+        )
+
+    def test_other_coherence_gates_feed_handshake_directly(
+        self, gate_graph: _GateGraphModule
+    ) -> None:
+        taste_id = gate_graph.gate_id("Fork taste test passed:")
+        other_gate_ids = {
+            node.id
+            for node in gate_graph.GATE_MODEL.by_kind("gate")
+            if node.id != taste_id
+        }
+        direct_edges = [
+            edge
+            for edge in gate_graph.GATE_MODEL.edges
+            if edge.src in other_gate_ids
+        ]
+        assert {edge.src for edge in direct_edges} == other_gate_ids
+        assert {edge.dst for edge in direct_edges} == {gate_graph.HANDSHAKE.id}
+        assert len(direct_edges) == len(other_gate_ids)
 
 
 class TestPortability:
@@ -182,40 +270,47 @@ class TestPortability:
 
 
 class TestCli:
-    def test_default_render_is_dot(self, gate_graph: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_default_render_is_dot(self, gate_graph: _GateGraphModule, capsys: pytest.CaptureFixture[str]) -> None:
         rc = gate_graph.main([])
         assert rc == 0
-        out = capsys.readouterr().out
-        assert out.startswith("digraph mold_gates {")
+        parsed = cast(dict[str, object], json.loads(capsys.readouterr().out))
+        assert parsed["render"] == "dot"
+        assert parsed["text"] == gate_graph.to_dot()
 
-    def test_mermaid_to_stdout(self, gate_graph: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_mermaid_to_stdout(self, gate_graph: _GateGraphModule, capsys: pytest.CaptureFixture[str]) -> None:
         rc = gate_graph.main(["--render", "mermaid"])
         assert rc == 0
-        assert "```mermaid" in capsys.readouterr().out
+        parsed = cast(dict[str, object], json.loads(capsys.readouterr().out))
+        assert parsed["render"] == "mermaid"
+        assert parsed["text"] == gate_graph.to_mermaid()
 
-    def test_out_file_written(self, gate_graph: ModuleType, tmp_path: Path) -> None:
+    def test_out_file_written(self, gate_graph: _GateGraphModule, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         out = tmp_path / "g.dot"
         rc = gate_graph.main(["--render", "dot", "--out", str(out)])
         assert rc == 0
         assert out.read_text(encoding="utf-8") == gate_graph.to_dot()
+        parsed = cast(dict[str, object], json.loads(capsys.readouterr().out))
+        assert parsed["path"] == str(out)
 
-    def test_svg_degrades_to_mermaid_note_when_dot_absent(
+    def test_svg_degrades_to_mermaid_when_dot_absent(
         self,
-        gate_graph: ModuleType,
+        gate_graph: _GateGraphModule,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        # No dot: svg degrades to mermaid (text) and prints fine, with a note on
-        # stderr. Forced via monkeypatch so this covers the degrade path on hosts
-        # that DO have graphviz too, not only on bare ones.
+        # No dot: svg degrades to mermaid (text). Forced via monkeypatch so this
+        # covers the degrade path on hosts that DO have graphviz too, not only
+        # on bare ones.
         monkeypatch.setattr(gate_graph, "dot_available", lambda: False)
         rc = gate_graph.main(["--render", "svg"])
         assert rc == 0
-        assert "degraded svg -> mermaid" in capsys.readouterr().err
+        parsed = cast(dict[str, object], json.loads(capsys.readouterr().out))
+        assert parsed["render"] == "mermaid"
+        assert parsed["text"] == gate_graph.to_mermaid()
 
     def test_binary_to_stdout_is_rejected(
         self,
-        gate_graph: ModuleType,
+        gate_graph: _GateGraphModule,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
@@ -226,51 +321,55 @@ class TestCli:
         # degrade, which never happens on a dot-less host.
         import subprocess as _sp
 
-        def fake_run(*_a, **_k):
-            return _sp.CompletedProcess(args=_a, returncode=0, stdout=b"<svg>fake</svg>", stderr=b"")
+        def fake_run(*_a: object, **_k: object) -> _sp.CompletedProcess[bytes]:
+            return _sp.CompletedProcess(args=("dot",), returncode=0, stdout=b"<svg>fake</svg>", stderr=b"")
 
         monkeypatch.setattr(gate_graph, "dot_available", lambda: True)
         monkeypatch.setattr(gate_graph.subprocess, "run", fake_run)
         rc = gate_graph.main(["--render", "svg"])
         assert rc == 2
-        assert "is binary; pass --out" in capsys.readouterr().err
+        err = cast(dict[str, object], json.loads(capsys.readouterr().err))
+        assert "is binary; pass --out" in cast(str, err["error"])
 
     def test_dot_timeout_exits_2(
         self,
-        gate_graph: ModuleType,
+        gate_graph: _GateGraphModule,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         import subprocess as _sp
 
-        def fake_run(*_a, **_k):
+        def fake_run(*_a: object, **_k: object) -> _sp.CompletedProcess[bytes]:
             raise _sp.TimeoutExpired(cmd="dot", timeout=30)
 
         monkeypatch.setattr(gate_graph, "dot_available", lambda: True)
         monkeypatch.setattr(gate_graph.subprocess, "run", fake_run)
         rc = gate_graph.main(["--render", "svg"])
         assert rc == 2
-        assert "timed out" in capsys.readouterr().err
+        err = cast(dict[str, object], json.loads(capsys.readouterr().err))
+        assert "timed out" in cast(str, err["error"])
 
     def test_out_write_failure_exits_2(
         self,
-        gate_graph: ModuleType,
+        gate_graph: _GateGraphModule,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         out = tmp_path / "nope" / "g.dot"
         rc = gate_graph.main(["--render", "dot", "--out", str(out)])
         assert rc == 2
-        assert "could not write" in capsys.readouterr().err
+        err = cast(dict[str, object], json.loads(capsys.readouterr().err))
+        assert "could not write" in cast(str, err["error"])
 
     def test_bad_state_file_exits_2(
-        self, gate_graph: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, gate_graph: _GateGraphModule, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         bad = tmp_path / "state.json"
-        bad.write_text("{not json", encoding="utf-8")
+        _ = bad.write_text("{not json", encoding="utf-8")
         rc = gate_graph.main(["--state", str(bad)])
         assert rc == 2
-        assert "could not read state" in capsys.readouterr().err
+        err = cast(dict[str, object], json.loads(capsys.readouterr().err))
+        assert "could not read state" in cast(str, err["error"])
 
 
 class TestGateIdInjectivity:
@@ -280,18 +379,18 @@ class TestGateIdInjectivity:
     items but the model would be missing a gate). Injectivity of gate_id over the
     real checklist is the boundary that closes that hole."""
 
-    def test_gate_ids_are_unique(self, gate_graph: ModuleType) -> None:
+    def test_gate_ids_are_unique(self, gate_graph: _GateGraphModule) -> None:
         labels = gate_graph.COHERENCE_GATES
         ids = [gate_graph.gate_id(label) for label in labels]
         dupes = {i for i in ids if ids.count(i) > 1}
         assert not dupes, f"gate_id collisions hide a dropped gate behind set-equality: {dupes}"
         assert len(set(ids)) == len(labels)
 
-    def test_model_gate_count_equals_checklist_source(self, gate_graph: ModuleType) -> None:
+    def test_model_gate_count_equals_checklist_source(self, gate_graph: _GateGraphModule) -> None:
         # The model is built from COHERENCE_GATES; assert no gate is lost in _build_model.
         assert len(gate_graph.GATE_MODEL.by_kind("gate")) == len(gate_graph.COHERENCE_GATES)
 
-    def test_gate_id_is_idempotent(self, gate_graph: ModuleType) -> None:
+    def test_gate_id_is_idempotent(self, gate_graph: _GateGraphModule) -> None:
         # Slugging an already-slugged id must be a fixed point, else re-deriving
         # ids (model vs prose) could diverge on a second pass.
         for label in gate_graph.COHERENCE_GATES:
@@ -305,7 +404,7 @@ class TestRenderAutoDetect:
     dot_available(). Exercise that path so the auto-detect wiring is covered, not
     just the injected flag."""
 
-    def test_text_targets_match_auto_detect_path(self, gate_graph: ModuleType) -> None:
+    def test_text_targets_match_auto_detect_path(self, gate_graph: _GateGraphModule) -> None:
         # dot/mermaid never touch the binary, so auto-detect must agree with the
         # forced-absent result regardless of whether dot is installed.
         for target in ("dot", "mermaid"):
@@ -314,7 +413,7 @@ class TestRenderAutoDetect:
             assert auto_t == forced_t == target
             assert auto_p == forced_p
 
-    def test_svg_auto_detect_tracks_dot_availability(self, gate_graph: ModuleType) -> None:
+    def test_svg_auto_detect_tracks_dot_availability(self, gate_graph: _GateGraphModule) -> None:
         # With no dot_present arg, the effective target must follow dot_available():
         # 'svg' when graphviz is present, degraded 'mermaid' when it is absent.
         effective, payload = gate_graph.render("svg")
@@ -332,26 +431,26 @@ class TestRenderDotFailure:
     truncated/empty image. Monkeypatched so it runs without a real graphviz."""
 
     def test_nonzero_dot_exit_raises_with_stderr(
-        self, gate_graph: ModuleType, monkeypatch: pytest.MonkeyPatch
+        self, gate_graph: _GateGraphModule, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         import subprocess as _sp
 
-        def fake_run(*_a, **_k):
-            return _sp.CompletedProcess(args=_a, returncode=1, stdout=b"", stderr=b"boom: layout failed")
+        def fake_run(*_a: object, **_k: object) -> _sp.CompletedProcess[bytes]:
+            return _sp.CompletedProcess(args=("dot",), returncode=1, stdout=b"", stderr=b"boom: layout failed")
 
         monkeypatch.setattr(gate_graph.subprocess, "run", fake_run)
         with pytest.raises(gate_graph.RenderError) as exc:
-            gate_graph.render("svg", dot_present=True)
+            _ = gate_graph.render("svg", dot_present=True)
         assert "boom: layout failed" in str(exc.value)
         assert "svg" in str(exc.value)
 
     def test_successful_dot_returns_binary_target(
-        self, gate_graph: ModuleType, monkeypatch: pytest.MonkeyPatch
+        self, gate_graph: _GateGraphModule, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         import subprocess as _sp
 
-        def fake_run(*_a, **_k):
-            return _sp.CompletedProcess(args=_a, returncode=0, stdout=b"<svg>fake</svg>", stderr=b"")
+        def fake_run(*_a: object, **_k: object) -> _sp.CompletedProcess[bytes]:
+            return _sp.CompletedProcess(args=("dot",), returncode=0, stdout=b"<svg>fake</svg>", stderr=b"")
 
         monkeypatch.setattr(gate_graph.subprocess, "run", fake_run)
         effective, payload = gate_graph.render("png", dot_present=True)
@@ -398,8 +497,8 @@ class TestCliDegradeToFile:
     fallback bytes to the named file AND print the degrade note, not silently
     write an empty/binary file."""
 
-    def test_out_with_degraded_svg_writes_mermaid_and_notes(
-        self, gate_graph: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    def test_out_with_degraded_svg_writes_mermaid(
+        self, gate_graph: _GateGraphModule, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         if gate_graph.dot_available():
             pytest.skip("dot present: svg would render binary, not degrade")
@@ -407,14 +506,16 @@ class TestCliDegradeToFile:
         rc = gate_graph.main(["--render", "svg", "--out", str(out)])
         assert rc == 0
         assert out.read_text(encoding="utf-8") == gate_graph.to_mermaid()
-        assert "degraded svg -> mermaid" in capsys.readouterr().err
+        parsed = cast(dict[str, object], json.loads(capsys.readouterr().out))
+        assert parsed["path"] == str(out)
 
-    def test_unknown_render_choice_rejected_by_argparse(
-        self, gate_graph: ModuleType
+    def test_unknown_render_choice_rejected(
+        self, gate_graph: _GateGraphModule, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        # argparse choices guard the CLI surface before render() is ever called.
-        with pytest.raises(SystemExit):
-            gate_graph.main(["--render", "jpeg"])
+        rc = gate_graph.main(["--render", "jpeg"])
+        assert rc == 2
+        err = cast(dict[str, object], json.loads(capsys.readouterr().err))
+        assert err["exit_code"] == 2
 
 
 class TestNonGoalsGatePresence:
@@ -430,10 +531,10 @@ class TestNonGoalsGatePresence:
     the handshake checklist, regardless of whether prose was dropped in lockstep.
     """
 
-    NON_GOALS_ID = "non-goals-audit"  # gate_id() slug of "Non-goals audit:"
-    NON_GOALS_DOT_ID = "non_goals_audit"  # _dot_id() form rendered in the .dot
+    NON_GOALS_ID: str = "non-goals-audit"  # gate_id() slug of "Non-goals audit:"
+    NON_GOALS_DOT_ID: str = "non_goals_audit"  # _dot_id() form rendered in the .dot
 
-    def test_gate_node_exists_in_model_by_id(self, gate_graph: ModuleType) -> None:
+    def test_gate_node_exists_in_model_by_id(self, gate_graph: _GateGraphModule) -> None:
         gates = {n.id: n for n in gate_graph.GATE_MODEL.by_kind("gate")}
         assert self.NON_GOALS_ID in gates, (
             "the non-goals-audit (RC4) gate is missing from GATE_MODEL; set-equality "
@@ -449,7 +550,7 @@ class TestNonGoalsGatePresence:
         assert "[AGENT-INTRODUCED]" in node.label
 
     def test_gate_renders_into_dot_with_edge_to_handshake(
-        self, gate_graph: ModuleType
+        self, gate_graph: _GateGraphModule
     ) -> None:
         # Anchor on the LIVE render (to_dot()), not the committed mold.dot
         # snapshot: a snapshot regenerated after a removal would match again, but
@@ -469,15 +570,15 @@ class TestNonGoalsGatePresence:
             "the non_goals_audit gate must feed the handshake like every other gate"
         )
 
-    def test_checklist_carries_the_non_goals_item(self, gate_graph: ModuleType) -> None:
+    def test_checklist_carries_the_non_goals_item(self, gate_graph: _GateGraphModule) -> None:
         # The prose anchor for THIS gate specifically: some coherence-checklist
         # label in handshake.md must slug to non-goals-audit.
         body = HANDSHAKE.read_text(encoding="utf-8")
         block = re.search(
-            r"```\nCoherence self-check before curdle:\n(.*?)```", body, re.DOTALL
+            r"```\nCoherence self-check before Cook handoff:\n(.*?)```", body, re.DOTALL
         )
         assert block, "coherence self-check block not found in handshake.md"
-        labels = re.findall(r"^- \[ \] (.+?)\s*$", block.group(1), re.MULTILINE)
+        labels = cast(list[str], re.findall(r"^- \[ \] (.+?)\s*$", block.group(1), re.MULTILINE))
         ids = {gate_graph.gate_id(label) for label in labels}
         assert self.NON_GOALS_ID in ids, (
             "handshake.md coherence checklist dropped the Non-goals audit gate item"
@@ -495,10 +596,10 @@ class TestDurableWritesGatePresence:
     by-meaning assertions are the only catcher if this specific gate vanishes.
     """
 
-    DURABLE_ID = "durable-writes"  # gate_id() slug of "Durable writes:"
-    DURABLE_DOT_ID = "durable_writes"  # _dot_id() form rendered in the .dot
+    DURABLE_ID: str = "durable-writes"  # gate_id() slug of "Durable writes:"
+    DURABLE_DOT_ID: str = "durable_writes"  # _dot_id() form rendered in the .dot
 
-    def test_gate_node_exists_in_model_by_id(self, gate_graph: ModuleType) -> None:
+    def test_gate_node_exists_in_model_by_id(self, gate_graph: _GateGraphModule) -> None:
         gates = {n.id: n for n in gate_graph.GATE_MODEL.by_kind("gate")}
         assert self.DURABLE_ID in gates, (
             "the durable-writes (ADR-001) gate is missing from GATE_MODEL; set-equality "
@@ -515,7 +616,7 @@ class TestDurableWritesGatePresence:
         assert "fallback" in node.label
 
     def test_gate_renders_into_dot_with_edge_to_handshake(
-        self, gate_graph: ModuleType
+        self, gate_graph: _GateGraphModule
     ) -> None:
         dot = gate_graph.to_dot()
         node_line = next(
@@ -532,39 +633,104 @@ class TestDurableWritesGatePresence:
             "the durable_writes gate must feed the handshake like every other gate"
         )
 
-    def test_checklist_carries_the_durable_writes_item(self, gate_graph: ModuleType) -> None:
+    def test_checklist_carries_the_durable_writes_item(self, gate_graph: _GateGraphModule) -> None:
         body = HANDSHAKE.read_text(encoding="utf-8")
         block = re.search(
-            r"```\nCoherence self-check before curdle:\n(.*?)```", body, re.DOTALL
+            r"```\nCoherence self-check before Cook handoff:\n(.*?)```", body, re.DOTALL
         )
         assert block, "coherence self-check block not found in handshake.md"
-        labels = re.findall(r"^- \[ \] (.+?)\s*$", block.group(1), re.MULTILINE)
+        labels = cast(list[str], re.findall(r"^- \[ \] (.+?)\s*$", block.group(1), re.MULTILINE))
         ids = {gate_graph.gate_id(label) for label in labels}
         assert self.DURABLE_ID in ids, (
             "handshake.md coherence checklist dropped the Durable writes gate item"
         )
 
 
-class TestCommittedPyzFreshness:
-    """The `gate_graph` fixture imports a FRESH rebuild of src/mold/ (via
-    build_pyz.cached_bundle), and TestDotSnapshot compares mold.dot to that fresh
-    to_dot(). Neither exercises the COMMITTED skills/mold/scripts/mold.pyz — the
-    artifact the SKILL actually invokes (`mold.pyz gate-graph --render dot`). A src
-    edit that regenerates mold.dot but leaves the committed .pyz stale would pass
-    every other test. This closes the fourth-artifact freshness loop: the committed
-    bundle's own render must byte-match the committed snapshot."""
+class TestSpecFormatValidGatePresence:
+    """The `spec-format-valid` gate (curdle-gate-wiring) makes validate-spec a
+    lockstep-enforced coherence gate: the handshake cannot extract a spec that
+    fails validate-spec.
 
-    def test_committed_pyz_renders_byte_identical_to_dot(self) -> None:
-        assert MOLD_PYZ.exists(), f"missing committed bundle: {MOLD_PYZ}"
+    Like the non-goals and durable-writes gates, set-equality + count-equality
+    between prose and model are blind to a coordinated removal (drop the
+    checklist item AND the node together, N -> N-1 on both sides, still green).
+    These positive by-name assertions are the only catcher if this specific gate
+    vanishes.
+    """
+
+    SPEC_FORMAT_ID: str = "spec-format-valid"  # gate_id() slug of "Spec format valid:"
+    SPEC_FORMAT_DOT_ID: str = "spec_format_valid"  # _dot_id() form rendered in the .dot
+
+    def test_gate_node_exists_in_model_by_id(self, gate_graph: _GateGraphModule) -> None:
+        gates = {n.id: n for n in gate_graph.GATE_MODEL.by_kind("gate")}
+        assert self.SPEC_FORMAT_ID in gates, (
+            "the spec-format-valid gate is missing from GATE_MODEL; set-equality "
+            "with prose stays green if the checklist item was dropped in lockstep, "
+            "so this by-name check is the only catcher"
+        )
+        node = gates[self.SPEC_FORMAT_ID]
+        assert node.kind == "gate"
+        assert "validate-spec" in node.label
+
+    def test_gate_renders_into_dot_with_edge_ordered_before_curdle(
+        self, gate_graph: _GateGraphModule
+    ) -> None:
+        dot = gate_graph.to_dot()
+        node_line = next(
+            (
+                line
+                for line in dot.splitlines()
+                if line.strip().startswith(f"{self.SPEC_FORMAT_DOT_ID} [")
+            ),
+            None,
+        )
+        assert node_line is not None, f"{self.SPEC_FORMAT_DOT_ID} node absent from to_dot()"
+        assert 'kind="gate"' in node_line
+        lines = dot.splitlines()
+        gate_edge_idx = next(
+            i for i, line in enumerate(lines) if line.strip() == f"{self.SPEC_FORMAT_DOT_ID} -> handshake;"
+        )
+        curdle_edge_idx = next(
+            i for i, line in enumerate(lines) if 'handshake -> curdle [label="coherence check"];' in line
+        )
+        assert gate_edge_idx < curdle_edge_idx, (
+            "the spec-format-valid gate's edge must be ordered before the handshake -> curdle edge"
+        )
+
+    def test_checklist_carries_the_spec_format_item(self, gate_graph: _GateGraphModule) -> None:
+        body = HANDSHAKE.read_text(encoding="utf-8")
+        block = re.search(
+            r"```\nCoherence self-check before Cook handoff:\n(.*?)```", body, re.DOTALL
+        )
+        assert block, "coherence self-check block not found in handshake.md"
+        labels = cast(list[str], re.findall(r"^- \[ \] (.+?)\s*$", block.group(1), re.MULTILINE))
+        ids = {gate_graph.gate_id(label) for label in labels}
+        assert self.SPEC_FORMAT_ID in ids, (
+            "handshake.md coherence checklist dropped the Spec format valid gate item"
+        )
+
+
+class TestBuiltArchiveFreshness:
+    """The `gate_graph` fixture imports the source module, and TestDotSnapshot
+    compares mold.dot to that source model's fresh to_dot(). Neither exercises
+    the packaged mold archive — the artifact the SKILL actually invokes
+    (`scripts/mold gate-graph --render dot`). This closes the freshness loop
+    through the packaging seam: the built archive's own render must byte-match
+    the committed snapshot."""
+
+    def test_built_archive_renders_byte_identical_to_dot(
+        self, skill_archive: Callable[[str], Path]
+    ) -> None:
+        archive = skill_archive("mold")
         assert MOLD_DOT.exists(), f"missing committed snapshot: {MOLD_DOT}"
         result = subprocess.run(
-            [sys.executable, str(MOLD_PYZ), "gate-graph", "--render", "dot"],
+            [sys.executable, str(archive), "gate-graph", "--render", "dot"],
             capture_output=True,
             check=True,
         )
-        assert result.stdout == MOLD_DOT.read_bytes(), (
-            "committed mold.pyz renders a .dot differing from committed mold.dot — "
-            "the bundle is stale; rebuild it from src/mold/ so all four lockstep "
-            "artifacts (handshake checklist, gate-graph.py, mold.dot, mold.pyz) "
-            "stay in sync"
+        parsed = cast(dict[str, object], json.loads(result.stdout))
+        assert parsed["text"] == MOLD_DOT.read_text(encoding="utf-8"), (
+            "the built mold archive renders a .dot differing from committed mold.dot — "
+            "regenerate mold.dot from src/easy_cheese/skills/mold so the lockstep "
+            "artifacts (handshake checklist, gate_graph.py, mold.dot) stay in sync"
         )

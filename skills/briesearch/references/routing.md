@@ -1,172 +1,162 @@
-# Source routing
+# Capability routing
 
-Decide once which sources will run, then commit. If you commit a source in routing, you must execute it (or surface its unavailability) — never silently drop it.
+Select the required research capabilities once. Then use that selection. Run each capability marked `YES` through its selected route. Otherwise, use an explicit fallback or report an unavailable or empty result.
+
+Run `providers` before the routing block. It lists the usable routes for each capability in preference order: CLI, then MCP, then native. See `providers.md`.
 
 ## Decision tree
 
+```text
+Is the question about a library API, configuration, or migration?
+  YES → Library/API documentation
+         (providers route `docs`; official docs, vendor llms.txt)
+
+Does it require current public facts, discovery, or page extraction?
+  YES → Current-web discovery/extraction
+         (providers routes `web-search` and `web-extract`)
+
+Does it rest on papers, citations, or scholarly evidence?
+  YES → Scholarly literature
+         (providers route `papers`)
+
+Is it about a past repository decision, rationale, ADR, or recorded convention?
+  YES → Repository knowledge/wiki
+         (for example Hallouminate, llm-wiki, Markdown ADR/wiki)
+
+Is it about patterns or constraints in this checkout?
+  YES → Local code intelligence
+         (shared search/read routing contract)
+
+Is it about hosted repository state or real-world project examples?
+  YES → Git hosting/examples
+         (providers route `git-host`; host-scoped web search)
+
+Is it multi-part, comparative, a "best" question, or a cited report?
+  YES → Route every capability needed for the claims; use a deep-research
+         provider only when it covers the required public-web portion.
 ```
-Is the question about a specific library API, config, or migration?
-  YES → Context7  (+ GitHub if real-world usage matters)
 
-Is it a factual / current / vendor / "what or who or when" question?
-  YES → Tavily — see method matrix below
+## Capability guide
 
-Is it "how should I…" or a best-practice question?
-  YES → Tavily advanced  (+ Context7 when a named library is in scope)
-
-Is it about a past decision or rationale in this repo?
-  YES → Wiki  (hallouminate `ground`)
-
-Is it about patterns in this repo?
-  YES → Codebase  (semantic search + bounded read per the shared routing contract)
-
-Is it about how open-source projects solve something?
-  YES → GitHub  (+ Tavily if written analysis would help)
-
-Is it deep, multi-source, comparative, or "compare X vs Y / market analysis / lit review"?
-  YES → Single tavily_research call (see "When to use tavily_research")
-```
-
-## Source guide
-
-| Source | Best for | Notes |
+| Capability | Best for | Provider selection |
 | --- | --- | --- |
-| Context7 (MCP) | Library APIs, config, migration notes for indexed open-source dependencies | Tools: `resolve-library-id` (`libraryName` + `query`) → `query-docs` (`libraryId` + `query`). Both require a `query`. See "Context7 method" below. |
-| Tavily (MCP) | Current facts, technical articles, vendor docs, best practices, deep multi-source synthesis | Use the method matrix to pick the right rung. |
-| Codebase | Local conventions, existing usage, constraints | Follow the [shared source-code routing contract](../../cheese/references/code-intelligence-routing.md). |
-| Wiki (hallouminate MCP) | Past decisions, rationale, ADRs, conventions recorded in the repo wiki | Tool: `ground` against the repo's wiki corpus. Optional — when hallouminate is absent, degrade per `../../cheese/references/optional-plugins.md`: skip, note once, cap confidence. |
-| GitHub | Real-world OSS usage patterns | `gh` CLI or harness GitHub integration. Treat as supporting evidence unless the user asked for OSS precedent. |
+| Library/API documentation | APIs, configuration, migration guidance, supported versions | Use the first `docs` route. Otherwise, read official documentation, `llms.txt`, or package documentation through a `web-extract` route. |
+| Current-web discovery/extraction | Current facts, announcements, maintenance signals, public pages | Use the first `web-search` route for discovery. Use the first `web-extract` route for retrieval. |
+| Scholarly literature | Papers, citation counts, preprints, literature reviews | Use the first `papers` route. |
+| Repository knowledge/wiki | Prior decisions, rationale, ADRs, recorded conventions | Prefer the configured wiki backend. Examples include Hallouminate, llm-wiki, and limited Markdown ADR or wiki reads. |
+| Local code intelligence | Existing use, implementations, local constraints | Follow the [shared source code routing contract](../../cheese/references/code-intelligence-routing.md). |
+| Git hosting/examples | Issues, releases, commits, pull requests, and OSS use patterns | Use the first `git-host` route or host-specific web discovery. Treat examples as support unless the question asks about precedent. |
 
-## Context7 method
+Select one route for each capability. Use multiple providers only when independent verification or coverage requires them. Do not select a provider only because this file names it.
 
-Two-step flow. Skip the first step (`resolve-library-id`) whenever an exact `/org/project` (or `/org/project/version`) ID is already known — supplied by the user or pasted into the prompt — which saves ~7K tokens per skip. Put the ID straight into the `query-docs` call and Context7 skips the matching step.
+## Provider tool sets
 
-| Step | Tool | Args | Notes |
+A provider selection includes its complete tool set. Evidence collection has discovery and retrieval operations. Discovery finds candidates. Retrieval reads a page before you cite it. Use both operations from the same provider when possible. A search snippet is discovery, not inspection. A model summary of a page is also discovery. `ground-check` reports citations that do not have retrieval evidence.
+
+| Route (example) | Discovery | Retrieval (what you cite from) | Coverage / extras |
 | --- | --- | --- | --- |
-| 1 | `resolve-library-id` | `libraryName`, `query` | `query` is the user's full question, not just keywords — the server reranker uses it. |
-| 2 | `query-docs` | `libraryId`, `query` | Pass the chosen `/org/project` from step 1, plus the same focused question. |
+| Search CLI (`parallel-cli`, `tvly`, `linkup`) | `<cli> search` | `<cli> extract` or `linkup fetch` | Write output to `raw_dir`; trim it with `jq` |
+| Jina Reader | — | `curl https://r.jina.ai/<url>` | Raw markdown for any discovered URL |
+| Context7 (`ctx7` or MCP) | `ctx7 library` or `resolve-library-id` | `ctx7 docs` or `query-docs` (version-scoped) | Resolve only when the library id is ambiguous |
+| Search MCP (Exa, Tavily, Kagi) | search tool | contents or extract tool | Crawl or map tools for broad section coverage |
+| Native web | web search | A raw page open. Claude Code `WebFetch` returns a summary. | — |
+| Scholarly (`curl` to OpenAlex, arXiv, Semantic Scholar) | search endpoint | Lookup by DOI or ID, then the paper page | Batch lookups |
+| Hallouminate | `ground` | `read_markdown` (cite path + lines) | `backlinks`, `list_tree` for neighbouring decisions |
+| Git hosting (`gh`) | `gh search` (code/issues/prs) | `gh api`, `gh <noun> view` | Release/tag metadata for freshness claims |
+| Local code intelligence | shared [routing contract](../../cheese/references/code-intelligence-routing.md) search | bounded read at the cited `file:line` | Dependency inspection for callers |
 
-### Rules
+Rules:
 
-- **Always pass a `query`.** Both tools rerank against it. A library name alone returns generic noise.
-- **No `topic=` or `tokens=` parameters.** Modern Context7 reranks server-side (~3.3 K avg context tokens); the legacy `topic`/`tokens` knobs belong to the pre-rebrand `get-library-docs` and were removed. To narrow scope, write a richer `query` ("react hooks useState rules", "next.js 15 middleware auth").
-- **Soft cap: ~3 Context7 calls per question.** Injected by the MCP tool description ("Do not call this tool more than 3 times per question"), not a documented upstream policy — the observed post-reranking average is ~2.96 calls. Beyond ~3, answer with the best result so far.
-- **Cache library IDs within a session.** `/org/project` and `/org/project/version` are stable — once resolved, reuse without re-resolving. No expiry window is documented; handle 301 redirects (use the response's `redirectUrl`) and re-resolve per session to be safe.
+- **Do not use a generic wrapper without a clear need.** Use the selected provider retrieval tool when it is available. Otherwise, record the substitution as `unavailable.md` specifies.
+- **Record the provider and tool for every call.** For a CLI route, the tool is the subcommand, such as `tvly extract`. Use the capture manifest in `context-isolation.md` § Capture manifest. A provider name does not prove that its retrieval tool read a page.
+- **Treat discovery-only execution as committed-but-skipped.** Apply this status to claims that require page content.
 
-### Error handling
+## Provider-selected methods
 
-- `"Documentation not found or not finalized"` → re-call `resolve-library-id` once with an alternate name (full vs short, scoped vs unscoped). If still empty, surface UNAVAILABLE per `unavailable.md` — do not retry the same ID.
-- Multiple `resolve-library-id` matches → prefer the higher reputation / official org match; cite the chosen ID in the routing block.
+### Library/API documentation
 
-### When Context7 comes up empty
+Ask one focused question that includes the version. Resolve the library only when the documentation index requires it. Then query the index. If the index is absent or incomplete, read an authoritative source. Sources include vendor documentation, `llms.txt`, package documentation, and the repository README.
 
-If the library isn't indexed — or the question is about repo architecture, not API signatures — fall back in this order before generic web search (reach for whichever the harness actually has; the llms.txt path needs only WebFetch):
+Do not use a documentation provider for private application logic or repository architecture. It can also omit a new behavior. Route these parts to local code, repository knowledge, release notes, or the current web.
 
-1. **llms.txt fast-path.** If the vendor publishes one (Anthropic, Vercel, Cloudflare, Stripe all do), `WebFetch` their `/llms.txt` (index) or `/llms-full.txt` directly — more authoritative than any crawl of the same docs.
-2. **GitMCP** (`gitmcp.io`, free/OSS) — any public GitHub repo, zero pre-indexing, real-time; reads `llms.txt`/`llms-full.txt`/README first. Best for the long tail Context7 hasn't indexed.
-3. **DeepWiki MCP** (`mcp.deepwiki.com`, free/no-auth for public repos; `ask_question`) — whole-repo architecture and "how does this fit together" questions Context7 can't answer (it returns API snippets, not narrative).
+#### Library docs brief
 
-### When Context7 is the wrong tool
+Use this method when the research grounds a plan that depends on a library. Examples are a new integration, an API surface choice, or a migration path.
 
-- Refactoring, business logic, debugging, code review, general programming concepts.
-- Application code or internal libraries with no public docs.
-- Niche packages absent from Context7's index (~110 K libraries as of mid-2026; the index grows on-demand — submit a repo via the web UI or POST llms.txt / OpenAPI specs to `/api/v2/add/llmstxt` / `/api/v2/add/openapi`, private repos on paid plans — so absence is fixable, not permanent).
-- Mature, well-known libraries the model already covers reliably — value is marginal; skip to spare a routed call.
+1. **Pin the target.** Record the library, ecosystem, version constraint, and use case. Several libraries can match one name. Treat that match as an open question when it changes the source plan.
+2. **Split the scope into topics.** Select only the topics that the decision needs: install and quickstart, API or command surface, configuration, migration and version notes, security or operational caveats, and recommended practice. Send one version-scoped docs query for each topic. Do not request the complete library in one query.
+3. **Use the docs index as the spine.** Then verify its version against an official release marker through a `web-extract` route. Release notes, a changelog, and the registry page are release markers.
+4. **Climb the official-source ladder.** Prefer the official docs site. Then use the official repository docs, the official package registry page, and a maintainer release announcement. Use community examples only when official docs are missing.
+5. **Extract selectively.** Extract only pages that can change the plan, such as quickstarts, API references, migration guides, release notes, and security notes. Skip marketing pages and sections outside the use case. Do not mirror a docs site.
+6. **Reconcile the sources.** The docs index can lag the official docs on a version, a feature, or a major-version marker. When they disagree, the official current docs win. Record both sides as a conflicting row pair. Flag each renamed API, deprecated command, version mismatch, and missing page. Separate documented guarantees from examples and conventions.
 
-### Cost and freshness
+Return the result in the library docs brief shape in `synthesis.md`.
 
-- **Free tier is ~1,000 calls/month** (cut ~83% in Jan 2026 from ~6,000); Pro is $10/seat/month. High-frequency runs can drain the free tier — spend routed calls deliberately.
-- **Private repos** need Pro (+ ~$25 / 1M tokens for private parsing) or Enterprise.
-- **Freshness is tiered**: top-100 libraries refresh daily, top-1,000 ~every 15 days, top-5,000 ~every 30 days, the long tail up to ~45 days. For a just-released version the indexed docs can lag — cross-check the changelog before trusting them.
+### Current-web discovery and extraction
 
-Upstream reference (canonical):
+Use a durable two-step pattern:
 
-- <https://github.com/upstash/context7/blob/main/README.md>
-- <https://github.com/upstash/context7/blob/main/rules/context7-mcp.md>
+1. **Discover** authoritative candidate URLs with the selected search provider.
+2. **Extract or open** only the strongest candidates. Use the same provider or a compatible fetcher. Focus on the claim under review.
 
-## Tavily method matrix
+Examples include a search CLI with its extract command, an MCP search tool with its contents tool, and native web search with a raw fetch. For a large site, search or map its structure first. Then extract only the relevant pages. Crawl the site only when the question requires broad coverage. Deep research can support a comparative public web report. It does not replace repository knowledge or local code evidence.
 
-The Tavily MCP exposes 5 tools at increasing cost and precision. Pick the lowest rung that answers the question; escalate only when the previous rung returns nothing useful.
+Use provider date controls for freshness-sensitive facts when they are available. Record an absolute date. Use exact phrase search for literal errors or API names when possible. Filter candidates for authority and relevance before extraction.
 
-| Need | Tool | When |
-| --- | --- | --- |
-| Discover sources, snippets, scores; no URL yet | `tavily_search` | First reach for any factual / "what's the latest" question. Leave `include_raw_content=false`; pull bodies via `tavily_extract` instead. |
-| Have URL(s), need clean markdown | `tavily_extract` | After search, or when the user supplies links. Up to 20 URLs per call. Pass `query=` so chunks rerank against the question. Set `extract_depth=advanced` for tables, embedded content, LinkedIn, or other protected sites. |
-| Big site, don't know the right page | `tavily_map` | URL-only structure of a domain. Cheap. Pair with `tavily_extract` (Map-then-Extract) for surgical access to large docs sites. |
-| Many pages on a site section (e.g. all `/docs/auth/*`) | `tavily_crawl` | Most expensive. Start with `max_depth=1`, use `select_paths` and semantic `instructions` to keep results on-topic. `extract_depth` applies here too: `basic` = 1 credit / 5 URLs, `advanced` = 2 / 5. |
-| Multi-source synthesis with citations (compare X vs Y, market report, lit review) | `tavily_research` | Blocking — one call returns the cited report directly (params: `input`, `model`). 30-120s. Use `model=mini` for narrow scope, `pro` for multi-domain, `auto` if unsure. Rate limit: 20 req/min — fan out subqueries via `tavily_search`, not parallel research calls. |
+### Scholarly literature
 
-### Search depth (when calling `tavily_search`)
+Search one scholarly index first. Look up each candidate by DOI or ID. Deduplicate papers by DOI. Prefer the published version over a preprint when both exist. Record the version that you read. Respect the rate limits in `providers.md`.
 
-| Depth | Latency | Relevance | Use when |
-| --- | --- | --- | --- |
-| `ultra-fast` | Lowest | Lower | Real-time UX (rare in /briesearch). |
-| `fast` | Low | Good | Need chunks but latency matters. |
-| `basic` | Medium | High | General-purpose default. |
-| `advanced` | Higher | Highest | Specific information queries; precision matters. Follow with `tavily_extract(query=…)` on the top-scoring URLs. |
+### Repository knowledge/wiki
 
-### Filters
+Query the configured repository knowledge source before you infer that a decision is absent. Suitable sources include Hallouminate, llm-wiki, and limited Markdown ADR or wiki reads. Cite the wiki or ADR path and relevant lines when possible.
 
-- **Time**: **set `time_range` whenever the question carries "latest" / "current" / "newest" or names a year** (`day` / `week` / `month` / `year`). Use `start_date` / `end_date` for absolute windows.
-- **Domain**: `include_domains=[...]` for trusted sources (vendor, arxiv.org, github.com); `exclude_domains=[...]` for noise (reddit.com, quora.com).
-- **Score**: post-filter response items before extracting (the score is in the response, not a request param). Keep `score > 0.5` as the floor for extraction candidates; tighten to `score > 0.7` when you only want high-confidence sources.
-- **Exact phrase**: `exact_match=true` when chasing a literal quote, error string, or API name.
-- **`chunks_per_source`** (1-3 on search; 1-5 on extract/crawl): how many reranked snippets come back per source at `advanced`/`fast` depth. `1` trims context, `3` maximises coverage — a direct context-budget lever.
-- **Avoid the `auto_parameters` cost trap**: `auto_parameters=true` lets Tavily auto-pick depth and may silently set `search_depth=advanced` (2 credits). Set `search_depth` explicitly when cost matters.
-- **Post-filter beyond score**: score is the cheap first cut; for precision-sensitive questions also drop results by URL/term regex or a quick LLM "does this cover X?" check.
+### Local code intelligence
 
-### Composite patterns
+Use semantic search, structural search, limited reads, and dependency inspection through the shared contract. Local code defines current repository behavior. Repository knowledge defines recorded rationale. Route both capabilities when the question asks why the current code has its structure.
 
-- **Search-then-Extract** (default two-step): `tavily_search` for discovery → drop results with `score ≤ 0.5` → `tavily_extract(urls=[…], query=<focused question>)` on the survivors. Cheaper and lower-noise than `include_raw_content=true` on search.
-- **Map-then-Extract** (large docs sites): `tavily_map(url=…, select_paths=[…])` to find the 1-3 right URLs without paying for content → `tavily_extract` only those. Cheaper than `tavily_crawl` when you don't need every page.
-- **Verify-then-cite** (link verification): to confirm a URL loads *and* actually covers the claimed topic, use `tavily_extract(urls=[…], query=<the claim>)` — its LLM-optimized clean content makes the "does this page cover X" judgment sharper and cheaper than raw HTML. This is the preferred verification/extraction primitive. WebFetch is the fallback, not the default — reach for it only when the Tavily MCP is unavailable (see `unavailable.md`).
+### Git hosting/examples
 
-### When to use `tavily_research`
-
-A single MCP call beats hand-orchestrating search+extract when:
-
-- The question is comparative ("X vs Y").
-- The deliverable is a cited report, not a single fact.
-- The scope is multi-domain (market analysis, competitive landscape, literature review).
-- 30-120s latency is acceptable.
-
-Hand-orchestrate (search → score-filter → extract → synthesize) instead when:
-
-- The question is cross-source — Tavily plus Context7 plus codebase plus GitHub. `tavily_research` only sees public web; private signals require local synthesis.
-- You need fine-grained control over which URLs feed synthesis.
-- The user wants the raw evidence table, not a narrative report.
-
-Upstream reference (canonical):
-
-- <https://github.com/tavily-ai/skills/blob/main/skills/tavily-cli/SKILL.md>
-- <https://github.com/tavily-ai/skills/tree/main/skills/tavily-best-practices/references>
+Use host-native search for repository metadata and code examples when it is available. Otherwise, use a host integration or host-specific web search. Separate maintained upstream state from third-party examples. Do not treat example frequency as proof of correctness.
 
 ## Source priority
 
-Within each source class, prefer authoritative over secondary:
+Authority depends on the claim type:
 
-1. **Official vendor / library docs** for API, config, migration claims.
-2. **Original papers, standards, RFCs** for technical claims.
-3. **Release notes / changelogs** for version or freshness claims.
-4. **Repo-local evidence** from semantic source search for local conventions.
-5. **GitHub examples** as supporting evidence unless the user asked for OSS precedent.
-6. **Blogs, tutorials, AI-generated content** only when nothing above answers the question — and disclose them as such.
+1. **Current checkout behavior and conventions:** repo-local code wins. External docs describe an upstream contract; they do not override what this checkout does.
+2. **Recorded repository decisions and rationale:** repository knowledge/ADRs win.
+3. **External library/API configuration and migration claims:** official vendor/library docs win.
+4. **Technical claims:** original papers, standards, and RFCs win.
+5. **Version or freshness claims:** release notes, changelogs, and host metadata win.
+6. **Real-world precedent:** Git-hosted examples support the claim but do not establish correctness.
+7. **Coverage gaps:** use blogs, tutorials, and AI-generated content only as a last resort. Disclose their use.
 
-For named-library questions, the routed-call order is **semantic source search → Context7 → Tavily**: cheap repo precedent first, the library's own indexed docs second, current-events / vendor announcements / coverage gaps last. Fan all routed calls in a single assistant turn (parallel tool calls) so total wall time is one round-trip.
+Run independent capabilities in parallel when the harness supports this work. Claim authority determines which evidence wins. Provider call order does not determine authority.
 
 ## Routing block
 
-Emit the decision compactly before fetching:
+Emit this canonical block before fetching:
 
 ```text
 ROUTING DECISION:
-- Context7: YES (library: "<library>", query: "<focused question>")
-- Tavily:   YES (rung: search, depth: basic, filters: time_range=month)
-- Codebase: YES (local precedent matters)
-- GitHub:   NO  (not looking for OSS usage patterns)
-SOURCE PRIORITY: vendor docs > release notes > repo precedent
+TIER: standard
+- Library/API documentation:      YES (provider: context7 via cli ctx7; library/version: <scope>)
+- Current-web discovery/extraction: YES (provider: parallel via cli, jina via curl; freshness: <window>)
+- Scholarly literature:           NO  (no paper evidence needed)
+- Repository knowledge/wiki:      NO  (no prior-decision question)
+- Local code intelligence:        YES (provider: easy-cheese routing; local precedent matters)
+- Git hosting/examples:           NO  (hosted state or examples not required)
+SOURCE PRIORITY: checkout code for local behavior; vendor docs/releases for external API/freshness
 ```
+
+Use `YES` or `NO` for each capability. Do this even when the answer is clear. Name the provider and its route (`cli`, `mcp`, or `native`). The provider field can name any equivalent provider. It does not require a provider from the examples.
+
+## Verify then cite
+
+Use the selected provider retrieval operation to inspect each cited URL. Confirm that the source supports the claim. A CLI extract command, Jina Reader, and an MCP contents tool are examples. A model summary, such as Claude Code `WebFetch` output, does not count as retrieval for a quote. If the provider cannot read the page, select the next `web-extract` route. Record the substitution. The `synthesis.md` exemptions omit only link checks for user URLs and inline `file:line` references. They do not omit content inspection.
+
+Record each retrieval in the capture manifest when it occurs. `ground-check` reads this manifest. It rejects each remote citation without a successful retrieval entry and tool name. This check compares citations with fetched sources, not memory.
 
 ## Hard rule
 
-Make this mechanical, not honor-system. After gather, diff the emitted `ROUTING DECISION` against what actually ran: for each source marked `YES`, confirm a call executed and produced evidence, an `unavailable` result, or an empty result. Any committed source with no corresponding execution is **committed-but-skipped** — mark it explicitly in the report (a `Searched, empty` line if it ran dry, an UNAVAILABLE note per `unavailable.md` if it failed, or a flagged gap if it was simply not run) and apply the matching confidence cap from `synthesis.md`. A `YES` in the routing block with nothing to show for it is a reconciliation failure, not a silent drop.
+After collection, compare the routing block with the actual calls. Record evidence, an empty result, or an unavailable result for each `YES` capability. Include the selected fallback. Mark a capability without execution as **committed-but-skipped**. Report this gap. Apply the confidence rule from `synthesis.md`. Do not report a gap when an equivalent provider completes the capability.

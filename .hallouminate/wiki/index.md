@@ -14,13 +14,24 @@ git-tracking axis (`skills/cheese/references/formatting.md:103`).
 
 <!-- HALLOUMINATE:INDEX-START -->
 - [adr/](./adr/index.md) — adr
+- [analytics/](./analytics/index.md) — analytics
 - [architecture/](./architecture/index.md) — architecture
+- [decisions/](./decisions/index.md) — decisions
+- [gotchas/](./gotchas/index.md) — gotchas
+- [ideas/](./ideas/index.md) — ideas
+- [research/](./research/index.md) — research
+- [sources/](./sources/index.md) — sources
 - [specs/](./specs/index.md) — specs
 - [architecture](./architecture.md) — Architecture of easy-cheese
-- [domain-model](./domain-model.md) — Easy-cheese domain model
+- [docs-mermaid-rendering](./docs-mermaid-rendering.md) — Docs Mermaid rendering
+- [domain-model](./domain-model.md) — Easy Cheese domain model
+- [easy-cheese-manifesto](./easy-cheese-manifesto.md) — Easy-cheese manifesto
 - [fanout-engine-entities](./fanout-engine-entities.md) — Fan-out engine entities
 - [log](./log.md) — Ingest Log
 - [post-pr-wiki-writeback](./post-pr-wiki-writeback.md) — Post-PR wiki write-back — plan and followups
+- [red-gate-environment-gotchas](./red-gate-environment-gotchas.md) — red-gate environment gotchas
+- [schema-root-domain](./schema-root-domain.md) — Schema root domain and catalog site
+- [skill-optimization-landscape](./skill-optimization-landscape.md) — Skill optimization landscape — harnesses, task sources, and per-skill problems
 - [skill-parity-analysis](./skill-parity-analysis.md) — Skill-parity analysis
 - [skill-size-budget](./skill-size-budget.md) — Skill size budget
 - [spec-workflow-comparison](./spec-workflow-comparison.md) — Spec / brainstorm-to-spec workflow comparison

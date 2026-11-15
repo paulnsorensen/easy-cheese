@@ -1,0 +1,18 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/mold-canvas-v2. No PR exists for this branch.
+Quality gate: `just check` passed at HEAD (exit 0). Intermediate commits were not gated.
+PR template: .github/PULL_REQUEST_TEMPLATE.md with sections What changed / Why / How to verify / Non-obvious changes / Risk / rollout notes / Checklist.
+
+The branch came from a /cook fan-out of three curds, then /age and two /cure rounds.
+
+$ git log --oneline --reverse main..HEAD   (47 commits, summarized)
+ 1-12  feat(mold): curd 1 - canvas data model (frontend/mold-review/src/model/*)
+13-25  feat(mold): curd 2 - canvas renderer (frontend/mold-review/src/render/*)
+26-34  feat(mold): curd 3 - skill wiring (skills/mold/SKILL.md, skills/mold/references/canvas.md)
+35-41  fix(mold): cure round 1 - each commit touches model, render, and wiring files together
+42-47  fix(mold): cure round 2 - renames a model field used by render and wiring; updates all three
+
+$ git diff --stat main...HEAD
+ 121 files changed, 1670 insertions(+), 264 deletions(-)
+
+Commits 35-47 each edit files from all three curds. Splitting by curd would need those commits rewritten,
+and curd 1 alone at its original tip fails `just check` (the cure fixed a type error it introduced).

@@ -14,29 +14,84 @@ is self-contained.
 """
 from __future__ import annotations
 
+import json
 import multiprocessing as mp
 import os
 import subprocess
 import sys
 from pathlib import Path
-from types import ModuleType
+from typing import Protocol, cast
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import build_pyz  # noqa: E402
+HARD_CHEESE_ARCHIVE = REPO_ROOT / "skills" / "hard-cheese" / "scripts" / "hard-cheese.pyz"
 
-BUNDLE = build_pyz.cached_bundle("hard-cheese")
+
+class _FromargsNamespace(Protocol):
+    CliError: type[Exception]
+
+
+class _AppendAttemptModule(Protocol):
+    fromargs: _FromargsNamespace
+
+    def _validate_slug(self, slug: str) -> str: ...
+    def _escape_cell(self, value: str) -> str: ...
 
 
 def _run(env_dir: Path, *args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["HARD_CHEESE_ARTIFACT_DIR"] = str(env_dir)
     return subprocess.run(
-        [sys.executable, str(BUNDLE), "append-attempt", *args],
+        [sys.executable, str(HARD_CHEESE_ARCHIVE), "append-attempt", *args],
         capture_output=True, text=True, env=env, cwd=str(REPO_ROOT),
     )
+
+
+def _run_bundle(*args: str) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    _ = env.pop("PYTHONPATH", None)
+    return subprocess.run(
+        [sys.executable, str(HARD_CHEESE_ARCHIVE), *args],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=REPO_ROOT,
+    )
+
+
+def test_empty_args_prints_usage_and_exits_two() -> None:
+    result = _run_bundle()
+
+    assert result.returncode == 2
+    assert "append-attempt" in result.stdout
+    assert "freshness-check" in result.stdout
+
+
+def test_help_flag_prints_usage_and_exits_zero() -> None:
+    result = _run_bundle("--help")
+
+    assert result.returncode == 0
+    assert "append-attempt" in result.stdout
+    assert "freshness-check" in result.stdout
+
+
+def test_unknown_command_prints_usage_to_stderr() -> None:
+    result = _run_bundle("unknown")
+
+    assert result.returncode == 2
+    assert "append-attempt" in result.stderr
+    assert "freshness-check" in result.stderr
+
+
+@pytest.mark.parametrize("command", ["append-attempt", "freshness-check"])
+def test_subcommand_help_names_the_command(command: str) -> None:
+    result = _run_bundle(command, "--help")
+
+    assert result.returncode == 0
+    assert result.stderr == ""
+    usage = result.stdout.splitlines()[0]
+    assert usage.startswith(f"Usage: {command} ")
 
 
 def _read_rows(artifact: Path) -> list[str]:
@@ -46,32 +101,32 @@ def _read_rows(artifact: Path) -> list[str]:
 
 
 class TestSlugValidation:
-    def test_rejects_traversal(self, append_attempt: ModuleType) -> None:
-        with pytest.raises(append_attempt.cli.CliError):
-            append_attempt._validate_slug("../escape")
+    def test_rejects_traversal(self, append_attempt: _AppendAttemptModule) -> None:
+        with pytest.raises(append_attempt.fromargs.CliError):
+            _ = append_attempt._validate_slug("../escape")  # pyright: ignore[reportPrivateUsage]
 
-    def test_rejects_forward_slash(self, append_attempt: ModuleType) -> None:
-        with pytest.raises(append_attempt.cli.CliError):
-            append_attempt._validate_slug("foo/bar")
+    def test_rejects_forward_slash(self, append_attempt: _AppendAttemptModule) -> None:
+        with pytest.raises(append_attempt.fromargs.CliError):
+            _ = append_attempt._validate_slug("foo/bar")  # pyright: ignore[reportPrivateUsage]
 
-    def test_rejects_backslash(self, append_attempt: ModuleType) -> None:
-        with pytest.raises(append_attempt.cli.CliError):
-            append_attempt._validate_slug("foo\\bar")
+    def test_rejects_backslash(self, append_attempt: _AppendAttemptModule) -> None:
+        with pytest.raises(append_attempt.fromargs.CliError):
+            _ = append_attempt._validate_slug("foo\\bar")  # pyright: ignore[reportPrivateUsage]
 
-    def test_rejects_empty(self, append_attempt: ModuleType) -> None:
-        with pytest.raises(append_attempt.cli.CliError):
-            append_attempt._validate_slug("")
+    def test_rejects_empty(self, append_attempt: _AppendAttemptModule) -> None:
+        with pytest.raises(append_attempt.fromargs.CliError):
+            _ = append_attempt._validate_slug("")  # pyright: ignore[reportPrivateUsage]
 
-    def test_accepts_kebab(self, append_attempt: ModuleType) -> None:
-        assert append_attempt._validate_slug("my-slug-42") == "my-slug-42"
+    def test_accepts_kebab(self, append_attempt: _AppendAttemptModule) -> None:
+        assert append_attempt._validate_slug("my-slug-42") == "my-slug-42"  # pyright: ignore[reportPrivateUsage]
 
 
 class TestEscapeCell:
-    def test_pipe_is_escaped(self, append_attempt: ModuleType) -> None:
-        assert append_attempt._escape_cell("a | b") == "a \\| b"
+    def test_pipe_is_escaped(self, append_attempt: _AppendAttemptModule) -> None:
+        assert append_attempt._escape_cell("a | b") == "a \\| b"  # pyright: ignore[reportPrivateUsage]
 
-    def test_newline_becomes_br(self, append_attempt: ModuleType) -> None:
-        assert append_attempt._escape_cell("line1\nline2") == "line1<br>line2"
+    def test_newline_becomes_br(self, append_attempt: _AppendAttemptModule) -> None:
+        assert append_attempt._escape_cell("line1\nline2") == "line1<br>line2"  # pyright: ignore[reportPrivateUsage]
 
 
 class TestCli:
@@ -125,7 +180,8 @@ class TestCli:
             "--feedback", "fb", "--explanation", "ex",
         )
         assert result.returncode == 2
-        assert "ERROR" in result.stderr
+        error = cast("dict[str, object]", json.loads(result.stderr.strip().splitlines()[-1]))
+        assert error["exit_code"] == 2
 
     def test_two_serial_appends_produce_two_rows(self, tmp_path: Path) -> None:
         for status, score, feedback in [
@@ -149,14 +205,18 @@ class TestCli:
         assert "PASS" in rows[1]
 
 
-def _spawn_one(args: tuple[str, str, int]) -> int:
-    """Top-level so multiprocessing can pickle it."""
-    artifact_dir, slug, idx = args
+def _spawn_one(args: tuple[str, str, str, int]) -> int:
+    """Top-level so multiprocessing can pickle it.
+
+    The archive path travels in ``args``: a spawned child must not resolve
+    (and possibly build) the archive on its own.
+    """
+    bundle, artifact_dir, slug, idx = args
     env = os.environ.copy()
     env["HARD_CHEESE_ARTIFACT_DIR"] = artifact_dir
     result = subprocess.run(
         [
-            sys.executable, str(BUNDLE), "append-attempt",
+            sys.executable, bundle, "append-attempt",
             "--slug", slug,
             "--status", "FAIL" if idx % 2 == 0 else "PASS",
             "--score", str(2 + (idx % 3)),
@@ -176,11 +236,12 @@ class TestConcurrency:
         rewrite atomic. Without either, the second writer could read the
         pre-first-write state and clobber it.
         """
+        bundle = str(HARD_CHEESE_ARCHIVE)
         ctx = mp.get_context("spawn")
         with ctx.Pool(processes=2) as pool:
             codes = pool.map(
                 _spawn_one,
-                [(str(tmp_path), "concurrent", i) for i in range(2)],
+                [(bundle, str(tmp_path), "concurrent", i) for i in range(2)],
             )
         assert codes == [0, 0]
         rows = _read_rows(tmp_path / "concurrent.md")
@@ -197,11 +258,12 @@ class TestConcurrency:
         read-modify-write isn't actually atomic some rows will be lost.
         """
         N = 8
+        bundle = str(HARD_CHEESE_ARCHIVE)
         ctx = mp.get_context("spawn")
         with ctx.Pool(processes=N) as pool:
             codes = pool.map(
                 _spawn_one,
-                [(str(tmp_path), "stress", i) for i in range(N)],
+                [(bundle, str(tmp_path), "stress", i) for i in range(N)],
             )
         assert all(c == 0 for c in codes), codes
         rows = _read_rows(tmp_path / "stress.md")

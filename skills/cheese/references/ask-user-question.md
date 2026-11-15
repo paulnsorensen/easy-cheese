@@ -19,23 +19,31 @@ question:
       description: Effect or tradeoff
 ```
 
-The record is the source of truth. A host rendering may change presentation, but it must preserve the prompt, recommended choice, every option's effect or tradeoff, selection mode, and a free-form `Other` path.
+The record is the source of truth.
+A host can change its presentation.
+It must preserve the recommended choice and every option's effect or tradeoff.
+It must also preserve selection mode and the free-form `Other` path.
 
-**Self-containment (hard).** The rendered question must stand alone: a user seeing only the widget — a truncated `prompt` plus short option `label`/`description` fields — must be able to understand the decision and every option's tradeoff without hunting for prose elsewhere. Host widgets truncate the `prompt` and hide any assistant text that is not in the same visible turn (or that lives in a thinking block). So never rely on framing that sits in a separate message, an earlier turn, or a thinking block: either fold the needed context into the `prompt` and each option's `description`, or emit a visible prose block in the same turn immediately before the question call. A picker that arrives with no visible framing is a transport defect, not a rendering quirk.
+**Self-containment (hard).** The rendered question must stand alone.
+A user must understand the decision and each option from the visible widget.
+Widgets can truncate `prompt` and hide text from other turns or thinking blocks.
+Do not depend on separate or earlier framing.
+Add the required context to `prompt` and each option description.
+Alternatively, show that context immediately before the question call.
+A picker without visible framing is a transport defect.
 
 ## When to structure
 
 Answers *when* a decision may be a structured question; capability-first
 rendering (above) governs *how* once that gate passes.
 
-**Freshness rule.** A structured question may only confirm a trade-off
-already discussed with the user this session. A structured question must
-never introduce an undiscussed design option — anything undiscussed gets
-prose weighing first, before any structured question.
+**Freshness rule.** A structured question can confirm only a trade-off from this session.
+Never introduce an undiscussed design option in a structured question.
+Weigh an undiscussed option in prose first.
 
 **Mechanical fast-path.** A mechanical item is intelligible without
-prior-session context — for example, a branch name or a yes/no dispatch. A
-mechanical item may be asked as a direct structured question.
+prior-session context. A branch name and a yes/no dispatch are examples. Ask a
+mechanical item as a direct structured question.
 
 **Design definition.** A design item is one whose options need session
 context to be intelligible — the tradeoffs cannot be judged without the
@@ -47,27 +55,23 @@ structured confirm. Never bundle multiple design forks into one prompt.
 
 ## Capability-first rendering
 
-One rule: use the richest callable structured question primitive visible in
-your active tool list that can faithfully encode the complete decision;
-otherwise use the portable fallback below. The active tool list is the runtime
-authority for what exists and what it can hold — read the active primitive's
-advertised question and option capacities from its schema instead of assuming a
-harness-wide limit, and never consult a harness lookup table to learn a tool's
-name. Never name a host tool in the transcript unless it is callable in that
-session.
-
-Wrapper and orchestrator hosts such as Conductor and Emdash / Em Dash route to
-the selected underlying agent or provider rather than inventing a common
-question schema. Runtime capability detection always wins over the wrapper or provider name. If the expected provider primitive is absent, denied, headless,
-or too small for the complete decision, use the lossless fallback.
+Use the richest callable structured question primitive visible in your active tool list.
+The primitive must encode the complete decision.
+Otherwise, use the portable fallback.
+Read the advertised question and option capacities from the active schema.
+You must never consult a harness lookup table for a tool name.
+Never name a host tool unless it is callable in that session.
+Wrapper hosts route to the selected underlying agent or provider.
+They do not create a common question schema.
+Runtime capability detection always wins over the wrapper or provider name.
+Use the lossless fallback when the provider tool is absent, denied, headless, or too small.
 
 Caveats that capability detection alone cannot infer:
 
-- **Capacity-limited schemas.** If an active schema advertises only 2-3
-  explicit choices, a four-option decision does not fit: render every option
-  with the numbered fallback, or use a lossless hybrid where every omitted
-  button remains an explicit numbered choice. Never merge or drop options to
-  make the tool call fit.
+- **Capacity-limited schemas.** If an active schema has only 2-3 explicit choices, a four-option decision does not fit.
+  Render every option with the numbered fallback.
+  Alternatively, use a lossless hybrid that keeps each omitted button as an explicit numbered choice.
+  Never merge or drop options to fit the tool.
 - **Mode-gated tools.** Use a question tool only when the active tool list and
   current collaboration mode both allow it (Codex `request_user_input` is the
   known case).
@@ -124,6 +128,7 @@ remains an explicit, equally actionable numbered choice.
    `other:` value.
 2. Preserve multiple selections only when `multi: true`.
 3. If the answer is ambiguous, ask one clarifying question through this same
-   transport; do not guess.
-4. Return the normalized value to the calling skill. The caller owns what
-   happens after selection.
+   transport.
+   Do not guess.
+4. Return the normalized value to the calling skill.
+   The caller owns what happens after selection.

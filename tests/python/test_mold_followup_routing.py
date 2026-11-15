@@ -13,6 +13,7 @@ ADR = REPO_ROOT / "skills" / "mold" / "references" / "adr.md"
 MODES = REPO_ROOT / "skills" / "mold" / "references" / "modes.md"
 CURD_COUNT = REPO_ROOT / "skills" / "mold" / "references" / "curd-count.md"
 SCOPED_DOCS = (MOLD, HANDSHAKE, CURDLE, ADR)
+EARLY_CURDS = REPO_ROOT / "skills" / "mold" / "references" / "early-curds.md"
 
 
 def _text(path: Path) -> str:
@@ -46,22 +47,19 @@ def test_scoped_documents_exist() -> None:
     assert not missing, f"Mold follow-up routing files moved or renamed: {missing}"
 
 
-def test_user_key_allows_contextual_affirmations_without_inference() -> None:
-    section = _section(HANDSHAKE, "User key")
-    for phrase in (
-        "explicit extraction intent",
-        "curdle",
-        "ship it",
-        "extract",
-        "that's enough",
-        "directly answers an agent's extraction question",
-        "ok let's go",
-        "sounds good",
-        "go ahead",
-    ):
-        assert phrase.casefold() in section.casefold()
-    assert "Never inferred" not in section
-    assert "unrelated or ambiguous approval" in section
+def test_handshake_has_no_user_key_and_names_the_self_check() -> None:
+    body = _text(HANDSHAKE)
+    intro = body.split("\n## ", 1)[0]
+    assert "requires the agent coherence self-check" in intro
+    assert "## User key" not in body
+    assert "response_is_affirmative" not in body
+    assert "two-key" not in body.casefold()
+
+
+def test_handshake_keeps_save_approval_override() -> None:
+    section = _section(HANDSHAKE, "Override semantics")
+    assert "does not grant execution authority" in section
+    assert "gates_overridden" in section
 
 
 def test_candidate_collection_is_non_committing_dialogue_state() -> None:
@@ -78,19 +76,18 @@ def test_candidate_collection_is_non_committing_dialogue_state() -> None:
     )
 
 
-def test_pre_curdle_batch_covers_grouping_discovery_and_approval() -> None:
+def test_followup_batch_covers_grouping_discovery_and_publication_consent() -> None:
     _assert_phrases(
         HANDSHAKE,
-        "before the two-key handshake",
+        "Before a runnable handoff",
         "independently deliverable units",
         "GitHub Issues",
         "roadmap goals",
         "semantic match",
         "grouping",
-        "splitting",
         "destination",
         "action",
-        "user approves",
+        "user must select any external",
         "when no candidates exist",
     )
 
@@ -103,14 +100,13 @@ def test_followup_disposition_stays_inside_one_user_owned_gate() -> None:
         "group related candidates",
         "when discovery is available",
         "recommend one destination per unit",
-        "the user approves the destination",
+        "user must select any external",
         "record accepted units for Curdle",
     )
     for phrase in (
         "extends the existing `Non-goals audit` gate",
         "does not add or rename a gate",
-        "the user approves grouping, splitting, semantic-match reuse, destination",
-        "Mold settles none silently",
+        "No external create/link action runs without the user's selection",
     ):
         assert phrase.casefold() in section.casefold()
 
@@ -200,63 +196,77 @@ def test_external_publication_is_recoverable_and_idempotent() -> None:
     )
 
 
-def test_mold_handoff_waits_for_followup_reconciliation() -> None:
+def test_mold_handoff_waits_for_user_selection_and_reconciliation() -> None:
     flow = _section(MOLD, "Flow")
     _assert_in_order(
         flow,
-        "local artifact and write-ahead prepared state",
-        "publishes approved follow-ups",
-        "reconciles their state and references into the durable spec",
-        "curd-count",
-        "## Handoff",
+        "Write the validated draft",
+        "publish follow-ups only after their own approval",
+        "after reconciliation",
+        "If the user selects bound curd execution",
+        "pass only ready direct inputs",
     )
 
     handoff = _section(MOLD, "Handoff")
     _assert_in_order(
         handoff,
-        "Curdle's phase two finishes",
-        "curd-count",
-        "shared handoff gate",
+        "A draft offers no Cook command",
+        "explicit Cook selection",
+        "Bound curd work dispatches the printed finalize command",
     )
 
     followups = _section(HANDSHAKE, "Follow-up disposition (inside the non-goals audit)")
     _assert_in_order(
         followups,
-        "after both keys pass",
         "writes local artifacts first",
-        "publishes approved follow-ups",
-        "reconciles their state and references into the durable spec",
-        "only then renders the implementation handoff",
+        "user selects a follow-up action",
+        "publishes that approved follow-up",
+        "reconciles state and references",
+        "before any implementation handoff",
     )
 
 
-def test_mold_decomposes_before_two_key_approval_and_persists_the_block() -> None:
+def test_mold_saves_draft_before_cook_consent_and_persists_typed_plan() -> None:
     flow = _section(MOLD, "Flow")
     _assert_in_order(
         flow,
-        "5. **Decompose for approval**",
-        "6. **Two-key handshake**",
+        "5. **Plan and validate**",
+        "6. **Readiness check**",
         "7. **Curdle**",
+        "8. **Offer Cook or keep shaping**",
     )
 
-    approval = _section(MOLD, "Approval gate")
+    gate = _section(MOLD, "Execution gate")
     _assert_in_order(
-        approval,
-        "validated curd block",
-        "`N curds / M waves`",
-        "both keys pass",
+        gate,
+        "save a validated parent spec or early curd mini-spec",
+        "Never start Cook from a saved spec",
+        "user must select the exact curd",
+        "A failed bound finalization leaves a saved draft",
     )
 
-    procedure = _section(CURDLE, "Pre-approval decomposer dispatch (curd block)")
+    procedure = _section(CURDLE, "Typed planner dispatch")
     _assert_in_order(
         procedure,
-        "before the two-key handshake",
         "1. **Dispatch**",
-        "2. **Validate**",
+        "2. **Validate and normalize**",
         "`N curds / M waves`",
-        "persist the same approved curd block",
+        "Persist the draft spec and host-validated `PlannerResult` and `CurdPlan`",
     )
-    assert "Do not re-dispatch" in procedure
+
+
+def test_early_curd_route_selection_stays_separate_from_scope_approval() -> None:
+    selection = _section(EARLY_CURDS, "Cook selection")
+    _assert_in_order(
+        selection,
+        "Ask one route question",
+        "Record the selected route beside the child",
+        "Execute only that route",
+        "For **Cook here in isolation**",
+        "For **Cook in another worktree**",
+    )
+    assert "the selection covers the scope or plan, not the dispatch route" in selection.casefold()
+    assert "without starting local Cook or publishing local execution refs" in selection
 
 
 def test_mold_never_hardcodes_transient_spec_paths() -> None:

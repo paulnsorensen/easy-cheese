@@ -1,0 +1,1 @@
+"""Mold canonical producer."""

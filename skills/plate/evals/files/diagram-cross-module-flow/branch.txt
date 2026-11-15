@@ -1,0 +1,20 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/briesearch-routes. No PR exists for this branch.
+Quality gate: `just check` passed at HEAD (exit 0).
+PR template: .github/PULL_REQUEST_TEMPLATE.md with sections What changed / Why / How to verify / Non-obvious changes / Risk / rollout notes / Checklist.
+
+$ git log --oneline main..HEAD
+6b0 feat(briesearch): detect provider routes CLI-first, then MCP, then web fallback
+
+$ git diff --stat main...HEAD
+ src/easy_cheese/skills/briesearch/router.py       | 96 ++++++++++++  (new: picks a route per provider)
+ src/easy_cheese/skills/briesearch/cli_probe.py    | 54 +++++++  (new: runs `<tool> --version`)
+ src/easy_cheese/skills/briesearch/mcp_probe.py    | 61 +++++++  (new: lists MCP tools from the harness config)
+ src/easy_cheese/shared/cache.py                    | 22 ++-   (router stores probe results here, 1 h TTL)
+ src/easy_cheese/skills/briesearch/report.py       | 17 +-    (report now prints the chosen route per provider)
+ tests/python/test_briesearch_router.py            | 88 ++++++++++
+ skills/briesearch/SKILL.md                        | 12 +-
+ 7 files changed, 336 insertions(+), 14 deletions(-)
+
+Data flow at HEAD: SKILL.md step 2 calls router.select(provider). router checks shared/cache.py first.
+On a miss it calls cli_probe; when the CLI is absent it calls mcp_probe; when both fail it returns route "web".
+The router writes the result to the cache and report.py renders the chosen route.

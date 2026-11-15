@@ -1,69 +1,160 @@
-# The TDD loop: cut → implement → taste-test
+# The TDD loop: test first where it fits → implement → taste-test
 
-The cook skill runs a sequential TDD discipline. Each phase has a clear exit before the next starts.
+TDD is recommended practice in Cook. No gate enforces it. Each phase should have a clear exit before the next phase starts.
 
-## Cut — failing tests first
+Docs, refactor, test, and appearance work uses its own implementation and verification path. It changes only the requested surface.
 
-When the change adds or modifies behaviour, write the test before the implementation.
+## Inner TDD — tests first where it fits
 
-**Cut must report:**
+When a change adds or modifies behavior, write the test before the implementation where it fits. This test is Cook's vertical loop.
 
-- Test files added or changed.
-- The spec requirement each test covers.
-- The observed red failure for each new behaviour.
-- Whether existing tests were touched and why (only allowed for related-fixture or shared-helper updates — never to weaken assertions).
+A test that passes against unimplemented code gives a false positive. Check that the test fails for the expected reason when that is cheap to do.
 
-If a test cannot be made to fail for the expected reason, **stop and fix the test before cooking**. A test that passes against unimplemented code is a false-positive factory.
+Shape each new test by [`../../cheese/references/test-shape.md`](../../cheese/references/test-shape.md).
+Extend the existing test file.
+Write one table row for each equivalence class.
+Use a property test instead of `range(N)` trials.
+Stack tables only when each axis selects a branch.
+
+### First acceptance coverage
+
+For behavior work, Cook owns the acceptance demonstration before Press. This is a reported obligation, not a gate. It adds no gate, no receipt, and no enforcement command.
+
+1. Run the smallest complete path first.
+2. For a bug fix, confirm the check detects the original failure. For new behavior, confirm the check rejects an absent or incorrect result.
+3. Run the check against the final integrated artifact.
+4. Record the revision, environment, command, and observed result in the package report's `### Acceptance evidence`.
+
+Apply a live check only where the claim depends on a live boundary.
+When a live check cannot run, report the behavior `unverified` and name the reduced claim. Never substitute an offline check silently.
 
 ## Implement — minimal green
 
-Implement the smallest production change that turns the cut tests green.
+For behavior work, make the smallest production change that makes the tests green.
+
+For docs, refactor, test, or appearance work, make the requested change and verify it directly.
 
 **Implement must:**
 
 - Use existing dependencies and project patterns.
-- Run the narrowest useful test (the new cut tests) plus relevant wider gates (lint, typecheck, build).
-- Preserve strong assertions written by cut.
-- Stop and ask if implementation reveals a design decision the spec did not answer.
+- Run the narrowest useful inner test.
+- Run relevant wider gates: the project formatter, lint, type check, and build.
+- Stop and ask if implementation identifies a design decision that the spec does not answer.
 
-If cook reports partial or skipped work, **stop and resolve before taste-test**.
+### Reviewable by construction
+
+Write the change so the taste-test and `/age` pass on the first round. Most rules below map to a taste-test lens or `/age` dimension that otherwise sends the work back; the size ceiling is enforced by `/plate`.
+
+- **Full-word identifiers.** No abbreviation or single letter whose scope outlives one short block. A conventional short name used conventionally (`i` as a loop index, `db`, `ctx`) is exempt. Reviewers find defects about 19% faster with full words (Hofmeister et al., 2019). `/age` grades this under [`deslop`](../../age/references/dimensions.md).
+- **Local reasoning.** A reviewer must understand each changed function from its own body plus the signatures it calls. Do not add monkey-patching, side-effecting decorators, `__getattr__` or `__getattribute__` tricks, operator overloading, metaclass logic, or exception-based control flow that crosses a module boundary.
+- **Let the type checker review.** Annotate every new parameter and return. Use a closed union or enum instead of a string tag. Make every `match` or `switch` over a closed union exhaustive with `assert_never` (mypy/pyright) or `assertNever` (typescript-eslint `switch-exhaustiveness-check`); never rely on a silent default arm. Idioms: [`deslop-python.md` § 15](../../age/references/deslop-python.md), [`deslop-typescript.md` § 16](../../age/references/deslop-typescript.md).
+- **Stay under the comprehension ceiling.** Keep the semantics-altering surface under roughly 400 changed code lines. When the contract needs more, name the layer boundaries under the package report's `### Risks` so `/plate` can recommend a stack.
+
+These rules do not license speculative types, helpers, or abstractions. Scope and Simplify still apply.
+
+Before the Press loop, make every inner test and relevant gate GREEN.
+
+For non-behavior work, complete the requested non-behavior verification and taste-test. Then, hand off directly to Age. Non-behavior work has no Press loop.
+
+A corrective Cook (`correction = true`) applies only to the active Press finding or `coverage_gap`. It must not weaken, replace, or bypass an existing test.
+
+If Cook reports partial or skipped work, **stop and resolve it before taste-test**.
 
 ## Taste-test — drift, readability, scope, simplify, plus three fresh-context lenses
 
-After cook says "I completed all the changes", run a taste test before press. The taste-test is a **fresh-context review**: when the cooked diff is non-trivial it is dispatched to a read-only reviewer that did not write the code. Small diffs keep the cheap inline check.
+After Cook says "I completed all the changes", run a taste test before Press. The taste-test is a **fresh-context review**.
 
-**Cost gate — where it runs.** Dispatch the fresh-context reviewer unless all four hold: single file AND no new public surface AND <~40 changed lines AND no risk flag — then run the coder self-check instead. Any one term failing routes to 1 fresh opus reviewer.
+For a non-trivial cooked diff, dispatch the review to a read-only reviewer that did not write the code. For a small diff, use the low-cost inline check.
 
-**Risk flag** — one of the override categories in `src/fanout/age_route.py`'s `OVERRIDE_FLAGS` constant: auth/secrets/crypto/tenant isolation; payments/ledgers/irreversible effects; concurrency/idempotency/ordering/retries; schema/migration/protocol/public-API change; production-destructive ops; weak integration coverage around a global invariant. On a bundle-only host the same constant ships in the age bundle (`python3 ${CLAUDE_SKILL_DIR}/../age/scripts/age.pyz age-route` consumes the flags; see `skills/age/SKILL.md § Router call` for the exact vocabulary).
+**Cost gate — where it runs.**
+
+Dispatch the fresh-context reviewer unless all four conditions are true:
+
+- The diff changes one file.
+- The diff adds no new public surface.
+- The diff has <~40 changed lines.
+- The diff has no risk flag.
+
+If all four conditions are true, run the coder self-check. If one condition is false, dispatch 1 fresh `reviewer (taste-test)` at the tier that **Who runs it** names below.
+
+### Risk flag
+
+A risk flag identifies one of these categories:
+
+- auth/secrets/crypto/tenant isolation
+- payments/ledgers/irreversible effects
+- concurrency/idempotency/ordering/retries
+- schema/migration/protocol/public-API change
+- production-destructive ops
+- weak integration coverage around a global invariant
 
 **Who runs it.**
 
-- **Top-level `/cook`**: resolve the fresh-context taste-test through `../../cheese/references/agent-resolution.md`, requesting a read-only `reviewer` at `powerful` / `high`. Pass `{spec/contract, diff, cut-test list, any locked/user-approved decisions}`; it returns the per-lens verdict below, not a full `/age` report. A general worker may qualify only under the shared prompt-only read-only degradation.
-- **Coder-nested `/cook`**: when the active coder cannot dispatch, run the inline self-check and record `taste_test: deferred-to-orchestrator`; the orchestrator must resolve and run the authoritative reviewer before accepting the handoff.
+- **Top-level `/cook`**:
+  - Resolve the fresh-context taste-test through `../../cheese/references/agent-resolution.md`.
+  - Request a read-only `reviewer (taste-test)` at `default` / `medium`.
+  - Pass `{spec/contract, diff, inner-test list, any locked/user-approved decisions}`.
+  - The reviewer returns the per-lens verdict below.
+  - The reviewer does not return a full `/age` report.
+  - A general worker can qualify only under the shared prompt-only read-only degradation.
+- **Coder-nested `/cook`**:
+  - If the active coder cannot dispatch, run the inline self-check.
+  - Record `taste_test: deferred-to-orchestrator`.
+  - The orchestrator must run the authoritative reviewer before it accepts the handoff.
 
-**Lenses.** Inline or dispatched, the taste-test returns `pass | revise | escalate` per lens (`halt` for Locked-decision):
+**Lenses.**
+
+The inline or dispatched taste-test returns `pass | revise | escalate` for each lens. The Locked-decision lens can also return `halt`.
 
 | Lens | Question | Pass criterion |
 | --- | --- | --- |
-| Spec | Did the implementation drift from the spec? | Every behaviour described in the spec is present; nothing extra. |
-| Readability | Is the change as concise and clear as possible? | A reviewer can understand each changed file without external context. |
-| Scope | Did cook add more than asked? | The diff matches the spec's bullets; no speculative helpers. |
+| Spec | Did the implementation drift from the spec? | Every behavior described in the spec is present; nothing extra. |
+| Readability | Is the change as concise and clear as possible? | A reviewer can understand each changed function from its body and the signatures it calls, without external context, and the diff meets § Reviewable by construction (full-word identifiers, local reasoning). |
+| Scope | Did Cook add more than asked? | The diff matches the spec's bullets; no speculative helpers. |
 | Simplify | Does the diff reuse what exists, stay clean, and avoid wasted work? | See sub-checks below; all three must pass. |
-| Production path | Does every spec acceptance criterion have a *production* path that exercises it? | The behaviour is reachable from real callers, not only from tests that manufacture the state. |
+| Production path | Does every spec acceptance criterion have a *production* path that exercises it? | The behavior is reachable from real callers, not only from tests that manufacture the state. |
 | Wired callers | Does each new public function have a non-test caller? | A non-test caller exists, or the diff carries an explicit "wired in phase X" note. |
-| Locked-decision | If the dispatch prompt carries a locked/user-approved decision, does the diff implement *that* decision? | The diff honours the locked decision, or the reviewer returns `halt` flagging the divergence. |
+| Locked-decision | If the dispatch prompt carries a locked/user-approved decision, does the diff implement *that* decision? | The diff honors the locked decision, or the reviewer returns `halt` flagging the divergence. |
 
-The last three lenses are the fresh-context additions — they encode the failures the inline taste-test historically passed: a missing production path, public functions with zero non-test callers, and a silently-substituted design decision. A `halt` from the Locked-decision lens stops the chain for a human decision; it is not a corrective-cook finding.
+The last three lenses are fresh-context additions. They identify failures that the inline taste-test historically passed:
 
-**Escalate-unverifiable.** When a lens cannot verify its claim from available evidence, it returns `escalate` for that lens, never a guessed `pass` or `revise` (cross-cutting contract 1 in the spec: "a claim no evidence can settle returns escalate, never a guessed pass or fail").
+- A missing production path.
+- Public functions with no non-test callers.
+- A silently substituted design decision.
 
-The **Simplify** lens runs three sub-checks (the same three axes `/simplify` uses):
+A `halt` from the Locked-decision lens stops the chain for a human decision. It is not a corrective Cook finding.
+On a `/cure` run, each selected finding's `recommendation:` and `invariants:` lines are the locked decision for that fix.
 
-- **Reuse** — new code does not duplicate an existing utility/helper/component; inline logic that has a project helper uses it; no near-duplicates of an existing function.
-- **Quality** — no redundant state (cached value that can be derived), no parameter sprawl (added params instead of restructuring), no copy-paste-with-variation, no leaky abstraction (exposing internals across a slice boundary), no stringly-typed code where a constant/enum/union exists.
-- **Efficiency** — no unnecessary work (redundant compute, repeated reads, N+1), no missed concurrency on independent ops, no recurring no-op state/store updates in loops or handlers, no pre-existence checks that should instead perform the operation and handle the resulting error, no unbounded structures or leaked listeners/timers, no full-file/dataset reads when a slice would do.
+**Escalate-unverifiable.**
 
-Each lens returns `pass`, `revise`, or `escalate` (`halt` for Locked-decision). Pipe every `revise` finding back into a bounded corrective cook pass with the original spec, the cook report, and the taste evidence.
+If available evidence cannot verify a lens claim, return `escalate` for that lens. Never return a guessed `pass` or `revise`.
+
+This rule implements cross-cutting contract 1 in the spec: "a claim no evidence can settle returns escalate, never a guessed pass or fail".
+
+The **Simplify** lens uses the same three sub-checks as `/simplify`:
+
+- **Reuse**
+  - New code must not duplicate an existing utility, helper, or component.
+  - Inline logic must use an available project helper.
+  - New code must not create a near-duplicate of an existing function.
+- **Quality**
+  - Do not add redundant state, such as a cached value that the code can derive.
+  - Do not add parameters when code restructuring is appropriate.
+  - Do not use copy-paste-with-variation.
+  - Do not create a leaky abstraction that exposes internals across a slice boundary.
+  - Do not use stringly-typed code when a constant, enum, or union exists.
+- **Efficiency**
+  - Avoid unnecessary work, including redundant compute, repeated reads, and N+1.
+  - Use concurrency for independent operations.
+  - Avoid recurring no-op state or store updates in loops or handlers.
+  - Do not use pre-existence checks when the operation can handle the resulting error.
+  - Do not use unbounded structures.
+  - Do not leak listeners or timers.
+  - Read a slice instead of a full file or dataset when a slice is sufficient.
+
+Each lens returns `pass`, `revise`, or `escalate`. The Locked-decision lens can also return `halt`.
+
+Send every `revise` finding into a bounded corrective Cook pass. Include the original spec, the Cook report, and the taste evidence.
 
 ## Two-round cap
 
@@ -72,12 +163,39 @@ best:    implement → taste-test (all pass) → press
 worst:   implement → taste-test → implement → taste-test → implement (final)
 ```
 
-After the second taste test, allow only one final corrective cook pass. If that final pass cannot fully resolve the taste findings, **stop and report blocked** instead of continuing to press.
+After the second taste test, allow only one final corrective Cook pass.
+Stop when the final pass cannot resolve all taste findings.
+Report the result as **blocked**.
+Do not continue to Press.
 
 ## Self-evaluation before handoff
 
-Confirm every item the package report asserts (`package-report.md` § Self-eval),
-plus two it does not surface:
+Confirm every item that the package report asserts (`package-report.md` § Self-eval). Also confirm these two items:
 
 - [ ] Spec or acceptance criteria are clear.
-- [ ] Remaining risks or skipped checks are documented.
+- [ ] The report documents every remaining risk and every skipped check.
+
+## Boundary-specific checks
+
+For Mold-to-Cook changes, the inner test loop covers the consumer seam rather
+than only a helper function:
+
+- classify explicit mode before inference and reject malformed declared
+  pointers/projections without task fallback;
+- plan Full work on invocation, with no scope or plan approval step;
+- materialize a Full plan once and recompute coverage when the acknowledged
+  remainder changes;
+- keep holds across every resubmission and permit execution only from `ready`;
+- accept Light on invocation with no invented planner artifact;
+- reject runner evidence that is stale, failed, or outside its authorized
+  paths and commands; and
+- preserve incomplete work and exact missing-decision requests.
+
+The command under test supplies no agent callback and no user response.  The
+orchestrator supplies planner output and runner approval explicitly; the Cook
+result is recomputed from those references on each call.
+The final execution-boundary test uses
+`execute_bound_plan` with real dispatch callbacks.  It proves that
+non-ready, held, stale, and overbroad handoffs stop before `workflow.cook`,
+while a ready Full handoff forwards the exact plan curd IDs and leaves the
+canonical planner remainder untouched.
