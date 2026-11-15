@@ -67,6 +67,7 @@ Accordingly, the Milknado importer, plan-v2 projection, and result-aggregation p
 [^planning-seams]: src/easy_cheese_schemas/planner.py:44-113,144-182; src/easy_cheese/shared/workflow.py:223-243; skills/cook/references/fan-pathway.md:56-99.
 [^execution-seams]: src/easy_cheese/shared/workflow.py:748-794,999-1139; src/easy_cheese/shared/phase_routes.py:16-30 (`_ROUTES`).
 [^review-seams]: src/easy_cheese/shared/workflow.py:1043-1057,554-580; skills/age/SKILL.md:235-243.
+[^review-kind]: `src/easy_cheese_schemas/contracts.py:203-206,1207-1224` (`ReviewKind`, `ReviewRequest.review_kind`); PR #405.
 [^diagnosis-seams]: src/easy_cheese/shared/workflow.py:1079-1097,617-630,810-829.
 [^writer-seam]: src/easy_cheese/shared/workflow.py:445-476.
 [^continuity-seams]: src/easy_cheese/skills/wheypoint/checkpoint.py:56-64,234-304; src/easy_cheese/skills/wheypoint/commit.py:620-682,792-837; src/easy_cheese/skills/wheypoint/lineage.py:59-142.
@@ -137,6 +138,10 @@ flowchart LR
 <certain> ReviewResult has typed findings and a coverage ledger; an empty finding list is clean only with complete coverage.
 
 <certain> Taste Test and Age are typed review variants. Review batches correlate items by stable identity rather than array position and preserve successful results when another item fails.[^checkpoint]
+
+<certain> ReviewRequest carries an optional `review_kind` field. Its values are `taste_test` and `age`.
+A downstream consumer reads the review family from the wire and does not infer it from context.
+The field is additive. It landed before a Milknado schema pin, so a later pin needs no cross-repo change.[^review-kind]
 
 <certain> DiagnosisResult has symptom, reproduction, hypotheses, optional confirmed cause, regression seam, and unresolved evidence. A diagnosis without a confirmed cause does not dispatch Cure work.
 
