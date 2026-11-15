@@ -142,6 +142,7 @@ flowchart LR
 <certain> ReviewRequest carries an optional `review_kind` field. Its values are `taste_test` and `age`.
 When a producer sets the field, a downstream consumer can read the review family from the wire.
 The field is additive and defaults to none.
+It landed before a Milknado schema pin, so a later pin needs no cross-repo change.
 The current workflow leaves it unset: no `ReviewRequest` constructor in `src/` passes `review_kind`.[^review-kind]
 
 <certain> DiagnosisResult has symptom, reproduction, hypotheses, optional confirmed cause, regression seam, and unresolved evidence. A diagnosis without a confirmed cause does not dispatch Cure work.

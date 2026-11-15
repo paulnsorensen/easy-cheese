@@ -10,18 +10,20 @@ A dealbreaker is a missed reproduction, publication, a left debug tag, a fix wit
 
 | ID | Behavior | Cases |
 |---|---|---|
-| `PAST-1` | Builds a feedback loop and reproduces the exact failure before it names a cause. | `pasteurize-flaky-1`, `pasteurize-flaky-2`, `pasteurize-trace-1`, `pasteurize-trace-2`, `pasteurize-perf-1`, `pasteurize-perf-2`, `pasteurize-pressure-1`, `pasteurize-pressure-2`, `pasteurize-pressure-3`, `pasteurize-norepro-1`, `pasteurize-norepro-2`, `pasteurize-silent-1`, `pasteurize-silent-2`, `pasteurize-silent-3` |
-| `PAST-2` | Uses a pasted trace or a trace file as the symptom and still reruns the loop itself. | `pasteurize-trace-1`, `pasteurize-trace-2` |
+| `PAST-1` | Builds a feedback loop and reproduces the exact failure before it names a cause. | `pasteurize-flaky-1`, `pasteurize-flaky-2`, `pasteurize-trace-1`, `pasteurize-trace-2`, `pasteurize-perf-1`, `pasteurize-perf-2`, `pasteurize-pressure-1`, `pasteurize-pressure-2`, `pasteurize-pressure-3`, `pasteurize-norepro-1`, `pasteurize-norepro-2`, `pasteurize-silent-1`, `pasteurize-silent-2`, `pasteurize-silent-3`, `pasteurize-env-1`, `pasteurize-env-2` |
+| `PAST-2` | Uses a pasted trace or a trace file as the symptom and still reruns the loop itself. | `pasteurize-trace-1`, `pasteurize-trace-2`, `pasteurize-env-1` |
 | `PAST-3` | Shows three to five ranked, testable hypotheses before it changes code. | `pasteurize-flaky-1`, `pasteurize-perf-1` |
-| `PAST-4` | Adds a regression test that fails before the fix and passes after it. | `pasteurize-flaky-1`, `pasteurize-flaky-2`, `pasteurize-trace-1`, `pasteurize-trace-2`, `pasteurize-perf-1`, `pasteurize-pressure-1`, `pasteurize-pressure-2`, `pasteurize-pressure-3`, `pasteurize-silent-1`, `pasteurize-silent-2`, `pasteurize-silent-3` |
-| `PAST-5` | Makes the minimal production change and touches nothing else. | `pasteurize-flaky-1`, `pasteurize-flaky-2`, `pasteurize-trace-1`, `pasteurize-trace-2`, `pasteurize-perf-1`, `pasteurize-silent-1`, `pasteurize-silent-2`, `pasteurize-silent-3` |
-| `PAST-6` | Leaves no `[DEBUG-` tag behind and runs the session-tag sweep. | `pasteurize-flaky-1`, `pasteurize-flaky-2`, `pasteurize-trace-1`, `pasteurize-trace-2`, `pasteurize-silent-1`, `pasteurize-silent-2`, `pasteurize-silent-3` |
+| `PAST-4` | Adds a regression test that fails before the fix and passes after it. | `pasteurize-flaky-1`, `pasteurize-flaky-2`, `pasteurize-trace-1`, `pasteurize-trace-2`, `pasteurize-perf-1`, `pasteurize-pressure-1`, `pasteurize-pressure-2`, `pasteurize-pressure-3`, `pasteurize-silent-1`, `pasteurize-silent-2`, `pasteurize-silent-3`, `pasteurize-env-1`, `pasteurize-env-2` |
+| `PAST-5` | Makes the minimal production change and touches nothing else. | `pasteurize-flaky-1`, `pasteurize-flaky-2`, `pasteurize-trace-1`, `pasteurize-trace-2`, `pasteurize-perf-1`, `pasteurize-silent-1`, `pasteurize-silent-2`, `pasteurize-silent-3`, `pasteurize-env-1`, `pasteurize-env-2` |
+| `PAST-6` | Leaves no `[DEBUG-` tag behind and runs the session-tag sweep. | `pasteurize-flaky-1`, `pasteurize-flaky-2`, `pasteurize-trace-1`, `pasteurize-trace-2`, `pasteurize-silent-1`, `pasteurize-silent-2`, `pasteurize-silent-3`, `pasteurize-env-1`, `pasteurize-env-2` |
 | `PAST-7` | Still reproduces first and tests when the user says to just patch it. | `pasteurize-pressure-1`, `pasteurize-pressure-2` |
 | `PAST-8` | Says plainly when it cannot reproduce, asks for access or an artifact, says it needs loop access, and does not guess a cause or a fix. | `pasteurize-norepro-1`, `pasteurize-norepro-2` |
 | `PAST-9` | Measures a baseline for a performance regression and reports the result after the fix. | `pasteurize-perf-1`, `pasteurize-perf-2` |
 | `PAST-10` | Reports cause, loop, and next step, offers the chain, and never commits or pushes. | `pasteurize-flaky-1`, `pasteurize-flaky-2`, `pasteurize-pressure-3` |
 | `PAST-11` | In auto mode, skips the hypothesis question but not reproduction, the test, the fix, or the cleanup. | `pasteurize-perf-2` |
 | `PAST-12` | Reproduces a silent wrong result through an expected-output check. No exception is raised and the unit tests pass. Green tests are not proof. | `pasteurize-silent-1`, `pasteurize-silent-2`, `pasteurize-silent-3` |
+| `PAST-13` | Reproduces a failure that only the reported environment shows, and fixes the cause, not the environment or the test. | `pasteurize-env-1`, `pasteurize-env-2` |
+| `PAST-14` | After the last production edit, reruns the reported command in the reported environment and shows the expected output before it claims a fix. A green local unit test is not that proof. | `pasteurize-env-1`, `pasteurize-env-2` |
 
 ## Gate rules that apply
 

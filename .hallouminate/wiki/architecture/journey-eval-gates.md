@@ -56,9 +56,32 @@ Its replayed output is the case `files`, overlaid by the fixture `output` map, m
 Keep only changed files in `output`, so a case edit does not break the fixture.
 A restored Press finding report carries `digest: sha256:<hex> (<test path>)`, the SHA-256 of the seeded attack test file. Press stops when the digest is missing. Recompute it when you edit that test file.
 
+## Gate sources per skill
+
+- The compiler derives each skill from a gate file stem, so the stem equals the skill directory: `scripts/journey_gates/hard-cheese.py`, not `hard_cheese.py`.
+- Each gate module keeps `# pyright:` pragmas inside its `gate:strip` block, as `common.py` does. The compiled source drops `from __future__ import annotations`, so annotations run on Python 3.9: use `Optional` and built-in generics, never `X | Y`.
+- `tests/python/test_journey_gates.py` runs the shared checks (compile, stdlib, fixture replay, Codex parity) over `GATE_SKILLS`. Its synthetic `clean()` scenarios model a Cook workspace, so the generic push and pull-request tests cover only `SKILLS`. Rule tests for affinage, melt, and hard-cheese live in `tests/python/test_journey_gates_<skill>.py` and import helpers from `tests.python.test_journey_gates`.
+- Affinage cases stub `gh` in `bin/gh` (including `pr checkout` and `repo view`), and requests stop at the `/cure` handoff, because sibling skills are not staged.
+- Melt cases build the conflict with `restore-repo.sh` under `GIT_CONFIG_GLOBAL=/dev/null`; the gate fails `not-restored` when no step runs it.
+- Hard-cheese cases expect `--no-judge` (LOGGED) when no judge sub-agent can run; an `ERROR` attempt without a judge run is a dealbreaker.
+- The journey judge receives only the user and agent text of each turn, never tool calls or their arguments (skillz `evaluation/_evaluator.py` `_judge_data`; skillz issue #649 tracks showing commands). A criterion such as "the agent SHALL run `append-attempt`" cannot be graded and scores low. Grade the agent's report in criteria and check commands in the gate.
 ## Intake minimums
 
 skillz intake has these minimums (skillz `packages/skillz/src/skillz_experiments/_intake.py:24-31`).
 It needs at least 4 scored families. It trains on 4 cases from 2 families. It validates on 1 family, the smallest. It holds out at least 6 cases.
 Every scored journey case needs EARS `expected.criteria`.
 `skillz-experiment.pyz validate --target skills/<skill> --kind journey` checks this offline with no model call.
+
+
+## Case hardness and run planning
+
+Evidence from the 2026-11-15 harder-case run (Pasteurize and Mold, skillz dist `47b57bb1`):
+
+- skillz stops with `cases-too-easy` when any train or validation family has a seed mean of 0.9 or more. One saturated family stops the run, even when other families have headroom.
+- A run draft must hold every case in `journeys.json`. To keep a saturated family out of train and validation, pick a `--seed` that puts it in holdout. `run` without approvals prints the split in the `cases-unapproved` question, so a seed survey costs no model call.
+- The plan sits near the 1000-call ceiling and cannot be approved lower. A Mold suite with 7 or more holdout cases fits only with `--repeats 1`.
+- `--edit` is recorded when `run.json` is first written. Pass `--edit prose` on that call, or the run records the default `prose+cli`.
+- Measured cost: about $0.24 per scored Pasteurize outcome and $0.40 per scored Mold outcome (Sonnet task, Opus judge and reflection, list prices).
+- Saturated families at that time: Pasteurize `trace`, Mold `mini`. The seed also solved the drafted Pasteurize `decoy` and `verify` families (0.98 and 1.00), so they were dropped before merge.
+- A gutted SKILL.md (three generic steps) scored 0.00 on every new case. Use it as the weak arm when a suite needs a discrimination check.
+

@@ -27,7 +27,11 @@ from typing import Any, Optional
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+# Skills whose synthetic scenarios (`clean`) model a Cook-shaped workspace.
 SKILLS = ("cook", "mold", "press", "pasteurize")
+# Every skill with a compiled journey gate. Skill-specific rule tests for the
+# skills outside SKILLS live in `test_journey_gates_<skill>.py`.
+GATE_SKILLS = ("affinage", "cook", "hard-cheese", "melt", "mold", "pasteurize", "press")
 SHAPES = ("claude", "codex")
 OLD_GATES = REPO_ROOT / ".cheese" / "scratch" / "gates"
 ABS = "/work/ws/"
@@ -311,7 +315,7 @@ WITH_SOURCE = ("cook", "pasteurize")
 # --- compiler ----------------------------------------------------------------
 
 
-@pytest.mark.parametrize("skill", SKILLS)
+@pytest.mark.parametrize("skill", GATE_SKILLS)
 def test_contract_argv_is_compiled_source(skill: str) -> None:
     compiler = load_compiler()
     argv = contract_argv(skill)
@@ -320,7 +324,7 @@ def test_contract_argv_is_compiled_source(skill: str) -> None:
     assert argv[3] == compiler.compiled_source(REPO_ROOT, skill)
 
 
-@pytest.mark.parametrize("skill", SKILLS)
+@pytest.mark.parametrize("skill", GATE_SKILLS)
 def test_compiled_source_is_stdlib_only_and_python39_syntax(skill: str) -> None:
     source = contract_argv(skill)[3]
     tree = ast.parse(source, feature_version=(3, 9))
@@ -355,7 +359,7 @@ def copy_compiler_tree(root: Path) -> None:
     shutil.copytree(
         REPO_ROOT / "scripts" / "journey_gates", root / "scripts" / "journey_gates"
     )
-    for skill in SKILLS:
+    for skill in GATE_SKILLS:
         target = root / "skills" / skill / "evals"
         target.mkdir(parents=True)
         shutil.copy(REPO_ROOT / "skills" / skill / "evals" / "autoimprove.json", target)
@@ -1210,7 +1214,7 @@ def load_cases(skill: str) -> dict[str, dict[str, str]]:
 
 def _fixture_params(claude_only: bool = False) -> list[Any]:
     found: list[Any] = []
-    for skill in SKILLS:
+    for skill in GATE_SKILLS:
         for fixture in load_fixtures(skill):
             codex = any("method" in event for event in fixture["trace"])
             if not (claude_only and codex):
@@ -1311,7 +1315,7 @@ def test_fixture_schema(skill: str, fixture: dict[str, Any]) -> None:
         assert rel not in fixture["output"], rel
 
 
-@pytest.mark.parametrize("skill", SKILLS)
+@pytest.mark.parametrize("skill", GATE_SKILLS)
 def test_fixture_names_are_unique_and_cover_pass_and_fail(skill: str) -> None:
     fixtures = load_fixtures(skill)
     names = [fixture["name"] for fixture in fixtures]
@@ -1930,10 +1934,10 @@ def test_compiler_derives_skills_from_the_gate_sources() -> None:
     gates = REPO_ROOT / "scripts" / "journey_gates"
     expected = sorted(p.stem for p in gates.glob("*.py") if p.stem != "common")
     assert load_compiler().skills(REPO_ROOT) == expected
-    assert set(expected) == set(SKILLS)
+    assert set(expected) == set(GATE_SKILLS)
 
 
-@pytest.mark.parametrize("skill", SKILLS)
+@pytest.mark.parametrize("skill", GATE_SKILLS)
 def test_compiled_gate_fits_one_argv_string(skill: str) -> None:
     assert len(contract_argv(skill)[3].encode("utf-8")) < 65536
 
