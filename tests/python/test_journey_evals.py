@@ -120,8 +120,9 @@ def test_journey_cases_follow_the_runner_rules(skill: Path) -> None:
         assert _texts(case.get("requirements")), f"{name}: requirements must be a nonempty list of ids"
         expected = case.get("expected")
         assert isinstance(expected, dict) and expected, f"{name}: expected must be a nonempty object"
-        files = _text_map(case.get("files"), f"{name} files")
-        assert files, f"{name}: files must be a nonempty map"
+        # skillz reads a missing journey `files` as `{}` (`_cases.py`); only task
+        # cases need fixture files (`_validate.py`).
+        files = _text_map(case.get("files", {}), f"{name} files")
         for file_name in files:
             path = PurePosixPath(file_name)
             parts = path.parts
