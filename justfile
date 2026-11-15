@@ -47,6 +47,9 @@ test:
     # archives built from them, before any archive executes. Main tracks no
     # archives, so every test run builds them.
     {{python}} scripts/runtime_gates.py
+    # The Vite build rewrites the Mold assets that the mold archive packages.
+    # Build the assets first, so the archive and the asset tree agree.
+    just mold-review-build
     just wedge-build
     background_pids=()
     # Reap every background check on every exit path, including an early `set -e`
@@ -63,9 +66,10 @@ test:
 
 
     # The pytest suites are latency-bound (subprocess-heavy) and leave cores
-    # idle, so run the CPU-bound independent checks (pnpm build, cargo) alongside
-    # them. Failures still fail the recipe via the waited exit codes below.
-    just test-mold-review &
+    # idle, so run the independent checks (Playwright, cargo) alongside them.
+    # A concurrent check must not write files that a suite reads.
+    # Failures still fail the recipe via the waited exit codes below.
+    just test-mold-review-browser &
     mold_review_pid=$!
     background_pids+=("$mold_review_pid")
     just test-skill-overlap &
@@ -90,14 +94,20 @@ test:
     wait "$skill_overlap_pid" || skill_overlap_status=$?
     background_pids=()
     if [[ $mold_review_status -ne 0 || $skill_overlap_status -ne 0 ]]; then
-        printf 'test-mold-review exited %d; test-skill-overlap exited %d\n' \
+        printf 'test-mold-review-browser exited %d; test-skill-overlap exited %d\n' \
             "$mold_review_status" "$skill_overlap_status" >&2
         exit 1
     fi
 
-# Build and exercise the development-only Mold review browser harness
-test-mold-review:
+# Build the development-only Mold review browser harness into the Mold assets
+mold-review-build:
     corepack pnpm --dir frontend/mold-review run build
+
+# Build and exercise the development-only Mold review browser harness
+test-mold-review: mold-review-build wedge-build test-mold-review-browser
+
+# Run the Mold review Playwright suite against the built mold archive
+test-mold-review-browser:
     corepack pnpm --dir frontend/mold-review run test
 
 # Run the real Mold-to-Cook browser workflow in its isolated fixture package.

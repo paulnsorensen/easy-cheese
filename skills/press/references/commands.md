@@ -4,5 +4,6 @@
 
 | Command | Purpose | Subcommands |
 | --- | --- | --- |
+| `test-shape` | Report test-shape findings for the Python tests that changed after a base revision (JSON out) |  |
 | `wheypoint-resolve` | Resolve a phase slug through the shared Wheypoint kernel (JSON out) |  |
 | `write-handoff-artifact` | Write a handoff preamble plus optional body atomically; pass --grounded paths |  |
