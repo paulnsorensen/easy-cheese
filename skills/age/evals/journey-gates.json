@@ -354,7 +354,8 @@
     ],
     "score": 0,
     "fails": [
-      "git-commit"
+      "git-commit",
+      "git-mutation"
     ]
   },
   {

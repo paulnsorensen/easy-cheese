@@ -90,7 +90,8 @@ for rel, path in workspace.output.items():
 
 # A fix must not break a test that passed before it. A test that was already red
 # may stay red, because a deferred finding leaves its test failing.
-if any(is_py(rel) and workspace.raw_changed(rel) for rel in workspace.output):
+changed_py = any(is_py(rel) and workspace.raw_changed(rel) for rel in workspace.output)
+if changed_py or any(is_py(rel) and workspace.deleted(rel) for rel in workspace.fixtures):
     before = unittest_results(Path("."))
     after = unittest_results(Path("output"))
     if before is not None and after is not None:

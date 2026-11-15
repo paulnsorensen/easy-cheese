@@ -79,35 +79,42 @@ def wheypoint_subcommands(command: str) -> list[str]:
     found: list[str] = []
     for argv in parsed:
         # The CLI runs as `wheypoint ...` or `python3 [options] <path>/wheypoint.pyz ...`.
-        for index, word in enumerate(argv):
-            if _basename(word) in ("wheypoint.pyz", "wheypoint"):
-                rest = [w for w in argv[index + 1 :] if not w.startswith("-")]
-                if rest:
-                    found.append(rest[0])
-                break
-            if index > 0 and not word.startswith("-"):
-                break  # the first operand after the interpreter is not the CLI
+        if _basename(argv[0]) == "wheypoint":
+            cli = 0
+        elif _basename(argv[0]).startswith("python"):
+            operands = [i for i, word in enumerate(argv) if i > 0 and not word.startswith("-")]
+            cli = operands[0] if operands and _basename(argv[operands[0]]) == "wheypoint.pyz" else -1
+        else:
+            cli = -1
+        if cli >= 0:
+            rest = [w for w in argv[cli + 1 :] if not w.startswith("-")]
+            if rest:
+                found.append(rest[0])
     return found
 
 
 def lists_tags_only(command: str) -> bool:
-    """Every `git tag` in the step lists tags and creates none."""
+    """The step literally holds `git tag` with list-only arguments; no alias is expanded."""
+    if "alias." in command:
+        return False
     try:
         parsed = [argv for argv, _ in _commands(command) if argv]
     except Exception:
         return False
+    listed = False
     for argv in parsed:
         if _basename(argv[0]) != "git":
             continue
         sub, index = _git_subcommand(argv)
         args = argv[index + 1 :]
-        if sub != "tag":
+        if sub != "tag" or "tag" not in argv:
             continue
         flags = {w.split("=", 1)[0] for w in args if w.startswith("-")}
         listing = bool(flags & TAG_LIST_FLAGS) or any(w.startswith("-n") for w in args)
         if not listing and any(not w.startswith("-") for w in args):
             return False
-    return True
+        listed = True
+    return listed
 
 
 workspace = Workspace()
@@ -123,10 +130,15 @@ for index, facts in workspace.facts.items():
         failures.add("git-publish")
 
 validated = False
-for kind, value in workspace.steps:
+for step_index, (kind, value) in enumerate(workspace.steps):
     if kind != "shell":
         continue
-    for sub in wheypoint_subcommands(value):
+    subcommands = wheypoint_subcommands(value)
+    step_facts = workspace.facts.get(step_index)
+    # A checkpoint step reports its own secret as secret-in-checkpoint.
+    if step_facts is not None and step_facts.writes and SECRET.search(value) and "checkpoint" not in subcommands:
+        failures.add("secret-written")
+    for sub in subcommands:
         if sub == "validate":
             validated = True
         elif sub == "checkpoint":

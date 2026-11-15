@@ -169,6 +169,7 @@ LEDGER_WRITES = {
     "move": sh(f"mv /tmp/row.md {LEDGER}"),
     "touch": sh("touch .cheese/hard-cheese/forged.md"),
     "remove": sh(f"rm {LEDGER}"),
+    "perl-attached-program": sh(f"perl -i -pe's/a/b/' {LEDGER}"),
 }
 
 

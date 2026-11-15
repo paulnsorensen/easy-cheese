@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
+from itertools import combinations
 from pathlib import Path, PurePosixPath
 from typing import cast
 
@@ -24,6 +25,8 @@ SUITES = sorted(path.parents[1] for path in SKILLS_DIR.glob("*/evals/journeys.js
 
 # The runner's `_intake.py` constants and `_cases.py` fixture rules.
 HOLDOUT_MINIMUM = 6
+TRAIN_MINIMUM = 4
+TRAIN_FAMILIES_MINIMUM = 2
 MINIMUM_FAMILIES = 4
 RESERVED_ROOTS = {"home", "tmp", "output", "capture", "answer.json", "response-schema.json", "AGENTS.md", "CLAUDE.md"}
 CASE_FIELDS = {"id", "family", "kind", "request", "brief", "max_turns", "requirements", "files", "expected", "source", "regression"}
@@ -131,13 +134,37 @@ def test_journey_cases_follow_the_runner_rules(skill: Path) -> None:
             assert parts[0] not in RESERVED_ROOTS and "AGENTS.md" not in parts, f"{name}: reserved fixture path {file_name}"
 
 
+def holdout_capacity(sizes: dict[str, int]) -> int | None:
+    """Holdout cases left after the runner's split, or None when no train set exists.
+
+    Mirrors skillz `_intake.py`: validation is the smallest family (ties by name). Train is the
+    subset of the rest with the fewest cases that holds enough families and cases.
+    """
+    validation = min(sizes, key=lambda family: (sizes[family], family))
+    rest = {family: count for family, count in sizes.items() if family != validation}
+    totals = [
+        sum(rest[family] for family in subset)
+        for width in range(TRAIN_FAMILIES_MINIMUM, len(rest) + 1)
+        for subset in combinations(rest, width)
+    ]
+    train = min((total for total in totals if total >= TRAIN_MINIMUM), default=None)
+    return None if train is None else sum(rest.values()) - train
+
+
+def test_holdout_capacity_rejects_a_suite_that_leaves_too_few_holdout_cases() -> None:
+    assert holdout_capacity({"a": 3, "b": 3, "c": 3, "d": 3}) == 3 < HOLDOUT_MINIMUM
+    assert holdout_capacity({"a": 2, "b": 2, "c": 2, "d": 2, "e": 2, "f": 2, "g": 2}) == 8
+    assert holdout_capacity({"a": 1, "b": 1, "c": 1}) is None
+
+
 @pytest.mark.parametrize("skill", SUITES, ids=_param_id)
 def test_journey_holdout_can_fill(skill: Path) -> None:
-    """Splits go by family: one family to train, one to validation, the rest to holdout."""
+    """The runner's split by family must leave enough holdout cases."""
     families = Counter(_text(case, "family") for case in _cases(skill))
     assert len(families) >= MINIMUM_FAMILIES, f"{len(families)} families; the runner needs {MINIMUM_FAMILIES}"
-    largest = sum(count for _, count in families.most_common(2))
-    assert families.total() - largest >= HOLDOUT_MINIMUM, (
+    capacity = holdout_capacity(dict(families))
+    assert capacity is not None, f"family sizes {dict(families)} leave no train set"
+    assert capacity >= HOLDOUT_MINIMUM, (
         f"family sizes {dict(families)} can leave fewer than {HOLDOUT_MINIMUM} holdout cases"
     )
 
