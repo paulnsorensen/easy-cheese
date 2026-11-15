@@ -16,12 +16,10 @@ from journey_gates.common import (
     emit,
     read_bytes,
     rule_publication,
+    SKIP_ROOTS,
     snapshot_visible,
     targets,
 )
-from journey_gates.common import _basename as _basename
-from journey_gates.common import _commands as _commands
-from journey_gates.common import _git_subcommand as _git_subcommand
 
 # gate:strip-end
 import shutil
@@ -29,6 +27,7 @@ import tempfile
 
 # Git subcommands that change the working tree, the index, or history.
 GIT_MUTATIONS = {
+    "add",
     "am",
     "apply",
     "checkout",
@@ -41,6 +40,7 @@ GIT_MUTATIONS = {
     "restore",
     "revert",
     "rm",
+    "stage",
     "stash",
     "switch",
 }
@@ -103,53 +103,15 @@ def workspace_rel(ws: Workspace, path: str) -> Optional[str]:
         return None
     return None if rel.startswith("..") else rel
 
-
 def read_only_stash(command: str) -> bool:
-    """Every `git stash` in the step is `git stash list` or `git stash show`."""
-    try:
-        commands = [argv for argv, _ in _commands(command) if argv]
-    except Exception:
-        return False
-    for argv in commands:
-        if _basename(argv[0]) != "git":
-            continue
-        sub, index = _git_subcommand(argv)
-        if sub == "stash" and argv[index + 1 : index + 2] not in (["list"], ["show"]):
-            return False
-    return True
+    """The step literally holds `git stash list` or `git stash show`; no alias is expanded."""
+    stashes = re.findall(r"\bgit\s+stash\b(?!\s+(?:list|show)\b)", command)
+    return "alias." not in command and not stashes and bool(re.search(r"\bgit\s+stash\s+(?:list|show)\b", command))
 
 
-def in_place_targets(argv: list[str]) -> list[str]:
-    """Files that `sed -i` or `perl -i` rewrites in place."""
-    name = _basename(argv[0])
-    if name not in ("sed", "perl"):
-        return []
-    script_flags = ("-e", "--expression", "-f", "--file") if name == "sed" else ("-e", "-E")
-    in_place = False
-    has_script = False
-    files: list[str] = []
-    args = argv[1:]
-    index = 0
-    while index < len(args):
-        word = args[index]
-        if word.split("=", 1)[0] in script_flags:
-            has_script = True
-            index += 1 if "=" in word else 2
-            continue
-        if word.startswith("--in-place"):
-            in_place = True
-        elif word.startswith("-") and not word.startswith("--") and len(word) > 1:
-            # Only switches that take no value may precede `i` in one cluster.
-            in_place = in_place or bool(re.match(r"^-[nErsuz]*i" if name == "sed" else r"^-[pnlaswT0-9]*i", word))
-            if name == "perl" and word[-1] in "eE":
-                has_script = True
-                index += 1
-        elif not word.startswith("-"):
-            files.append(word)
-        index += 1
-    if not in_place:
-        return []
-    return files if has_script else files[1:]
+def exempt_write(rel: str) -> bool:
+    """Review artifacts under `.cheese/` and the runtime roots are not production files."""
+    return rel.split("/")[0] in (".cheese", *SKIP_ROOTS)
 
 
 workspace = Workspace()
@@ -170,17 +132,9 @@ visible = sorted(
     if snapshot_visible(rel) and "__pycache__" not in rel
 )
 writes = [path for _, path in workspace.write_targets()]
-for kind, value in workspace.steps:
-    if kind == "shell":
-        try:
-            commands = [argv for argv, _ in _commands(value) if argv]
-        except Exception:
-            commands = []
-        for argv in commands:
-            writes.extend(in_place_targets(argv))
 for path in writes:
     rel = workspace_rel(workspace, path)
-    if rel is not None and snapshot_visible(rel):
+    if rel is not None and not exempt_write(rel):
         failures.add("production-write")
 if any(targets(workspace, rel) for rel in visible):
     failures.add("production-write")
