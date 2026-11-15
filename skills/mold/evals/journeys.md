@@ -2,7 +2,8 @@
 
 These journeys drive `/skillz autoimprove` for `/mold`.
 Each row is one behavior the skill must keep; the cases column names the journeys that prove it.
-The gate fails a run when Mold writes a source file, creates a new source file, changes a fixture code file, makes a git commit, pushes, or opens a PR.
+The gate fails a run when Mold writes a source file or creates a new source file.
+The gate also fails a run when Mold changes a fixture code file, makes a git commit, pushes, or opens a PR.
 Each case also carries EARS `expected.criteria`. Only the dealbreakers are `must`: production code, starting Cook without an explicit request, and a commit or push.
 
 | ID | Behavior | Cases |
@@ -10,9 +11,9 @@ Each case also carries EARS `expected.criteria`. Only the dealbreakers are `must
 | `MOLD-1` | A small, clear ask gets a tier announcement with a one-line reason and no long interview. The cases grade the announcement, not the Quick tier name. | `mold-mini-1`, `mold-mini-2`, `mold-mini-3`, `mold-boundary-2`, `mold-boundary-3` |
 | `MOLD-2` | The spec is saved at the resolver path and passes strict validation. | `mold-mini-1`, `mold-mini-2`, `mold-mini-3`, `mold-forks-1`, `mold-forks-2`, `mold-forks-3`, `mold-recover-1`, `mold-recover-2`, `mold-recover-3`, `mold-boundary-1`, `mold-boundary-2`, `mold-boundary-3`, `mold-leverage-1`, `mold-leverage-2`, `mold-leverage-3` |
 | `MOLD-3` | Every goal has an acceptance criterion, and non-goals are listed. | `mold-mini-1`, `mold-mini-2`, `mold-mini-3`, `mold-forks-1`, `mold-forks-2`, `mold-forks-3`, `mold-recover-2`, `mold-recover-3`, `mold-leverage-1`, `mold-leverage-2`, `mold-leverage-3` |
-| `MOLD-4` | Consequential forks are asked, one at a time, as lettered options with a fork card, never settled silently. | `mold-forks-1`, `mold-forks-2`, `mold-forks-3`, `mold-recover-1`, `mold-leverage-1`, `mold-leverage-2`, `mold-leverage-3` |
+| `MOLD-4` | Mold asks each consequential fork one at a time, as lettered options with a fork card, and never settles it silently. | `mold-forks-1`, `mold-forks-2`, `mold-forks-3`, `mold-leverage-1`, `mold-leverage-2`, `mold-leverage-3` |
 | `MOLD-5` | Explain more re-asks the same fork with new context and does not guess a choice. | `mold-forks-3` |
-| `MOLD-6` | Minor calls are decided by the agent and logged, not put to the user. | `mold-mini-2`, `mold-forks-1`, `mold-forks-2`, `mold-recover-2` |
+| `MOLD-6` | The agent decides minor calls and logs them, and does not put them to the user. | `mold-mini-2`, `mold-forks-1`, `mold-forks-2`, `mold-recover-2` |
 | `MOLD-7` | A confused user or a request for less depth makes Mold step back, explain plainly, and cut depth. | `mold-recover-1`, `mold-recover-2` |
 | `MOLD-8` | A vague idea gets one narrowing question about the pain, not a list of forks. | `mold-recover-3` |
 | `MOLD-9` | A saved spec or a general approval is not a Cook request; Cook needs an explicit choice. | `mold-mini-3`, `mold-boundary-1`, `mold-boundary-3` |

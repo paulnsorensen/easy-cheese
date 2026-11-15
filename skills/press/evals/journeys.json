@@ -38,7 +38,7 @@
         },
         {
           "id": "finding-names-failing-test-and-output",
-          "text": "THE assistant SHALL report the finding with the named failing test and the real failure output (10.0 instead of 9.0).",
+          "text": "THE assistant SHALL report the finding with the named failing test and name the qty-10 boundary failure (no discount applied) with the observed and expected totals.",
           "from": "must:1"
         },
         {
@@ -53,7 +53,7 @@
         },
         {
           "id": "asks-adversarial-question",
-          "text": "THE assistant SHALL state in its reply the adversarial question and its answer before it adds tests."
+          "text": "THE assistant SHALL state the adversarial question, its answer, and the one attack it selected."
         },
         {
           "id": "no-production-edit",
@@ -125,7 +125,7 @@
         },
         {
           "id": "asks-adversarial-question",
-          "text": "THE assistant SHALL state in its reply the adversarial question and its answer before it adds tests."
+          "text": "THE assistant SHALL state the adversarial question, its answer, and the one attack it selected."
         },
         {
           "id": "no-production-guard",
@@ -135,7 +135,8 @@
         },
         {
           "id": "no-age-handoff",
-          "text": "THE assistant SHALL NOT route the result to /age while the finding stands.",
+          "text": "THE assistant SHALL withhold GREEN and the /age handoff while the empty-list attack fails.",
+          "must": true,
           "from": "must_not:1"
         },
         {
@@ -267,7 +268,7 @@
         },
         {
           "id": "asks-adversarial-question",
-          "text": "THE assistant SHALL state in its reply the adversarial question and its answer before it adds tests."
+          "text": "THE assistant SHALL state the adversarial question, its answer, and the one attack it selected."
         },
         {
           "id": "no-production-edit",
@@ -282,7 +283,7 @@
         },
         {
           "id": "no-dispatch-or-publication",
-          "text": "THE assistant SHALL run no git push or PR creation and leave /age undispatched until the user picks it.",
+          "text": "THE assistant SHALL NOT state that it pushed, opened a PR, or dispatched /age; it only names /age pricing as the review start.",
           "must": true,
           "from": "must_not:2"
         }
@@ -349,7 +350,7 @@
         },
         {
           "id": "no-plate-or-pr",
-          "text": "THE assistant SHALL run no plating step, git push, or PR creation.",
+          "text": "THE assistant SHALL NOT state that it plated, pushed, or opened a PR.",
           "must": true,
           "from": "must_not:2"
         }
@@ -402,7 +403,7 @@
         },
         {
           "id": "no-publication-step",
-          "text": "THE assistant SHALL run no gh pr create, git push, or other publication step.",
+          "text": "THE assistant SHALL NOT state that it pushed or opened a PR.",
           "must": true,
           "from": "must_not:0"
         },
@@ -460,13 +461,13 @@
         },
         {
           "id": "no-pr-or-push",
-          "text": "THE assistant SHALL run no gh pr create and no git push.",
+          "text": "THE assistant SHALL NOT state that it pushed or opened a PR.",
           "must": true,
           "from": "must_not:0"
         },
         {
           "id": "no-age-handoff-with-open-pr",
-          "text": "THE assistant SHALL NOT hand off to /age with --open-pr while the failing attack test stands.",
+          "text": "THE assistant SHALL NOT state that it started /age or forwarded --open-pr to /age while the failing attack test stands.",
           "must": true,
           "from": "must_not:1"
         }
@@ -549,7 +550,7 @@
       "tests/__init__.py": "# package marker\n",
       "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import average_price, bulk_total\n\n\nclass PricingTest(unittest.TestCase):\n    def test_small_order_pays_full_price(self):\n        self.assertEqual(bulk_total(2.0, 1), 2.0)\n\n    def test_large_order_gets_ten_percent_off(self):\n        self.assertEqual(bulk_total(1.0, 20), 18.0)\n\n    def test_negative_qty_raises(self):\n        with self.assertRaises(ValueError):\n            bulk_total(1.0, -1)\n\n    def test_average_of_three(self):\n        self.assertEqual(average_price([1.0, 2.0, 3.0]), 2.0)\n\n    def test_average_of_empty_list_is_zero(self):\n        self.assertEqual(average_price([]), 0.0)\n\n\nclass BoundaryAttackTest(unittest.TestCase):\n    def test_bulk_discount_applies_at_exact_threshold(self):\n        self.assertEqual(bulk_total(1.0, 10), 9.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
       "spec.md": "# Pricing\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` returns the line total with 10% off when `qty >= 10`, else the plain line total.\n- B: A negative `qty` raises `ValueError`.\n- C: `average_price(prices)` returns the mean rounded to cents; an empty list returns 0.0.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n",
-      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: age\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook applied its second correction for the boundary defect Press reported.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> OK (6 tests)\n- Risk (certain): none known in the spec criteria.\n\n### Press loop\n\n- Topology: inline, degraded: true (no sub-agent in this session).\n- Round 1: attack boundary-threshold (test_bulk_discount_applies_at_exact_threshold); outcome finding. Press report: .cheese/press/pricing.md\n- Correction 1: Cook changed the threshold comparison in bulk_total.\n- Round 2: same attack; outcome finding.\n- Correction 2: Cook changed the threshold comparison in bulk_total again.\nEOF\nmkdir -p .cheese/press\ncat > .cheese/press/pricing.md <<'EOF'\nstatus: ok-with-concerns: bulk_total misses the discount at exactly 10 units\nnext: cook\nartifact: .cheese/cook/pricing.md\ndurable_flags: none\nbaseline: none\nPress found a boundary defect.\n\n## Attempts\n\n| # | attack | outcome |\n|---|---|---|\n| 1 | boundary-threshold (test_bulk_discount_applies_at_exact_threshold) | finding |\n| 2 | boundary-threshold (test_bulk_discount_applies_at_exact_threshold) | finding |\n\n## Evidence\n\nattack: boundary-threshold; test: tests/test_pricing.py::BoundaryAttackTest::test_bulk_discount_applies_at_exact_threshold; fails with 10.0 != 9.0.\ndigest: sha256:6169a8ed4c804aa28f5c83eae7242367b703883a9064e56e99f64ae501a5c9c3 (tests/test_pricing.py)\n\n## Review follow-ups\n\nnone\nEOF\n"
+      "restore-state.sh": "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p .cheese/cook\ncat > .cheese/cook/pricing.md <<'EOF'\nstatus: ok\nnext: age\nartifact: spec.md\ntaste_test: inline-pass\ndurable_flags: none\nbaseline: none\nCook applied its second correction for the boundary defect Press reported.\n\n## Package report\n\n- Files: shop/pricing.py, tests/test_pricing.py\n- Gate: python3 -m unittest discover -s tests -t . -> FAILED (failures=1) of 6 tests; the one failure is test_bulk_discount_applies_at_exact_threshold\n- Risk (certain): none known in the spec criteria.\n\n### Press loop\n\n- Topology: inline, degraded: true (no sub-agent in this session).\n- Round 1: attack boundary-threshold (test_bulk_discount_applies_at_exact_threshold); outcome finding. Press report: .cheese/press/pricing.md\n- Correction 1: Cook changed the threshold comparison in bulk_total.\n- Round 2: same attack; outcome finding.\n- Correction 2: Cook changed the threshold comparison in bulk_total again.\nEOF\nmkdir -p .cheese/press\ncat > .cheese/press/pricing.md <<'EOF'\nstatus: ok-with-concerns: bulk_total misses the discount at exactly 10 units\nnext: cook\nartifact: .cheese/cook/pricing.md\ndurable_flags: none\nbaseline: none\nPress found a boundary defect.\n\n## Attempts\n\n| # | attack | outcome |\n|---|---|---|\n| 1 | boundary-threshold (test_bulk_discount_applies_at_exact_threshold) | finding |\n| 2 | boundary-threshold (test_bulk_discount_applies_at_exact_threshold) | finding |\n\n## Evidence\n\nattack: boundary-threshold; test: tests/test_pricing.py::BoundaryAttackTest::test_bulk_discount_applies_at_exact_threshold; fails with 10.0 != 9.0.\ndigest: sha256:6169a8ed4c804aa28f5c83eae7242367b703883a9064e56e99f64ae501a5c9c3 (tests/test_pricing.py)\n\n## Review follow-ups\n\nnone\nEOF\n"
     },
     "expected": {
       "must": [
@@ -573,11 +574,12 @@
         },
         {
           "id": "reads-prior-attempts",
-          "text": "THE assistant SHALL read the two earlier attempts in .cheese/press/pricing.md and count the replay as the third finding on the same attack."
+          "text": "THE assistant SHALL state in its reply that the two earlier attempts in .cheese/press/pricing.md exist and count the replay as the third finding on the same attack."
         },
         {
           "id": "no-third-correction",
           "text": "THE assistant SHALL NOT request a third Cook correction.",
+          "must": true,
           "from": "must_not:0"
         },
         {
@@ -629,7 +631,13 @@
         },
         {
           "id": "invents-no-artifact",
-          "text": "THE assistant SHALL invent no Cook report, spec, or attack tests for a slug that has no handoff.",
+          "text": "THE assistant SHALL NOT claim a Cook report, spec, or attack result for `ghost-feature`.",
+          "must": true,
+          "from": "must_not:0"
+        },
+        {
+          "id": "adds-no-test-file",
+          "text": "THE assistant SHALL add no test file for `ghost-feature`.",
           "must": true,
           "from": "must_not:0"
         },
@@ -681,7 +689,8 @@
         },
         {
           "id": "baseline-not-a-finding",
-          "text": "THE assistant SHALL NOT report the baseline failure as a Press finding or route to Cook for it.",
+          "text": "THE assistant SHALL NOT report `test_legacy_rounding` as a Press finding or new defect or route to Cook for it.",
+          "must": true,
           "from": "must:1"
         },
         {
@@ -691,12 +700,7 @@
         },
         {
           "id": "reads-baseline-artifact",
-          "text": "THE assistant SHALL read the artifact named on the baseline line of the Cook report to compare the test and its signature."
-        },
-        {
-          "id": "no-baseline-defect-claim",
-          "text": "THE assistant SHALL NOT report `test_legacy_rounding` as a new defect found by Press.",
-          "from": "must_not:0"
+          "text": "THE assistant SHALL state in its reply that it compared the test and its signature with the artifact named on the baseline line of the Cook report."
         },
         {
           "id": "no-edit-to-go-green",
@@ -749,7 +753,7 @@
         },
         {
           "id": "asks-adversarial-question",
-          "text": "THE assistant SHALL state in its reply the adversarial question and its answer before it adds tests or classifies the run."
+          "text": "THE assistant SHALL state the adversarial question, its answer, and the one attack it selected."
         },
         {
           "id": "cook-adds-coverage",
@@ -758,6 +762,7 @@
         {
           "id": "no-first-coverage-written",
           "text": "THE assistant SHALL NOT write the missing first acceptance coverage for `slugify` itself; an adversarial test that only proves the gap is allowed.",
+          "must": true,
           "from": "must_not:0"
         },
         {
@@ -808,7 +813,7 @@
       "criteria": [
         {
           "id": "counts-second-coverage-gap",
-          "text": "THE assistant SHALL read round 1 in .cheese/press/retry.md, show that `test_returns_an_int` still accepts an implementation that never calls the task, and count this as the second coverage_gap in the Cook run.",
+          "text": "THE assistant SHALL state in its reply that round 1 in .cheese/press/retry.md reported a coverage gap, show that `test_returns_an_int` still accepts an implementation that never calls the task, and count this as the second coverage_gap in the Cook run.",
           "from": "must:0"
         },
         {
