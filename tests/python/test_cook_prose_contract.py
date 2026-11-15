@@ -310,3 +310,18 @@ def test_press_loop_runs_inline_on_a_harness_without_sub_agents() -> None:
     assert "Record `topology: inline` and `degraded: true` in `agent_resolution`" in loop
     assert "Never skip the round because no sub-agent exists." in loop
     assert "general, then inline in the Cook session (`degraded: true`)" in skill
+
+
+def test_a_stalled_curd_is_reported_in_prose_before_any_route_or_question() -> None:
+    """A curd at the Cure cap once reached a design picker and a re-dispatch with no prose."""
+    fan = _read(REFERENCES / "fan-pathway.md")
+    section = fan.split("- **Stall report.**", 1)[1].split("\n## ", 1)[0]
+    questions = _read(COOK.parent / "cheese" / "references" / "ask-user-question.md")
+    answer = questions.split("## Normalize the answer", 1)[1]
+
+    assert "Write the stall report as visible prose before the Mold route and before any question." in section
+    assert "Name the curd, each Age and Cure pass with its findings, and why the fixes did not converge." in section
+    assert "A question can confirm only an option that the report weighed." in section
+    assert "state the selected option and the next dispatch in prose before the dispatch" in section
+    assert "Never act on an answer silently." in answer
+    assert "state the selected option and the next action in one visible prose sentence" in answer
