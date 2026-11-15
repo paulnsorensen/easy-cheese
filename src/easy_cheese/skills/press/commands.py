@@ -21,6 +21,13 @@ def _write_handoff_artifact(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("test-shape")
+def _test_shape(argv: list[str]) -> int:
+    from easy_cheese.skills.press.suite_shape import main
+
+    return main(argv)
+
+
 COMMANDS = (
     derive_command(
         _wheypoint_resolve,
@@ -29,6 +36,10 @@ COMMANDS = (
     derive_command(
         _write_handoff_artifact,
         "Write a handoff preamble plus optional body atomically; pass --grounded paths",
+    ),
+    derive_command(
+        _test_shape,
+        "Report test-shape findings for the Python tests that changed after a base revision (JSON out)",
     ),
 )
 

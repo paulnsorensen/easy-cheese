@@ -98,7 +98,7 @@ This workflow omits the git-history/precedent dimension.
    Read `references/fan-out.md` for the context checklist and deterministic planning contract.
    Collect instruction sources, build context, and run `scripts/age.pyz age-route` through its bundle path.
    Use the assignments, effort, dispatch batches, and capability restrictions.
-   Assemble shared evidence and the plan before the lock; do not launch a separate classifier agent.
+   Read [scope interrogation](references/scope-interrogation.md) before collecting evidence. Ask the user only when missing intent changes a recommendation.
    The lock covers the packet, because the packet is review evidence.
    Then run `python3 skills/age/scripts/age.pyz review-lock --slug <slug>` to lock the production tree.
    Use the resolved slug from `## Inputs`.

@@ -45,6 +45,7 @@ Select ONE relevant false-success attack, not all four. Record the question, the
 [`references/gap-analysis.md`](references/gap-analysis.md) lists the attacks and the evidence sequence.
 
 Press does not write first coverage. When it is missing, Press reports `coverage_gap`.
+Press adds a test only for a branch or false success that no existing test catches. [`../cheese/references/test-shape.md`](../cheese/references/test-shape.md) defines placement, overlap, tables, generated inputs, and seams.
 Replay the same attack after each Cook correction, with the same attack and test digest.
 Invalid evidence and a production tree change stop the run. The outcome table defines the caps.
 
@@ -62,10 +63,11 @@ See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md)
 
 1. **Read** — Load the approved spec, Cook handoff, and baseline block. Use canonical terms from `.cheese/glossary/<slug>.md` when that file exists.
 2. **Inspect** — Read the acceptance check before you add tests.
-3. **Attack** — Add or run only adversarial tests. Do not change production paths.
-4. **Classify** — Select `green`, `finding`, `coverage_gap`, `invalid_evidence`, or `production_changed`.
-5. **Report** — Write `.cheese/press/<slug>.md`. Include the question, the selected attack, why it threatens the claim, the attempts, evidence, and review follow-ups.
-6. **Hand off** — Send GREEN to `/age`. Send a finding or `coverage_gap` to Cook.
+3. **Attack** — Add or run only adversarial tests. Do not change production paths. Extend the existing test file for the module. Before you add a test, name the existing test closest to it. Do not add the test when that test asserts the same seam and branch.
+4. **Shape** — On the first run of an attack, run `python3 skills/press/scripts/press.pyz test-shape --base <revision>`. Use the acceptance-evidence revision from the Cook report. Fix each finding in a Press test, or record why it stands. Record a finding on a test that Press did not write under `## Review follow-ups`. The check reads Python tests only. For other tests, apply the rules by hand and record `test-shape: manual`. After a shape fix, run the attack again. Record that outcome and test digest as the attack evidence. A replay uses this final version of the attack and skips this step.
+5. **Classify** — Select `green`, `finding`, `coverage_gap`, `invalid_evidence`, or `production_changed`.
+6. **Report** — Write `.cheese/press/<slug>.md`. Include the question, the selected attack, why it threatens the claim, the attempts, evidence, test shape, and review follow-ups.
+7. **Hand off** — Send GREEN to `/age`. Send a finding or `coverage_gap` to Cook.
 
 Use [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) for source changes.
 
@@ -124,6 +126,7 @@ Write these body sections under the preamble:
 
 - `## Attempts` — one row for each attempt. Give the attempt number and outcome.
 - `## Evidence` — the stable attack identity, the test digest, and the failing test for a finding.
+- `## Test shape` — one row for each new test: the test, the closest existing test, and the branch or false success that only the new test catches. Then the `test-shape` result and the reason for each finding that stands.
 - `## Review follow-ups` — each out-of-contract concern. Write `none` when the run records no concern. Age reads this section.
 
 Map the outcome to the terminal preamble:
@@ -159,6 +162,7 @@ Forward `--hard`, `--auto`, and `--open-pr` to `/age` when the caller supplied t
 ## Rules
 
 - Do not edit production code, production fixtures, or production adapters.
+- Do not create a `test_press_*` file when a test file for the module exists.
 - Do not change the attack between replays.
 - Do not treat out-of-contract behavior as an implementation request. Record it under `## Review follow-ups`. Report the run as `ok-with-concerns` on a GREEN pass.
 - Preserve baseline-aware readiness.

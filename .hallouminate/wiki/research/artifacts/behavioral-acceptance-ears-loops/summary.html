@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{box-sizing:border-box}body{margin:0;color:var(--foreground);font:15px/1.55 var(--font-sans,system-ui)}h2{font-size:25px;line-height:1.2;margin:0 0 12px}h3{font-size:18px;margin:0 0 10px}p{margin:8px 0 14px}.sub{color:var(--muted-foreground);font-size:13px}a{color:var(--accent);text-underline-offset:3px}strong{font-weight:650}.flow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:20px 0}.step{background:var(--secondary);border-radius:var(--radius,8px);padding:16px}.step b{display:block;font-size:14px}.step span{display:block;color:var(--muted-foreground);font-size:12px;margin-top:4px}.num{color:var(--accent);font:12px var(--font-mono,monospace);margin-bottom:9px}.tabs{display:flex;flex-wrap:wrap;gap:8px;border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:22px}button{font:inherit;font-size:13px;color:var(--foreground);background:var(--secondary);border:1px solid var(--border);border-radius:var(--radius,8px);padding:9px 13px;cursor:pointer}button[aria-selected=true]{background:var(--primary);color:var(--primary-foreground);border-color:var(--primary)}button:focus-visible{outline:3px solid var(--ring);outline-offset:2px}[hidden]{display:none!important}.rows{display:grid;gap:0}.row{display:grid;grid-template-columns:1fr 1.5fr 1.2fr;gap:18px;padding:15px 0;border-bottom:1px solid var(--border);font-size:14px}.row.head{color:var(--muted-foreground);font-size:12px;text-transform:uppercase;letter-spacing:.06em;padding-top:0}.row b{display:block}.bad{color:var(--muted-foreground)}.note{padding:16px;background:var(--accent-surface);color:var(--accent-surface-foreground);border-radius:var(--radius,8px);margin:18px 0}.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}.box{background:var(--secondary);padding:18px;border-radius:var(--radius,8px)}ul,ol{padding-left:21px;margin:10px 0}li{margin:7px 0}pre{padding:16px;overflow-wrap:anywhere;white-space:pre-wrap;background:var(--code-background);color:var(--code-foreground);border-radius:var(--radius,8px);font:12px/1.65 var(--font-mono,monospace)}code{font-family:var(--font-mono,monospace);font-size:.9em}.sources{font-size:12px;color:var(--muted-foreground);margin-top:18px}details{border-top:1px solid var(--border);padding-top:14px;margin-top:16px}summary{font-weight:650;cursor:pointer}.footer{margin-top:22px;border-top:1px solid var(--border);padding-top:14px;font-size:12px;color:var(--muted-foreground)}
+@media(max-width:500px){h2{font-size:22px}.flow{grid-template-columns:1fr 1fr}.cols{grid-template-columns:1fr}.row{grid-template-columns:1fr;gap:6px}.row.head{display:none}.row .bad:before{content:"Rejects: ";font-weight:650}.tabs{gap:6px}button{flex:1 1 40%;padding:10px 8px}}
+</style></head><body>
+<h2>Stronger evidence, not more ceremony</h2>
+<p><strong>EARS states the rule. BDD makes examples concrete. Execution checks the result. A bounded loop responds to failures.</strong></p>
+<p class="sub">Research synthesis · 17 October 2026 · Candidate practices, not adopted skill changes</p>
+<div class="flow" aria-label="Validation sequence">
+<div class="step"><div class="num">01 / REQUIRE</div><b>EARS rule</b><span>Condition → required response</span></div>
+<div class="step"><div class="num">02 / EXEMPLIFY</div><b>BDD examples</b><span>Normal case + meaningful failure</span></div>
+<div class="step"><div class="num">03 / OBSERVE</div><b>Real outcome</b><span>Effect, not a success message</span></div>
+<div class="step"><div class="num">04 / ITERATE</div><b>Bounded repair</b><span>Fixed check + explicit stop</span></div>
+</div>
+<div class="tabs" role="tablist" aria-label="Research topics">
+<button id="tab-checks" role="tab" aria-selected="true" aria-controls="checks">Behavioral checks</button>
+<button id="tab-ears" role="tab" aria-selected="false" aria-controls="ears">EARS + BDD</button>
+<button id="tab-loops" role="tab" aria-selected="false" aria-controls="loops">Loops ≠ hill climbs</button>
+<button id="tab-quality" role="tab" aria-selected="false" aria-controls="quality">Tests + code quality</button>
+</div>
+<section id="checks" role="tabpanel" aria-labelledby="tab-checks">
+<h3>Choose checks by failure risk</h3>
+<p>Do not generate every check for every task. Keep the smallest set that covers distinct risks.</p>
+<div class="rows">
+<div class="row head"><span>Claim</span><span>Behavioral check</span><span>False success</span></div>
+<div class="row"><b>The delivered path works</b><span>Use the installed entrypoint, real configuration, and safe isolated destination. Inspect the resulting effect.</span><span class="bad">Helpers pass, but packaging or wiring fails.</span></div>
+<div class="row"><b>The exported patch works</b><span>Apply it to its declared clean base. Execute the target and inspect its output.</span><span class="bad">The patch exists but changes nothing useful.</span></div>
+<div class="row"><b>Failures stay failures</b><span>Deny a required test permission. Check the specified error and unchanged protected state.</span><span class="bad">An unexpected error passes a success scenario.</span></div>
+<div class="row"><b>Recovery preserves behavior</b><span>Interrupt and resume at a durable boundary. Check the required effects and duplicate policy.</span><span class="bad">Lost work, duplicate effects, or false completion.</span></div>
+<div class="row"><b>The evaluator detects defects</b><span>Run the same check on a known-broken case and a working reference.</span><span class="bad">The evaluator accepts everything—or rejects everything.</span></div>
+<div class="row"><b>The candidate improves outcomes</b><span>Compare baseline and candidate on reserved realistic tasks. Repeat noisy trials.</span><span class="bad">The experiment completes without useful improvement.</span></div>
+</div>
+<div class="note"><strong>Keep three claims separate:</strong> the experiment runs; its artifact reproduces the candidate; the candidate improves useful behavior.</div>
+<p>An inconclusive result can be a valid experiment. It is not demonstrated improvement.</p>
+<p class="sources">Evidence: <a href="https://testing.googleblog.com/2021/06/how-much-testing-is-enough.html" target="_blank" rel="noopener">Google on user-journey testing</a>; <a href="https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents" target="_blank" rel="noopener">Anthropic on agent outcomes and graders</a>. Specific checks above are applications of that evidence.</p>
+</section>
+<section id="ears" role="tabpanel" aria-labelledby="tab-ears" hidden>
+<h3>A requirement is not yet a test</h3>
+<p>EARS distinguishes events, states, unwanted behavior, optional features, and always-active requirements. Gherkin describes context, action, and expected outcome.</p>
+<div class="box"><strong>Illustrative EARS requirement</strong><p>When an experiment exports a patch, the patch shall reproduce the evaluated candidate on its declared base.</p></div>
+<p>The fixture below has a separate contract: doubling 7 produces 14. This is an example, not an existing Skillz command.</p>
+<pre>Given a clean checkout at base B
+And "./fixture double 7" incorrectly prints "7"
+When I apply the exported patch
+And I run "./fixture double 7"
+Then the exit status is 0
+And stdout is exactly "14"</pre>
+<p><strong>Evaluator control:</strong> the same acceptance check must reject a no-op patch on base B.</p>
+<p>This checks the exporter on a fixture. It does not establish that a real target skill improves.</p>
+<details open><summary>Small acceptance record</summary><ul><li>Requirement ID and one required response.</li><li>Concrete normal and failure examples.</li><li>Actual entrypoint and boundaries that remain real.</li><li>Observable result and independent expected value.</li><li>False-success case and executable check.</li><li>Deadline when the requirement depends on time.</li></ul></details>
+<p>For “while” requirements, test relevant transitions—not one snapshot. Keep existing test tooling when it can execute the examples.</p>
+<p class="sources">Evidence: <a href="https://www.researchgate.net/profile/Alistair_Mavin/publication/224079416_Easy_approach_to_requirements_syntax_EARS/links/568ce3bf08aeb488ea311990/Easy-approach-to-requirements-syntax-EARS.pdf" target="_blank" rel="noopener">Original EARS paper</a>; <a href="https://cucumber.io/docs/gherkin/reference/" target="_blank" rel="noopener">Gherkin reference</a>. The mapping and fixture are authored examples.</p>
+</section>
+<section id="loops" role="tabpanel" aria-labelledby="tab-loops" hidden>
+<h3>Use different end conditions</h3>
+<div class="cols">
+<div class="box"><h3>Acceptance repair</h3><p><strong>Question:</strong> Does the required behavior work?</p><ol><li>Run a fixed real-path check.</li><li>Diagnose one observed failure.</li><li>Make a coherent correction.</li><li>Re-run acceptance and regression checks.</li></ol><p><strong>Stop:</strong> acceptance and required gates pass, the budget expires, or progress needs a decision.</p></div>
+<div class="box"><h3>Optimization hill climb</h3><p><strong>Question:</strong> Can an accepted system improve one objective?</p><ol><li>Start from an accepted baseline.</li><li>Keep behavior and architecture constraints fixed.</li><li>Compare one candidate under matched conditions.</li><li>Retain only a justified gain.</li></ol><p><strong>Stop:</strong> the agreed target, budget, no-progress rule, or decision boundary.</p></div>
+</div>
+<div class="note"><strong>A retry scheduler is neither.</strong> Repeating the same attempt can produce one success without improving first-attempt reliability.</div>
+<p>Use strict ratchets for deterministic costs. Use repeated trials and an uncertainty policy for noisy agent quality.</p>
+<p>Keep final validation tasks separate from iteration tasks. Repeatedly consulting a holdout turns it into development evidence.</p>
+<p><strong>Local mismatch:</strong> your installed hill-climb skill explicitly continues after reaching its target. Do not reuse that stopping rule for acceptance work.</p>
+<p class="sources">Evidence: <a href="https://www.anthropic.com/engineering/building-effective-agents" target="_blank" rel="noopener">Evaluator-optimizer patterns</a>; <a href="https://papers.nips.cc/paper_files/paper/2015/hash/bad5f33780c42f2588878a9d07405083-Abstract.html" target="_blank" rel="noopener">Adaptive holdout reuse</a>. The two procedures are proposed adaptations.</p>
+</section>
+<section id="quality" role="tabpanel" aria-labelledby="tab-quality" hidden>
+<h3>Optimize behavior without rewarding tangled code</h3>
+<div class="note"><strong>Candidate rule:</strong> retain a gain only when behavior, architecture, security, and relevant regression checks also pass.</div>
+<p>A higher score must not compensate for a failed hard constraint.</p>
+<div class="cols">
+<div class="box"><h3>Admit useful tests</h3><p>Ask: “Which distinct failure does this test reject?”</p><ul><li>Keep fast tests for meaningful decisions and boundaries.</li><li>Parameterize repeated examples.</li><li>Use properties for invariants and sequences for state transitions.</li><li>Challenge assertions with a relevant seeded defect.</li></ul><p>Do not optimize test count, coverage, or mutation score alone.</p></div>
+<div class="box"><h3>Protect code structure</h3><ul><li>Check forbidden imports and dependency cycles.</li><li>Keep state-transition ownership clear.</li><li>Require a demonstrated need for abstractions.</li><li>Remove superseded paths and duplicate state.</li><li>Re-run unchanged behavior checks after refactoring.</li></ul><p>Complexity and line counts are review signals, not definitions of quality.</p></div>
+</div>
+<p><strong>Warning signs:</strong> private renames break many tests; fixtures copy the implementation; snapshots update automatically; the suite grows but the live complaint remains.</p>
+<p>Keep overlapping tests when they cover different risks. Do not remove guards without approval.</p>
+<p class="sources">Evidence: <a href="https://research.google/pubs/an-industrial-application-of-mutation-testing-lessons-challenges-and-research-directions/" target="_blank" rel="noopener">Mutation-testing limits</a>; <a href="https://hypothesis.readthedocs.io/en/latest/stateful.html" target="_blank" rel="noopener">Stateful testing</a>; <a href="https://www.archunit.org/use-cases" target="_blank" rel="noopener">Executable architecture checks</a>. The retention rule is engineering synthesis, not a proven guarantee.</p>
+</section>
+<p class="footer">The sources establish methods, not their measured benefit in your workflow. No product code, skills, or guards change in this research round.</p>
+<script>
+const tabs=[...document.querySelectorAll('[role="tab"]')];
+function select(i){tabs.forEach((t,j)=>{t.setAttribute('aria-selected',String(i===j));t.tabIndex=i===j?0:-1;document.getElementById(t.getAttribute('aria-controls')).hidden=i!==j})}
+tabs.forEach((t,i)=>{t.addEventListener('click',()=>select(i));t.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();let j=(i+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;select(j);tabs[j].focus()}})});
+let pass=true;
+tabs.forEach((t,i)=>{t.click();pass=pass&&document.querySelectorAll('[role="tabpanel"]:not([hidden])').length===1&&!document.getElementById(t.getAttribute('aria-controls')).hidden});
+select(0);
+requestAnimationFrame(()=>console.log(JSON.stringify({tabCount:tabs.length,panels:document.querySelectorAll('[role="tabpanel"]').length,tabSwitchesPass:pass,horizontalOverflow:document.documentElement.scrollWidth>innerWidth,links:[...document.querySelectorAll('a')].every(a=>a.protocol==='https:')})));
+</script></body></html>
