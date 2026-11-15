@@ -1,8 +1,11 @@
 """Containment and size-bound tests for the remediation state store."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import cast
 
+import attrs
 import pytest
 from easy_cheese.shared.fanout.remediation_store import (
     MAX_STATE_BYTES,
@@ -17,6 +20,7 @@ from easy_cheese_schemas import (
     RemediationCursor,
     RemediationScopeKey,
     RemediationScopeKind,
+    ReviewDebt,
     SourcePlanRef,
 )
 
@@ -64,6 +68,22 @@ def test_load_refuses_oversize_file(tmp_path: Path) -> None:
     _ = path.write_bytes(b" " * (MAX_STATE_BYTES + 1))
     with pytest.raises(StateStoreError, match="exceeds"):
         _ = load_state(tmp_path, path)
+
+
+def test_load_refuses_state_with_removed_critical_debt_key(tmp_path: Path) -> None:
+    scope = _scope()
+    path = scope_state_path(tmp_path, scope)
+    debt = ReviewDebt.compute(blocker=1, high=0, medium=0, contained_low=0)
+    state = attrs.evolve(initial_state(scope, state_id="s1"), best_debt=debt)
+    _ = publish_state(tmp_path, path, state)
+    assert load_state(tmp_path, path).best_debt == debt
+
+    raw = cast("dict[str, dict[str, object]]", json.loads(path.read_bytes()))
+    raw["best_debt"]["critical"] = raw["best_debt"].pop("blocker")
+    _ = path.write_text(json.dumps(raw))
+    with pytest.raises(StateStoreError, match="cannot load remediation state") as excinfo:
+        _ = load_state(tmp_path, path)
+    assert "critical" in str(excinfo.value.__cause__)
 
 
 def test_run_lock_rejects_second_holder_and_keeps_inode(tmp_path: Path) -> None:

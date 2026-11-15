@@ -1,8 +1,18 @@
 from __future__ import annotations
 
 
+import json
+from typing import cast
+
 import attrs
 import pytest
+
+from easy_cheese_schemas import (
+    ContractValidationError,
+    canonical_bytes,
+    supported_version_for,
+    validate_contract,
+)
 
 from easy_cheese_schemas.manifest import PlateLayout, plate_layout_for
 
@@ -710,6 +720,33 @@ def test_blocked_review_rejects_findings_at_both_contract_boundaries() -> None:
             coverage=[],
             reason="The review could not complete",
         )
+
+
+def test_review_result_with_removed_critical_severity_fails_closed() -> None:
+    version = supported_version_for(ReviewResult)
+    assert version is not None
+    result = ReviewResult(
+        contract_version=version,
+        review_id="review-1",
+        disposition=ReviewDisposition.FINDINGS,
+        findings=[
+            ReviewFinding(
+                finding_id="finding-1",
+                dimension=ReviewDimension.CORRECTNESS,
+                severity=ReviewSeverity.BLOCKER,
+                summary="The failure path loses data",
+                evidence=[evidence()],
+                fix_cost_now=FixCostNow.CONTAINED,
+            )
+        ],
+        coverage=[ReviewCoverage("correctness", CoverageDisposition.COVERED)],
+    )
+    raw = cast("dict[str, list[dict[str, object]]]", json.loads(canonical_bytes(result)))
+    assert validate_contract(raw, ReviewResult, version).value == result
+
+    raw["findings"][0]["severity"] = "critical"
+    with pytest.raises(ContractValidationError, match=r"findings\[0\]\.severity must be one of 'blocker'"):
+        _ = validate_contract(raw, ReviewResult, version)
 
 
 def test_review_request_and_result_accept_typed_evidence() -> None:

@@ -8,7 +8,7 @@ atomic state publication; it never re-derives the decisions made here.
 
 Design decisions locked by `.context/remediation-decisions.md`:
 
-- D1: the selection floor is critical/high/medium, plus low findings whose
+- D1: the selection floor is blocker/high/medium, plus low findings whose
   `fix_cost_now` is `contained`. Non-contained low findings never enter
   `locked_selection`; they are recorded as deferred evidence instead.
 - D2: `finding_key` digests normalized dimension, canonical source path (or
@@ -16,7 +16,7 @@ Design decisions locked by `.context/remediation-decisions.md`:
   casefolded, whitespace-collapsed finding summary. Severity and line
   offsets never enter the key.
 - D3: `fix_cost_now` is consulted only for low-severity findings; it is
-  inert for critical/high/medium.
+  inert for blocker/high/medium.
 
 AC-17 (agent-authored round/score/clean fields are ignored) holds by
 construction: every value this module reads comes from `ReviewResult`/
@@ -93,12 +93,12 @@ def finding_key(finding: ReviewFinding) -> str:
 
 
 def compute_debt(findings: tuple[ReviewFinding, ...]) -> ReviewDebt:
-    """Score `findings` at 16/8/4/1 weights (critical/high/medium/contained-low).
+    """Score `findings` at 16/8/4/1 weights (blocker/high/medium/contained-low).
 
     Always built via `ReviewDebt.compute` so the score can never drift from
     the counts that produced it.
     """
-    critical = sum(1 for f in findings if f.severity is ReviewSeverity.CRITICAL)
+    blocker = sum(1 for f in findings if f.severity is ReviewSeverity.BLOCKER)
     high = sum(1 for f in findings if f.severity is ReviewSeverity.HIGH)
     medium = sum(1 for f in findings if f.severity is ReviewSeverity.MEDIUM)
     contained_low = sum(
@@ -107,7 +107,7 @@ def compute_debt(findings: tuple[ReviewFinding, ...]) -> ReviewDebt:
         if f.severity is ReviewSeverity.LOW and f.fix_cost_now is FixCostNow.CONTAINED
     )
     return ReviewDebt.compute(
-        critical=critical, high=high, medium=medium, contained_low=contained_low
+        blocker=blocker, high=high, medium=medium, contained_low=contained_low
     )
 
 
@@ -116,7 +116,7 @@ def locked_selection_and_deferred(
 ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
     """Split `findings` into D1's selection floor, deferred keys, and collisions.
 
-    Selected: every critical/high/medium finding, plus low findings marked
+    Selected: every blocker/high/medium finding, plus low findings marked
     `contained`. Deferred: every other low finding -- excluded from automatic
     remediation debt but recorded as evidence. Collisions: the sorted keys
     that more than one finding shares; they make reconciliation ambiguous.

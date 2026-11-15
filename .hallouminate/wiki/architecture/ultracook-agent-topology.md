@@ -51,7 +51,8 @@ A prepared intent without that observation blocks as outcome-unknown.
 It never claims that selected findings were applied.
 Post-merge Press still runs after replay.[^7]
 
-Automatic selection includes critical, high, medium, and contained-low findings.
+Automatic selection includes blocker, high, medium, and contained-low findings.
+`ReviewDebt` counts them in the `blocker`, `high`, `medium`, and `contained_low` fields; `easy-cheese-schemas` 4.0.0 renamed the `critical` field to `blocker`.
 Other low findings remain recorded but excluded from automatic debt.
 `FixCostNow.MODERATE` remains a valid cost class; it does not widen low selection.[^8]
 
@@ -78,4 +79,4 @@ Related decision: [progressive agent resolution](../adr/agent-resolution.md).
 [^8]: src/easy_cheese/shared/fanout/remediation.py:95-144; src/easy_cheese_schemas/contracts.py:FixCostNow.
 [^9]: src/easy_cheese/skills/cook/preparation/fan_execute.py:_execute_fan_locked; tests/python/test_cook_execution.py:test_press_resume_requires_manifest_refs.
 
-_Source: PR #316 ownership and PRs #701–#708 remediation cure · Updated: 2026-09-20 · Supersedes: per-curd Press and legacy manifest authority in the 2026-07-24 description_
+_Source: PR #316 ownership and PRs #701–#708 remediation cure · Updated: 2026-11-15 (severity word `blocker`, ingest hash 4ff8c4581c96fd93) · Supersedes: the `critical` severity word; per-curd Press and legacy manifest authority in the 2026-07-24 description_
