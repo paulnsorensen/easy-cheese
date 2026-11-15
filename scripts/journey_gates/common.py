@@ -783,8 +783,9 @@ def runs_tests(argv: list[str]) -> bool:
 def _inplace_targets(argv: list[str]) -> list[str]:
     """Files a `sed -i` / `perl -i` command edits in place."""
     args = argv[1:]
+    perl = _basename(argv[0]).startswith("perl")
     # sed -E is a plain flag; perl -E takes the program like -e.
-    script_opts = "efE" if _basename(argv[0]).startswith("perl") else "ef"
+    script_opts = "efE" if perl else "ef"
     inplace = scripted = False
     files: list[str] = []
     i = 0
@@ -801,8 +802,13 @@ def _inplace_targets(argv: list[str]) -> list[str]:
                 i += 1 if "=" in word else 2
                 continue
         elif word.startswith("-") and len(word) > 1:
-            inplace = inplace or bool(INPLACE.match(word[1:]))
-            if word[-1] in script_opts:
+            flags = word[1:]
+            if perl:
+                # perl -M, -m, and -I take the rest of the word as their
+                # argument, so `-Mstrict` or `-Ilib` is no -i flag.
+                flags = re.split("[MmI]", flags, maxsplit=1)[0]
+            inplace = inplace or bool(INPLACE.match(flags))
+            if flags and flags[-1] in script_opts:
                 scripted = True
                 i += 2
                 continue

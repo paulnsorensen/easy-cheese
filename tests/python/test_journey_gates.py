@@ -2114,6 +2114,7 @@ def test_write_then_logged_run_in_one_step_counts_as_verified(
         "perl -i -E 's/a/b/' tests/test_pricing.py",
         "sed --in-place 's/a/b/' tests/test_pricing.py",
         "perl -pi -e 's/a/b/' tests/test_pricing.py",
+        "perl -Mstrict -pi -e 's/a/b/' tests/test_pricing.py",
         "cp /tmp/new.py tests/test_pricing.py",
         "mv /tmp/new.py tests/test_pricing.py",
         "cp -t tests /tmp/test_pricing.py",
@@ -2135,6 +2136,8 @@ def test_in_place_edits_and_copies_are_writes(
         "sed -n 's/a/b/p' tests/test_pricing.py",
         "cp tests/test_pricing.py /tmp/backup.txt",
         "mv /tmp/a.txt /tmp/b.txt",
+        "perl -Mstrict -ne 'print if /a/' tests/test_pricing.py",
+        "perl -Ilib -ne 'print if /a/' tests/test_pricing.py",
     ],
 )
 def test_reads_and_scratch_edits_are_not_writes(
