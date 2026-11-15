@@ -8,7 +8,7 @@ import shutil
 import stat
 import subprocess
 from pathlib import Path
-from typing import Annotated, Callable, Literal, TypedDict
+from typing import IO, Annotated, Callable, Literal, TypedDict
 
 import fromargs
 
@@ -78,14 +78,37 @@ def _unmerged_paths(root: Path) -> list[str]:
     return sorted(path for path in result.stdout.split("\0") if path)
 
 
-_MAX_SCAN_BYTES = 8 * 1024 * 1024
-_MARKER = re.compile(rb"^(?:<{7,}|>{7,}|\|{7,})(?: |$)")
+_BINARY_PROBE_BYTES = 8000
+_CHUNK_BYTES = 64 * 1024
+# A marker run at a line start, then a space or the line end. The scan puts a
+# synthetic "\n" before the first byte, so every line start follows \r or \n.
+_LINE_MARKER = re.compile(rb"[\r\n](?:<{7,}|>{7,}|\|{7,})(?:[ \r\n]|\Z)")
+_MARKER_PREFIX = re.compile(rb"[\r\n](?:<*|>*|\|*)")
 
 
-def _contains_markers(content: bytes) -> bool:
-    if b"\0" in content[:8000]:
+def _stream_has_markers(stream: IO[bytes]) -> bool:
+    """Report whether a line of a text stream starts with a conflict marker.
+
+    The scan reads binary chunks and checks only line starts, so line length does
+    not matter. A last line that can still become a marker carries into the next
+    chunk, clipped to its terminator and seven marker bytes. Memory stays bounded,
+    so there is no size cap: a cap must block clean large files or skip real markers.
+    """
+    chunk = stream.read(_BINARY_PROBE_BYTES)
+    if b"\0" in chunk:
         return False
-    return any(_MARKER.match(line) for line in content.splitlines())
+    pending = b"\n"
+    while chunk:
+        buffer = pending + chunk
+        last = max(buffer.rfind(b"\n"), buffer.rfind(b"\r"))
+        if last >= 0 and _MARKER_PREFIX.fullmatch(buffer, last):
+            pending, end = buffer[last : last + 8], last
+        else:
+            pending, end = b"", len(buffer)
+        if _LINE_MARKER.search(buffer, 0, end):
+            return True
+        chunk = stream.read(_CHUNK_BYTES)
+    return _LINE_MARKER.search(pending) is not None
 
 
 def _has_worktree_markers(root: Path, path: str) -> bool:
@@ -103,17 +126,7 @@ def _has_worktree_markers(root: Path, path: str) -> bool:
         with os.fdopen(descriptor, "rb") as stream:
             if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
                 return True
-            if b"\0" in stream.read(8000):
-                return False
-            _ = stream.seek(0)
-            scanned = 0
-            while line := stream.readline(65536):
-                scanned += len(line)
-                if scanned > _MAX_SCAN_BYTES or len(line) == 65536 and not line.endswith(b"\n"):
-                    return True
-                if _MARKER.match(line.rstrip(b"\r\n")):
-                    return True
-            return False
+            return _stream_has_markers(stream)
     except FileNotFoundError:
         return False
     except OSError:
@@ -121,13 +134,16 @@ def _has_worktree_markers(root: Path, path: str) -> bool:
 
 
 def _has_index_markers(root: Path, path: str) -> bool:
-    size = run_git(["cat-file", "-s", f":{path}"], cwd=root)
-    if size.returncode:
-        return False
-    if int(size.stdout.strip()) > _MAX_SCAN_BYTES:
-        return True
-    result = run_git(["show", f":{path}"], cwd=root)
-    return result.returncode == 0 and _contains_markers(result.stdout.encode())
+    """Stream the stage-0 blob; a path absent from stage 0 gives no output."""
+    with subprocess.Popen(
+        ["git", "-C", str(root), "cat-file", "blob", f":{path}"],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+    ) as process:
+        assert process.stdout is not None
+        try:
+            return _stream_has_markers(process.stdout)
+        finally:
+            process.kill()
 
 
 def abort_args(operation: Operation | None) -> list[str] | None:

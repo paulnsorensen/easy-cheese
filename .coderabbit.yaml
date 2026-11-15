@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# `dist` is the default branch, so CodeRabbit skips PRs that target `main`.
+# Inherit the organization UI settings and add `main` to the auto-review set.
+inheritance: true
+reviews:
+  auto_review:
+    base_branches:
+      - "^main$"

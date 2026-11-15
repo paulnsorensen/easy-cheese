@@ -153,7 +153,13 @@ A spec captures a design decision and its rationale before code is written.
   Add References when the document uses external citations.
 - **Length budget:** 50–200 lines. Past 300 lines means a decision is buried; split or cut.
 
-Specs that touch existing systems open Approach with one diagram (flowchart or sequence) of the end state before any subsections.
+Specs that touch existing systems open Approach with one end-state diagram before any subsections.
+Pick its view with the checklist and the smallest-set rules in [`diagrams.md`](diagrams.md).
+A spec that adds, removes, or rewires an application, a data store, a queue, or an external system uses a C4 Container view.
+When no checklist item applies, draw a `flowchart` or a `sequenceDiagram` of the end state.
+Add at most two more diagrams.
+Each extra diagram answers a reader question that the opening diagram does not answer.
+Extra diagrams count toward the length budget.
 
 ### Findings report
 

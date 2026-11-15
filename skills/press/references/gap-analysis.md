@@ -55,7 +55,14 @@ Press closes only adversarial gaps in the approved Cook contract:
 2. Attack approved boundaries, invalid inputs, state transitions, integrations, and error paths.
 3. Verify assertion sensitivity. The attack must fail for an incorrect value, state, or error.
 
-Do not create one hardening test for each changed behavior.
+Cook owns first coverage. Press adds a test only for a branch or false success that no existing test catches:
+
+1. Before you add a test, name the existing test closest to it. The closest test calls the same function and reaches the same branch.
+2. When that test asserts the same seam and branch, do not add the test.
+3. Record each new test, its closest existing test, and the branch that only the new test catches under `## Test shape`.
+4. Run `test-shape` before the handoff. Fix or justify each finding.
+
+[`../../cheese/references/test-shape.md`](../../cheese/references/test-shape.md) defines the rules that `test-shape` checks.
 
 Do not add tests for unchanged or out-of-contract code.
 

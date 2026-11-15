@@ -69,18 +69,18 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-runtime = [{ name = "fromargs", specifier = "==0.2.0" }]
+runtime = [{ name = "fromargs", specifier = "==0.2.1" }]
 
 [[package]]
 name = "fromargs"
-version = "0.2.0"
+version = "0.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cyclopts" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/12/dd/0c37cb959dbe9b8f9888a72ff2d0814d3a3aed02306909dfd3cc6d2e88cc/fromargs-0.2.0.tar.gz", hash = "sha256:9467253d82079143d221586035903be33e7a133bc9870bc391f5e04599ef7e77", size = 44681, upload-time = "2026-10-05T05:20:49.473Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b0/64/e8c058fc4e5eb070683505e7076e668ae53e014572970ca2637b8d1126eb/fromargs-0.2.1.tar.gz", hash = "sha256:a8ebd91333afe69da2464dc2c4a1119fd8799e8efc605bfc03e6a00dda6b7eba", size = 43933, upload-time = "2026-10-26T01:45:43.805Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f1/40/23776d8376234fddbe0b1c830aeaa16b1b72e8a2a2178892c01237755fc4/fromargs-0.2.0-py3-none-any.whl", hash = "sha256:62ef933618c8568f9b36a0a41b95d275ec98d4493a6aeebb93b97cdc4c517f54", size = 17551, upload-time = "2026-10-05T05:20:48.66Z" },
+    { url = "https://files.pythonhosted.org/packages/1b/42/1ae8f97d6adf58e249d3bdc531f63e06df485f6d235223aa8f782bfb5352/fromargs-0.2.1-py3-none-any.whl", hash = "sha256:6fd26bfa1d3a7068ef41c5431f4d0f695bbbe0de313478ddfd9bb51c108daceb", size = 18283, upload-time = "2026-10-26T01:45:42.896Z" },
 ]
 
 [[package]]

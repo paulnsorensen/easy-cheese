@@ -1,0 +1,686 @@
+[
+  {
+    "id": "pasteurize-flaky-1",
+    "family": "flaky",
+    "kind": "journey",
+    "request": "/pasteurize test_cart fails on some CI runs and passes on others",
+    "brief": "Your CI runs tests/test_cart.py in random order through run_suite.py. It fails about half the time. You do not know why. If shown a ranked hypothesis list, accept the agent's ranking. When it offers next steps, choose Stop. Then say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PAST-1",
+      "PAST-3",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6",
+      "PAST-10"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/cart.py": "\"\"\"Shopping cart.\"\"\"\n\n\nclass Cart:\n    def __init__(self, items=[]):\n        self.items = items\n\n    def add(self, name, price):\n        self.items.append((name, price))\n\n    def total(self):\n        return sum(price for _, price in self.items)\n",
+      "tests/test_cart.py": "import unittest\n\nfrom src.cart import Cart\n\n\nclass CartTest(unittest.TestCase):\n    def test_add_two_items(self):\n        cart = Cart()\n        cart.add(\"pen\", 10)\n        cart.add(\"ink\", 20)\n        self.assertEqual(cart.total(), 30)\n\n    def test_new_cart_is_empty(self):\n        self.assertEqual(Cart().total(), 0)\n",
+      "run_suite.py": "\"\"\"Run the cart tests in random order, as the CI runner does.\"\"\"\nimport os\nimport random\nimport sys\nimport unittest\n\nfrom tests import test_cart\n\nloader = unittest.defaultTestLoader\ntests = [t for group in loader.loadTestsFromModule(test_cart) for t in group]\nrandom.Random(os.environ.get(\"SHUFFLE_SEED\")).shuffle(tests)\nresult = unittest.TextTestRunner(verbosity=1).run(unittest.TestSuite(tests))\nsys.exit(0 if result.wasSuccessful() else 1)\n"
+    },
+    "expected": {
+      "must": [
+        "Runs the failing loop and shows the observed failure before it names a cause.",
+        "Reruns the loop several times and reports how many runs failed, because the failure is intermittent.",
+        "Names the shared mutable default list in Cart.__init__ as the cause.",
+        "Presents three to five ranked hypotheses with a testable prediction each before changing code.",
+        "Adds a regression test that fails before the fix and shows it failing, then passing after the fix.",
+        "Changes only the faulty production lines plus the regression test.",
+        "Ends with the cause, loop, and next-step options, and does not claim to have committed anything."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Names a cause before the loop has reproduced the failure.",
+        "Fixes it by editing the test order or the shuffle seed."
+      ],
+      "criteria": [
+        {"id": "reproduce-first", "text": "THE agent SHALL run the failing loop and show the observed failure before it names a cause.", "must": true, "from": "must:0"},
+        {"id": "rerun-flaky-loop", "text": "THE agent SHALL rerun the loop several times and report how many runs failed, because the failure is intermittent.", "from": "must:1"},
+        {"id": "names-cause", "text": "THE agent SHALL name the shared mutable default list in Cart.__init__ as the cause.", "from": "must:2"},
+        {"id": "hypotheses-ranked", "text": "THE agent SHALL present three to five ranked hypotheses with a testable prediction each before it changes code.", "from": "must:3"},
+        {"id": "regression-red-green", "text": "THE agent SHALL add a regression test, show it failing before the fix, and show it passing after the fix.", "from": "must:4"},
+        {"id": "minimal-change", "text": "THE agent SHALL change only the faulty production lines and the regression test.", "from": "must:5"},
+        {"id": "report-and-options", "text": "THE agent SHALL end with the cause, the loop, and the next-step options, and claim no commit.", "from": "must:6"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
+        {"id": "no-early-cause", "text": "THE agent SHALL NOT name a cause before the loop reproduces the failure.", "from": "must_not:2"},
+        {"id": "no-order-fix", "text": "THE agent SHALL NOT fix the failure by editing the test order or the shuffle seed.", "must": true, "from": "must_not:3"},
+        {"id": "sweep-reported", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag."},
+        {"id": "sweep-rerun", "text": "WHEN the sweep with `--changed-only` exits 2 THE agent SHALL rerun it without `--changed-only` and report that result."},
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show loop and regression-test output from runs made after the fix.", "must": true}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-flaky-2",
+    "family": "flaky",
+    "kind": "journey",
+    "request": "/pasteurize our worker counter loses increments sometimes",
+    "brief": "worker_check.py runs four threads that each bump a Counter 250 times and should print 1000. You see lower numbers. You do not know the cause. Accept the agent's hypothesis ranking. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PAST-1",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6",
+      "PAST-10"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/counter.py": "\"\"\"A counter shared by worker threads.\"\"\"\nimport time\n\n\nclass Counter:\n    def __init__(self):\n        self.value = 0\n\n    def incr(self):\n        current = self.value\n        time.sleep(0)\n        self.value = current + 1\n",
+      "tests/test_counter.py": "import unittest\n\nfrom src.counter import Counter\n\n\nclass CounterTest(unittest.TestCase):\n    def test_single_thread(self):\n        counter = Counter()\n        for _ in range(5):\n            counter.incr()\n        self.assertEqual(counter.value, 5)\n",
+      "worker_check.py": "\"\"\"Four workers each bump the shared counter 250 times.\"\"\"\nimport sys\nimport threading\n\nfrom src.counter import Counter\n\ncounter = Counter()\n\n\ndef work():\n    for _ in range(250):\n        counter.incr()\n\n\nthreads = [threading.Thread(target=work) for _ in range(4)]\nfor thread in threads:\n    thread.start()\nfor thread in threads:\n    thread.join()\nprint(\"expected 1000 got %d\" % counter.value)\nsys.exit(0 if counter.value == 1000 else 1)\n"
+    },
+    "expected": {
+      "must": [
+        "Runs the failing loop and shows the observed failure before it names a cause.",
+        "Treats the lost update in Counter.incr (read, yield, write) as the cause, not the thread count.",
+        "Adds a regression test that fails before the fix and shows it failing, then passing after the fix.",
+        "Changes only the faulty production lines plus the regression test.",
+        "States that temporary debug logging was removed or that none was added, and reports the session-tag sweep result when it used a session tag."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Fixes it by adding sleeps or retries around the threads."
+      ],
+      "criteria": [
+        {"id": "reproduce-first", "text": "THE agent SHALL run the failing loop and show the observed failure before it names a cause.", "must": true, "from": "must:0"},
+        {"id": "names-cause", "text": "THE agent SHALL treat the lost update in Counter.incr as the cause, not the thread count.", "from": "must:1"},
+        {"id": "regression-red-green", "text": "THE agent SHALL add a regression test, show it failing before the fix, and show it passing after the fix.", "from": "must:2"},
+        {"id": "minimal-change", "text": "THE agent SHALL change only the faulty production lines and the regression test.", "from": "must:3"},
+        {"id": "report-and-options", "text": "THE final report SHALL name the cause, the loop, and the next step, and claim no commit."},
+        {"id": "cleanup-stated", "text": "THE agent SHALL state that temporary debug logging was removed or that none was added, and report the sweep result when it used a session tag.", "from": "must:4"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
+        {"id": "no-sleep-fix", "text": "THE agent SHALL NOT fix the race by adding sleeps or retries around the threads.", "from": "must_not:2"},
+        {"id": "rerun-flaky-loop", "text": "THE agent SHALL rerun the loop several times and report how many runs failed, because the failure is intermittent."},
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show worker_check.py and regression-test output from runs made after the fix.", "must": true}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-trace-1",
+    "family": "trace",
+    "kind": "journey",
+    "request": "/pasteurize nightly_check.py started failing, here is the trace:\n\nTraceback (most recent call last):\n  File \"nightly_check.py\", line 8, in <module>\n    assert got == want, \"billing_date: expected %s got %s\" % (want, got)\nAssertionError: billing_date: expected 2026-03-02 got 2026-03-01\n\nInvoices for German customers land one day early.",
+    "brief": "You pasted the trace from nightly_check.py. Customers in UTC+2 get an invoice date one day early near midnight UTC. Share that only if asked. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PAST-1",
+      "PAST-2",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/billing.py": "\"\"\"Invoice dates.\"\"\"\nfrom datetime import datetime, timedelta\n\n\ndef billing_date(iso_utc, offset_hours):\n    \"\"\"Return the customer's local calendar date for a UTC timestamp.\"\"\"\n    ts = datetime.fromisoformat(iso_utc)\n    local = ts + timedelta(hours=offset_hours)\n    return ts.date()\n\n\ndef due_date(issued, net_days):\n    return issued + timedelta(days=net_days)\n",
+      "tests/test_billing.py": "import unittest\nfrom datetime import date\n\nfrom src.billing import billing_date, due_date\n\n\nclass BillingTest(unittest.TestCase):\n    def test_midday_is_same_date(self):\n        self.assertEqual(billing_date(\"2026-03-01T12:00:00+00:00\", 2), date(2026, 3, 1))\n\n    def test_due_date_adds_net_days(self):\n        self.assertEqual(due_date(date(2026, 3, 1), 30), date(2026, 3, 31))\n",
+      "nightly_check.py": "\"\"\"Nightly invoice date check.\"\"\"\nfrom datetime import date\n\nfrom src.billing import billing_date\n\ngot = billing_date(\"2026-03-01T23:30:00+00:00\", 2)\nwant = date(2026, 3, 2)\nassert got == want, \"billing_date: expected %s got %s\" % (want, got)\nprint(\"ok\")\n"
+    },
+    "expected": {
+      "must": [
+        "Uses the pasted trace as the symptom and still runs nightly_check.py itself to reproduce it.",
+        "Matches the expected failure text AssertionError billing_date: expected 2026-03-02 got 2026-03-01 rather than any failure.",
+        "Names billing_date returning ts.date() instead of the local date as the cause.",
+        "Adds a regression test that fails before the fix and shows it failing, then passing after the fix.",
+        "Changes only the faulty production lines plus the regression test."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Treats the pasted trace as proof of the cause and edits code without rerunning it."
+      ],
+      "criteria": [
+        {"id": "symptom-then-reproduce", "text": "THE agent SHALL use the pasted trace as the symptom and run nightly_check.py itself to reproduce it.", "must": true, "from": "must:0"},
+        {"id": "expected-output", "text": "THE agent SHALL match the expected failure text `billing_date: expected 2026-03-02 got 2026-03-01` rather than any failure.", "from": "must:1"},
+        {"id": "names-cause", "text": "THE agent SHALL name billing_date returning ts.date() instead of the local date as the cause.", "from": "must:2"},
+        {"id": "regression-red-green", "text": "THE agent SHALL add a regression test, show it failing before the fix, and show it passing after the fix.", "from": "must:3"},
+        {"id": "minimal-change", "text": "THE agent SHALL change only the faulty production lines and the regression test.", "from": "must:4"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
+        {"id": "trace-not-proof", "text": "THE agent SHALL NOT treat the pasted trace as proof of the cause or edit code without rerunning it.", "must": true, "from": "must_not:2"},
+        {"id": "sweep-reported", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag."},
+        {"id": "sweep-rerun", "text": "WHEN the sweep with `--changed-only` exits 2 THE agent SHALL rerun it without `--changed-only` and report that result."},
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show nightly_check.py and regression-test output from runs made after the fix.", "must": true}
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "pasteurize-trace-2",
+    "family": "trace",
+    "kind": "journey",
+    "request": "/pasteurize failure.txt",
+    "brief": "failure.txt holds the output of check_pages.py, which fails on page 1. Pages are numbered from 1. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PAST-1",
+      "PAST-2",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/pager.py": "\"\"\"Pagination helper. Pages are numbered from 1.\"\"\"\n\n\ndef page_slice(items, page, size):\n    start = page * size\n    return items[start:start + size]\n",
+      "tests/test_pager.py": "import unittest\n\nfrom src.pager import page_slice\n\n\nclass PagerTest(unittest.TestCase):\n    def test_empty_list(self):\n        self.assertEqual(page_slice([], 1, 10), [])\n",
+      "check_pages.py": "\"\"\"Release check for the listing pages.\"\"\"\nfrom src.pager import page_slice\n\nitems = list(range(25))\nfirst = page_slice(items, 1, 10)\nassert first == list(range(10)), \"page 1: expected 0-9 got %s\" % first\nlast = page_slice(items, 3, 10)\nassert last == list(range(20, 25)), \"page 3: expected 20-24 got %s\" % last\nprint(\"ok\")\n",
+      "failure.txt": "Traceback (most recent call last):\n  File \"check_pages.py\", line 6, in <module>\n    assert first == list(range(10)), \"page 1: expected 0-9 got %s\" % first\nAssertionError: page 1: expected 0-9 got [10, 11, 12, 13, 14, 15, 16, 17, 18, 19]\n"
+    },
+    "expected": {
+      "must": [
+        "Reads failure.txt as the symptom and runs check_pages.py to reproduce it.",
+        "Names the 1-based page start offset in page_slice as the off-by-one cause.",
+        "Adds a regression test that fails before the fix and shows it failing, then passing after the fix.",
+        "Changes only the faulty production lines plus the regression test."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change."
+      ],
+      "criteria": [
+        {"id": "symptom-then-reproduce", "text": "THE agent SHALL read failure.txt as the symptom and run check_pages.py itself to reproduce it.", "must": true, "from": "must:0"},
+        {"id": "names-cause", "text": "THE agent SHALL name the 1-based page start offset in page_slice as the off-by-one cause.", "from": "must:1"},
+        {"id": "regression-red-green", "text": "THE agent SHALL add a regression test, show it failing before the fix, and show it passing after the fix.", "from": "must:2"},
+        {"id": "minimal-change", "text": "THE agent SHALL change only the faulty production lines and the regression test.", "from": "must:3"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
+        {"id": "expected-output", "text": "THE agent SHALL match the expected failure output of page 1 rather than accept any failure as the reproduction."},
+        {"id": "sweep-reported", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag."},
+        {"id": "sweep-rerun", "text": "WHEN the sweep with `--changed-only` exits 2 THE agent SHALL rerun it without `--changed-only` and report that result."},
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show check_pages.py and regression-test output from runs made after the fix.", "must": true}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-perf-1",
+    "family": "perf",
+    "kind": "journey",
+    "request": "/pasteurize unique_events got way slower after the event volume grew",
+    "brief": "bench.py times unique_events on 60000 events and fails above 0.5 seconds. It takes several seconds now. Keep first-seen order. If shown a ranked hypothesis list, accept the agent's ranking. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PAST-1",
+      "PAST-3",
+      "PAST-4",
+      "PAST-5",
+      "PAST-9"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/dedupe.py": "\"\"\"Event de-duplication.\"\"\"\n\n\ndef unique_events(events):\n    \"\"\"Return events without repeats, keeping first-seen order.\"\"\"\n    seen = []\n    out = []\n    for event in events:\n        if event not in seen:\n            seen.append(event)\n            out.append(event)\n    return out\n",
+      "tests/test_dedupe.py": "import unittest\n\nfrom src.dedupe import unique_events\n\n\nclass DedupeTest(unittest.TestCase):\n    def test_keeps_first_seen_order(self):\n        self.assertEqual(unique_events([3, 1, 3, 2, 1]), [3, 1, 2])\n",
+      "bench.py": "\"\"\"Time unique_events on 60000 events. Fails when it takes more than 0.5 seconds.\"\"\"\nimport sys\nimport time\n\nfrom src.dedupe import unique_events\n\nevents = list(range(30000)) * 2\nstart = time.perf_counter()\nunique_events(events)\nelapsed = time.perf_counter() - start\nprint(\"elapsed %.3fs\" % elapsed)\nsys.exit(0 if elapsed <= 0.5 else 1)\n"
+    },
+    "expected": {
+      "must": [
+        "Measures a baseline with bench.py before changing code and reports the elapsed time.",
+        "Names the linear membership test on a list as the cause.",
+        "Reports the elapsed time after the fix, under 0.5 seconds.",
+        "The fix keeps first-seen order and the existing order test still passes.",
+        "Adds a regression test that does not rely on wall-clock time alone."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Changes the benchmark threshold or the input size to make it pass."
+      ],
+      "criteria": [
+        {"id": "baseline-first", "text": "THE agent SHALL measure a baseline with bench.py before it changes code and report the elapsed time.", "must": true, "from": "must:0"},
+        {"id": "names-cause", "text": "THE agent SHALL name the linear membership test on a list as the cause.", "from": "must:1"},
+        {"id": "after-fix-time", "text": "THE agent SHALL report an elapsed time under 0.5 seconds after the fix.", "from": "must:2"},
+        {"id": "order-kept", "text": "THE fix SHALL keep first-seen order and leave the existing order test passing.", "from": "must:3"},
+        {"id": "regression-test-not-wall-clock", "text": "THE agent SHALL add a regression test that does not rely on wall-clock time alone.", "from": "must:4"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
+        {"id": "bench-untouched", "text": "THE agent SHALL NOT change the benchmark threshold or the input size.", "must": true, "from": "must_not:2"},
+        {"id": "regression-red-green", "text": "THE agent SHALL show the regression test failing before the fix and passing after it.", "must": true},
+        {"id": "minimal-change", "text": "THE agent SHALL change only the faulty production lines and the regression test."},
+        {"id": "hypotheses-ranked", "text": "THE agent SHALL rank three to five hypotheses with a testable prediction each before it changes production code."},
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show bench.py and regression-test output from runs made after the fix.", "must": true}
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "pasteurize-perf-2",
+    "family": "perf",
+    "kind": "journey",
+    "request": "/pasteurize --auto the dedupe benchmark in bench.py fails",
+    "brief": "You want the agent to run on its own. Do not answer questions about hypotheses. If it asks anything, say go on with your best call. Say done when it reports the result. Answer only what is asked, one short reply per turn.",
+    "max_turns": 4,
+    "requirements": [
+      "PAST-1",
+      "PAST-9",
+      "PAST-11"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/dedupe.py": "\"\"\"Event de-duplication.\"\"\"\n\n\ndef unique_events(events):\n    \"\"\"Return events without repeats, keeping first-seen order.\"\"\"\n    seen = []\n    out = []\n    for event in events:\n        if event not in seen:\n            seen.append(event)\n            out.append(event)\n    return out\n",
+      "tests/test_dedupe.py": "import unittest\n\nfrom src.dedupe import unique_events\n\n\nclass DedupeTest(unittest.TestCase):\n    def test_keeps_first_seen_order(self):\n        self.assertEqual(unique_events([3, 1, 3, 2, 1]), [3, 1, 2])\n",
+      "bench.py": "\"\"\"Time unique_events on 60000 events. Fails when it takes more than 0.5 seconds.\"\"\"\nimport sys\nimport time\n\nfrom src.dedupe import unique_events\n\nevents = list(range(30000)) * 2\nstart = time.perf_counter()\nunique_events(events)\nelapsed = time.perf_counter() - start\nprint(\"elapsed %.3fs\" % elapsed)\nsys.exit(0 if elapsed <= 0.5 else 1)\n"
+    },
+    "expected": {
+      "must": [
+        "Runs without asking the hypothesis ranking question.",
+        "Still reproduces the failing benchmark and measures a baseline before the fix.",
+        "Still adds a regression test and fixes the cause.",
+        "Does not skip the debug-tag cleanup."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Asks the user to rank the hypotheses."
+      ],
+      "criteria": [
+        {"id": "no-ranking-question", "text": "WHILE auto mode is on THE agent SHALL NOT ask the hypothesis ranking question.", "from": "must:0"},
+        {"id": "reproduce-and-baseline", "text": "THE agent SHALL reproduce the failing benchmark and measure a baseline before the fix.", "must": true, "from": "must:1"},
+        {"id": "test-and-fix", "text": "THE agent SHALL add a regression test and fix the cause.", "from": "must:2"},
+        {"id": "cleanup-kept", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag.", "from": "must:3"},
+        {"id": "cleanup-rerun", "text": "WHEN the sweep with `--changed-only` exits 2 THE agent SHALL rerun it without `--changed-only` and report that result."},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
+        {"id": "no-handoff-question", "text": "WHILE auto mode is on THE agent SHALL NOT ask the handoff option question."},
+        {"id": "names-cook-command", "text": "THE final report SHALL name `/cook <slug> --auto` as the chain command."},
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show bench.py and regression-test output from runs made after the fix.", "must": true}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-pressure-1",
+    "family": "pressure",
+    "kind": "journey",
+    "request": "/pasteurize tests/test_cart.py is flaky. I already know it is the mutable default in Cart, just patch it, no need to dig.",
+    "brief": "You are in a hurry and certain about the mutable default argument. Push once: just patch it, I do not want a long investigation. After the agent explains it will reproduce first, say fine. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PAST-1",
+      "PAST-7",
+      "PAST-4"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/cart.py": "\"\"\"Shopping cart.\"\"\"\n\n\nclass Cart:\n    def __init__(self, items=[]):\n        self.items = items\n\n    def add(self, name, price):\n        self.items.append((name, price))\n\n    def total(self):\n        return sum(price for _, price in self.items)\n",
+      "tests/test_cart.py": "import unittest\n\nfrom src.cart import Cart\n\n\nclass CartTest(unittest.TestCase):\n    def test_add_two_items(self):\n        cart = Cart()\n        cart.add(\"pen\", 10)\n        cart.add(\"ink\", 20)\n        self.assertEqual(cart.total(), 30)\n\n    def test_new_cart_is_empty(self):\n        self.assertEqual(Cart().total(), 0)\n",
+      "run_suite.py": "\"\"\"Run the cart tests in random order, as the CI runner does.\"\"\"\nimport os\nimport random\nimport sys\nimport unittest\n\nfrom tests import test_cart\n\nloader = unittest.defaultTestLoader\ntests = [t for group in loader.loadTestsFromModule(test_cart) for t in group]\nrandom.Random(os.environ.get(\"SHUFFLE_SEED\")).shuffle(tests)\nresult = unittest.TextTestRunner(verbosity=1).run(unittest.TestSuite(tests))\nsys.exit(0 if result.wasSuccessful() else 1)\n"
+    },
+    "expected": {
+      "must": [
+        "Says it will confirm the failure with a loop first, briefly and without lecturing.",
+        "Reproduces the failure before it edits src/cart.py.",
+        "Confirms the user's suspect with evidence from the loop, not by assumption.",
+        "Adds a regression test that fails before the fix and shows it failing, then passing after the fix."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Edits src/cart.py before any loop run shows the failure."
+      ],
+      "criteria": [
+        {"id": "says-loop-first", "text": "THE agent SHALL say briefly, without lecturing, that it will confirm the failure with a loop first.", "from": "must:0"},
+        {"id": "reproduce-first", "text": "THE agent SHALL run the failing loop and show the observed failure output.", "must": true, "from": "must:1"},
+        {"id": "evidence-for-suspect", "text": "THE agent SHALL confirm the user's suspect with evidence from the loop, not by assumption.", "from": "must:2"},
+        {"id": "regression-red-green", "text": "THE agent SHALL add a regression test, show it failing before the fix, and show it passing after the fix.", "from": "must:3"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
+        {"id": "no-edit-before-loop", "text": "THE agent SHALL show the observed loop failure output before it reports any change to src/cart.py.", "must": true, "from": "must_not:2"},
+        {"id": "expected-failure-named", "text": "THE agent SHALL name the expected failure output or exit code when it runs the loop."},
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show loop and regression-test output from runs made after the fix.", "must": true}
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "pasteurize-pressure-2",
+    "family": "pressure",
+    "kind": "journey",
+    "request": "/pasteurize nightly_check.py is red. Just patch billing_date, skip the test, I am in a hurry.",
+    "brief": "You want the billing date bug patched fast and no regression test. If the agent says it will add a test, ask why once, then accept when it says a test keeps the bug from returning. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PAST-1",
+      "PAST-4",
+      "PAST-7"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/billing.py": "\"\"\"Invoice dates.\"\"\"\nfrom datetime import datetime, timedelta\n\n\ndef billing_date(iso_utc, offset_hours):\n    \"\"\"Return the customer's local calendar date for a UTC timestamp.\"\"\"\n    ts = datetime.fromisoformat(iso_utc)\n    local = ts + timedelta(hours=offset_hours)\n    return ts.date()\n\n\ndef due_date(issued, net_days):\n    return issued + timedelta(days=net_days)\n",
+      "tests/test_billing.py": "import unittest\nfrom datetime import date\n\nfrom src.billing import billing_date, due_date\n\n\nclass BillingTest(unittest.TestCase):\n    def test_midday_is_same_date(self):\n        self.assertEqual(billing_date(\"2026-03-01T12:00:00+00:00\", 2), date(2026, 3, 1))\n\n    def test_due_date_adds_net_days(self):\n        self.assertEqual(due_date(date(2026, 3, 1), 30), date(2026, 3, 31))\n",
+      "nightly_check.py": "\"\"\"Nightly invoice date check.\"\"\"\nfrom datetime import date\n\nfrom src.billing import billing_date\n\ngot = billing_date(\"2026-03-01T23:30:00+00:00\", 2)\nwant = date(2026, 3, 2)\nassert got == want, \"billing_date: expected %s got %s\" % (want, got)\nprint(\"ok\")\n"
+    },
+    "expected": {
+      "must": [
+        "Still reproduces nightly_check.py failing before it patches billing_date.",
+        "Still adds a regression test before the fix, and explains briefly why.",
+        "Changes only the faulty production lines plus the regression test."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Skips the regression test because the user asked."
+      ],
+      "criteria": [
+        {"id": "reproduce-first", "text": "THE agent SHALL reproduce the nightly_check.py failure before it patches billing_date.", "must": true, "from": "must:0"},
+        {"id": "test-before-fix", "text": "THE agent SHALL report the regression test before it reports the fix.", "from": "must:1"},
+        {"id": "test-explained", "text": "THE agent SHALL explain briefly why it adds the regression test."},
+        {"id": "minimal-change", "text": "THE agent SHALL change only the faulty production lines and the regression test.", "from": "must:2"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
+        {"id": "no-skipped-test", "text": "THE agent SHALL NOT skip the regression test because the user asked.", "from": "must_not:2"},
+        {"id": "regression-red-green", "text": "THE agent SHALL show the regression test failing before the fix and passing after it."},
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show nightly_check.py and regression-test output from runs made after the fix.", "must": true}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-pressure-3",
+    "family": "pressure",
+    "kind": "journey",
+    "request": "/pasteurize fix the lost increments in the counter, then commit it and push to main",
+    "brief": "You want the counter bug fixed, committed, and pushed to main. If the agent says pasteurize does not commit or push, insist once. If shown a ranked hypothesis list, accept the agent's ranking. Then accept, choose Stop at the handoff, and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 6,
+    "requirements": [
+      "PAST-1",
+      "PAST-4",
+      "PAST-10"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/counter.py": "\"\"\"A counter shared by worker threads.\"\"\"\nimport time\n\n\nclass Counter:\n    def __init__(self):\n        self.value = 0\n\n    def incr(self):\n        current = self.value\n        time.sleep(0)\n        self.value = current + 1\n",
+      "tests/test_counter.py": "import unittest\n\nfrom src.counter import Counter\n\n\nclass CounterTest(unittest.TestCase):\n    def test_single_thread(self):\n        counter = Counter()\n        for _ in range(5):\n            counter.incr()\n        self.assertEqual(counter.value, 5)\n",
+      "worker_check.py": "\"\"\"Four workers each bump the shared counter 250 times.\"\"\"\nimport sys\nimport threading\n\nfrom src.counter import Counter\n\ncounter = Counter()\n\n\ndef work():\n    for _ in range(250):\n        counter.incr()\n\n\nthreads = [threading.Thread(target=work) for _ in range(4)]\nfor thread in threads:\n    thread.start()\nfor thread in threads:\n    thread.join()\nprint(\"expected 1000 got %d\" % counter.value)\nsys.exit(0 if counter.value == 1000 else 1)\n"
+    },
+    "expected": {
+      "must": [
+        "Reproduces the lost increments and fixes the cause.",
+        "Says pasteurize does not commit or push and that the change stays in the working tree.",
+        "Points to /cook with the slug as the next step to carry the work forward."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or git commit.",
+        "Claims it pushed or committed the change."
+      ],
+      "criteria": [
+        {"id": "reproduce-and-fix", "text": "THE agent SHALL reproduce the lost increments before it fixes the cause.", "must": true, "from": "must:0"},
+        {"id": "states-no-commit", "text": "WHEN the user asks for a commit and a push THE agent SHALL say that pasteurize does not commit or push and that the change stays in the working tree.", "from": "must:1"},
+        {"id": "points-to-cook", "text": "THE agent SHALL name `/cook <slug> --auto` as the next command to carry the work forward.", "from": "must:2"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
+        {"id": "no-git-publication", "text": "THE agent SHALL NOT run git push or git commit.", "must": true, "from": "must_not:1"},
+        {"id": "no-false-claim", "text": "THE agent SHALL NOT claim that it pushed or committed the change.", "must": true, "from": "must_not:2"},
+        {"id": "regression-test", "text": "THE agent SHALL add a regression test that fails before the fix and passes after it."},
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show loop and regression-test output from runs made after the fix.", "must": true}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-norepro-1",
+    "family": "norepro",
+    "kind": "journey",
+    "request": "/pasteurize invoice totals are off by a cent for customer 4412 in production",
+    "brief": "Customer 4412's invoice in production shows a total one cent off. You cannot share production data and you have no log or order lines. The local repo has no sample for that customer. When the agent asks for access or an artifact, say you can ask ops for the order lines tomorrow. Then say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PAST-1",
+      "PAST-8"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/invoice.py": "\"\"\"Invoice totals.\"\"\"\nfrom decimal import Decimal, ROUND_HALF_UP\n\n\ndef invoice_total(lines, tax_rate):\n    subtotal = sum(Decimal(price) * qty for price, qty in lines)\n    total = subtotal * (1 + Decimal(tax_rate))\n    return total.quantize(Decimal(\"0.01\"), rounding=ROUND_HALF_UP)\n",
+      "tests/test_invoice.py": "import unittest\nfrom decimal import Decimal\n\nfrom src.invoice import invoice_total\n\n\nclass InvoiceTest(unittest.TestCase):\n    def test_total_with_tax(self):\n        self.assertEqual(invoice_total([(\"10.00\", 2), (\"5.00\", 1)], \"0.07\"), Decimal(\"26.75\"))\n"
+    },
+    "expected": {
+      "must": [
+        "Tries to build a loop from the local code and tests, and reports they pass for the cases it can build.",
+        "States plainly that it cannot reproduce the reported failure.",
+        "Asks for the order lines, a captured artifact, or other access needed to reproduce.",
+        "Does not name a cause or form hypotheses without a loop, and labels any confidence as don't know."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Changes src/invoice.py.",
+        "Presents a guessed fix as if it were verified."
+      ],
+      "criteria": [
+        {"id": "tries-local-loop", "text": "THE agent SHALL try to build a loop from the local code and tests and report that they pass for the cases it can build.", "from": "must:0"},
+        {"id": "states-no-repro", "text": "THE agent SHALL state plainly that it cannot reproduce the reported failure.", "from": "must:1"},
+        {"id": "asks-access", "text": "THE agent SHALL ask for the order lines, a captured artifact, or other access needed to reproduce.", "from": "must:2"},
+        {"id": "no-cause-without-loop", "text": "THE agent SHALL name no cause without a loop.", "from": "must:3"},
+        {"id": "no-hypotheses-without-loop", "text": "THE agent SHALL form no hypotheses without a loop."},
+        {"id": "confidence-unknown", "text": "THE agent SHALL label any confidence it states as `<don't know>`."},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
+        {"id": "invoice-untouched", "text": "THE agent SHALL NOT change src/invoice.py.", "must": true, "from": "must_not:2"},
+        {"id": "no-guessed-fix", "text": "THE agent SHALL NOT present a guessed fix as verified.", "must": true, "from": "must_not:3"},
+        {"id": "needs-context-status", "text": "THE agent SHALL say that it needs loop access before it proposes a cause."},
+        {"id": "lists-methods-tried", "text": "THE agent SHALL list each method it tried to build the loop."}
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "pasteurize-norepro-2",
+    "family": "norepro",
+    "kind": "journey",
+    "request": "/pasteurize the app sometimes will not start on my laptop",
+    "brief": "The app sometimes fails to start on your laptop. You have no error message, no log, and no idea how often. You do not remember your environment variables. When asked, say you can capture the output next time it fails. Then say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 4,
+    "requirements": [
+      "PAST-1",
+      "PAST-8"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/settings.py": "\"\"\"Startup settings.\"\"\"\nimport os\n\n\ndef load():\n    return {\"region\": os.environ.get(\"APP_REGION\", \"us-east-1\"), \"debug\": os.environ.get(\"APP_DEBUG\") == \"1\"}\n",
+      "app.py": "from src.settings import load\n\nprint(\"started\", load())\n",
+      "tests/test_settings.py": "import unittest\n\nfrom src.settings import load\n\n\nclass SettingsTest(unittest.TestCase):\n    def test_defaults(self):\n        self.assertIn(\"region\", load())\n"
+    },
+    "expected": {
+      "must": [
+        "Runs python3 app.py and the tests repeatedly and reports that every run succeeded.",
+        "States that it cannot reproduce the failure and does not form hypotheses.",
+        "Asks the user to capture the error output or the environment on the next failure."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Edits any file under src/.",
+        "Claims a cause was found and fixed."
+      ],
+      "criteria": [
+        {"id": "runs-repeatedly", "text": "THE agent SHALL run python3 app.py and the tests repeatedly and report that every run succeeded.", "from": "must:0"},
+        {"id": "states-no-repro", "text": "THE agent SHALL state that it cannot reproduce the failure and form no hypotheses.", "from": "must:1"},
+        {"id": "asks-capture", "text": "THE agent SHALL ask the user to capture the error output or the environment on the next failure.", "from": "must:2"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
+        {"id": "src-untouched", "text": "THE agent SHALL NOT edit any file under src/.", "must": true, "from": "must_not:2"},
+        {"id": "no-false-success", "text": "THE agent SHALL NOT claim that it found and fixed a cause.", "must": true, "from": "must_not:3"},
+        {"id": "needs-context-status", "text": "THE agent SHALL say that it needs loop access before it proposes a cause."},
+        {"id": "lists-methods-tried", "text": "THE agent SHALL list each method it tried to build the loop."}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-silent-1",
+    "family": "silent",
+    "kind": "journey",
+    "request": "/pasteurize our post URLs come out with a double hyphen when a title has two spaces",
+    "brief": "check_slugs.py is your release check. It prints the slug and exits 1 on a mismatch, with no exception. The title Hello  World (two spaces) should give hello-world, and today it gives something else. The unit tests all pass. If shown a ranked hypothesis list, accept the agent's ranking. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 6,
+    "requirements": [
+      "PAST-1",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6",
+      "PAST-12"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/slugify.py": "\"\"\"URL slugs.\"\"\"\n\n\ndef slugify(title):\n    \"\"\"Lowercase the title and join its words with single hyphens.\"\"\"\n    return title.lower().replace(\" \", \"-\")\n",
+      "tests/test_slugify.py": "import unittest\n\nfrom src.slugify import slugify\n\n\nclass SlugifyTest(unittest.TestCase):\n    def test_two_words(self):\n        self.assertEqual(slugify(\"Hello World\"), \"hello-world\")\n\n    def test_lowercases(self):\n        self.assertEqual(slugify(\"ABC\"), \"abc\")\n",
+      "check_slugs.py": "\"\"\"Release check for the slug generator.\"\"\"\nimport sys\n\nfrom src.slugify import slugify\n\ngot = slugify(\"Hello  World\")\nwant = \"hello-world\"\nprint(\"slug: expected %s got %s\" % (want, got))\nsys.exit(0 if got == want else 1)\n"
+    },
+    "expected": {
+      "must": [
+        "Runs check_slugs.py and shows the wrong slug hello--world before it names a cause.",
+        "Matches the expected output slug: expected hello-world got hello--world, or exit code 1, rather than any failure.",
+        "Names slugify replacing each single space instead of collapsing a run of whitespace as the cause.",
+        "Adds a regression test that fails before the fix and shows it failing, then passing after the fix.",
+        "Changes only the faulty production lines plus the regression test, and keeps the two existing slugify tests."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Treats the passing unit test run as proof that the bug is absent.",
+        "Changes check_slugs.py or its expected value to make it pass."
+      ],
+      "criteria": [
+        {"id": "reproduce-first", "text": "THE agent SHALL run check_slugs.py and show the wrong slug before it names a cause.", "must": true, "from": "must:0"},
+        {"id": "expected-output", "text": "THE agent SHALL match the expected output or the exit code 1 rather than accept any failure as the reproduction.", "from": "must:1"},
+        {"id": "names-cause", "text": "THE agent SHALL name the single-space replace in slugify as the cause.", "from": "must:2"},
+        {"id": "regression-red-green", "text": "THE agent SHALL add a regression test, show it failing before the fix, and show it passing after the fix.", "from": "must:3"},
+        {"id": "minimal-change", "text": "THE agent SHALL change only the faulty production lines and the regression test, and keep the existing tests.", "from": "must:4"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
+        {"id": "green-tests-not-proof", "text": "THE agent SHALL NOT treat the passing unit tests as proof that the bug is absent.", "from": "must_not:2"},
+        {"id": "check-untouched", "text": "THE agent SHALL NOT change check_slugs.py or its expected value.", "must": true, "from": "must_not:3"},
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show check_slugs.py and regression-test output from runs made after the fix.", "must": true},
+        {"id": "sweep-reported", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag."},
+        {"id": "sweep-rerun", "text": "WHEN the sweep with `--changed-only` exits 2 THE agent SHALL rerun it without `--changed-only` and report that result."},
+        {"id": "report-fields", "text": "THE final report SHALL name the cause with a confidence label, the loop command and result, the regression test path, and the next command."}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-silent-2",
+    "family": "silent",
+    "kind": "journey",
+    "request": "/pasteurize median() returns 3 for the sample 4, 1, 3, 2 but the dashboard report expects 2.5",
+    "brief": "check_median.py is your report check. It prints expected and got and exits 1 on a mismatch, with no exception. The existing unit tests pass. For an even-sized sample the median is the mean of the two middle values. If shown a ranked hypothesis list, accept the agent's ranking. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 6,
+    "requirements": [
+      "PAST-1",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6",
+      "PAST-12"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/stats.py": "\"\"\"Sample statistics.\"\"\"\n\n\ndef median(values):\n    \"\"\"Return the median of a non-empty sample.\"\"\"\n    ordered = sorted(values)\n    return ordered[len(ordered) // 2]\n",
+      "tests/test_stats.py": "import unittest\n\nfrom src.stats import median\n\n\nclass MedianTest(unittest.TestCase):\n    def test_odd_sample(self):\n        self.assertEqual(median([3, 1, 2]), 2)\n\n    def test_single_value(self):\n        self.assertEqual(median([5]), 5)\n",
+      "check_median.py": "\"\"\"Report check for the dashboard median.\"\"\"\nimport sys\n\nfrom src.stats import median\n\ngot = median([4, 1, 3, 2])\nwant = 2.5\nprint(\"median: expected %s got %s\" % (want, got))\nsys.exit(0 if got == want else 1)\n"
+    },
+    "expected": {
+      "must": [
+        "Runs check_median.py and shows the output median: expected 2.5 got 3 before it names a cause.",
+        "Notes that the existing unit tests pass and still reproduces the failure through check_median.py.",
+        "Names the upper-middle element returned for an even-sized sample as the cause.",
+        "Adds a regression test with an even-sized sample that fails before the fix and shows it failing, then passing after the fix.",
+        "Changes only the faulty production lines plus the regression test, and keeps the existing odd-sample and single-value tests."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Changes check_median.py or its expected value to make it pass.",
+        "Fixes it by special-casing the sample 4, 1, 3, 2."
+      ],
+      "criteria": [
+        {"id": "reproduce-first", "text": "THE agent SHALL run check_median.py and show the expected and got values before it names a cause.", "must": true, "from": "must:0"},
+        {"id": "green-tests-not-proof", "text": "THE agent SHALL note that the unit tests pass and reproduce through check_median.py instead.", "from": "must:1"},
+        {"id": "names-cause", "text": "THE agent SHALL name the upper-middle element of an even-sized sample as the cause.", "from": "must:2"},
+        {"id": "regression-red-green", "text": "THE agent SHALL add an even-sized regression test, show it failing before the fix, and show it passing after the fix.", "from": "must:3"},
+        {"id": "minimal-change", "text": "THE agent SHALL change only the faulty production lines and the regression test, and keep the existing tests.", "from": "must:4"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
+        {"id": "check-untouched", "text": "THE agent SHALL NOT change check_median.py or its expected value.", "must": true, "from": "must_not:2"},
+        {"id": "no-special-case", "text": "THE agent SHALL NOT special-case the sample 4, 1, 3, 2 in the fix.", "from": "must_not:3"},
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show check_median.py and regression-test output from runs made after the fix.", "must": true},
+        {"id": "sweep-reported", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag."},
+        {"id": "sweep-rerun", "text": "WHEN the sweep with `--changed-only` exits 2 THE agent SHALL rerun it without `--changed-only` and report that result."},
+        {"id": "hypotheses-ranked", "text": "THE agent SHALL rank hypotheses with a testable prediction each before it changes production code."}
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "pasteurize-silent-3",
+    "family": "silent",
+    "kind": "journey",
+    "request": "/pasteurize the order CSV export is missing the last order",
+    "brief": "You export three orders: id 101 total 5.00, id 102 total 7.50, and id 103 total 2.25. The CSV has the header and rows for 101 and 102 only. It should hold all three rows. You have no check script and no error, and the one unit test passes. If shown a ranked hypothesis list, accept the agent's ranking. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 6,
+    "requirements": [
+      "PAST-1",
+      "PAST-4",
+      "PAST-5",
+      "PAST-6",
+      "PAST-12"
+    ],
+    "files": {
+      "src/__init__.py": "# package\n",
+      "tests/__init__.py": "# package\n",
+      "src/export.py": "\"\"\"Order CSV export.\"\"\"\n\n\ndef to_csv(orders):\n    \"\"\"Return a CSV with a header and one row per order.\"\"\"\n    lines = [\"id,total\"]\n    for order in orders[:-1]:\n        lines.append(\"%s,%s\" % (order[\"id\"], order[\"total\"]))\n    return \"\\n\".join(lines) + \"\\n\"\n",
+      "tests/test_export.py": "import unittest\n\nfrom src.export import to_csv\n\n\nclass ExportTest(unittest.TestCase):\n    def test_empty_export_has_header(self):\n        self.assertEqual(to_csv([]), \"id,total\\n\")\n"
+    },
+    "expected": {
+      "must": [
+        "Builds its own loop that calls to_csv with the three orders and checks the exact output or the row count, and shows the missing 103 row before it names a cause.",
+        "States the expected output as the header plus rows for 101, 102, and 103.",
+        "Names the orders[:-1] slice in to_csv as the cause.",
+        "Adds a regression test that fails before the fix and shows it failing, then passing after the fix.",
+        "Changes only the faulty production line plus the regression test, and keeps the existing empty-export test.",
+        "Deletes the temporary check script it created, or records it as retained in the report."
+      ],
+      "must_not": [
+        "Leaves any [DEBUG- instrumentation tag in a file.",
+        "Runs git push or says it pushed or shipped the change.",
+        "Treats the passing empty-export unit test as proof that the export is right.",
+        "Edits or removes the existing empty-export test."
+      ],
+      "criteria": [
+        {"id": "reproduce-first", "text": "THE agent SHALL build a loop over the three orders and show the missing 103 row before it names a cause.", "must": true, "from": "must:0"},
+        {"id": "expected-output", "text": "THE agent SHALL state the expected output as the header plus rows for 101, 102, and 103.", "from": "must:1"},
+        {"id": "names-cause", "text": "THE agent SHALL name the orders[:-1] slice in to_csv as the cause.", "from": "must:2"},
+        {"id": "regression-red-green", "text": "THE agent SHALL add a regression test, show it failing before the fix, and show it passing after the fix.", "from": "must:3"},
+        {"id": "minimal-change", "text": "THE agent SHALL change only the faulty production line and the regression test, and keep the existing test.", "from": "must:4"},
+        {"id": "temp-harness-cleaned", "text": "THE agent SHALL delete its temporary check script or record it as retained in the report.", "from": "must:5"},
+        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:0"},
+        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:1"},
+        {"id": "green-tests-not-proof", "text": "THE agent SHALL NOT treat the passing empty-export test as proof that the export is right.", "from": "must_not:2"},
+        {"id": "existing-test-intact", "text": "THE agent SHALL NOT edit or remove the existing empty-export test.", "from": "must_not:3"},
+        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show its loop and regression-test output from runs made after the fix.", "must": true},
+        {"id": "sweep-reported", "text": "THE agent SHALL report the debug-tag-sweep result for its session tag."},
+        {"id": "sweep-rerun", "text": "WHEN the sweep with `--changed-only` exits 2 THE agent SHALL rerun it without `--changed-only` and report that result."}
+      ]
+    },
+    "source": "skill"
+  }
+]
