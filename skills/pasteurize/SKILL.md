@@ -31,6 +31,7 @@ Stop at each red flag:
 | --- | --- |
 | "The cause is obvious." | Build the loop. An obvious cause takes one run to confirm. |
 | "The user said to skip the loop or the test." | A user request does not waive them. Say so in one line, then run both. |
+| "An existing test already covers it." | It did not catch the bug. Add a new test that fails on the old code. |
 | "The loop is too slow to write." | A slow loop still beats a wrong fix. |
 | "Any failure proves the bug." | Match the expected exit code or output. |
 | "The mocked seam is close enough." | Record the missing seam and route to Mold. |
@@ -279,8 +280,6 @@ A lower evidence score produces more agents because it represents a larger searc
 | cold bug | no score | deterministic | 3 |
 | cold bug | no score | non-deterministic | 5 |
 
-A score of 250 defines a tight range.
-
 A reviewer reasoned these constants; runs have not measured them.
 
 Bundle-only hosts can call the policy with this command:
@@ -288,9 +287,6 @@ Bundle-only hosts can call the policy with this command:
 ```bash
 python3 skills/pasteurize/scripts/pasteurize.pyz pasteurize-route <request.json>
 ```
-
-The command reads JSON and writes JSON.
-It follows the `age-route` bundle convention.
 
 ## Preferred tools
 
