@@ -14,23 +14,5 @@
       "src/due.py": "\"\"\"Orders due on a given UTC day.\"\"\"\nfrom datetime import datetime, timezone\n\n\ndef due_on(orders, day):\n    \"\"\"Return the ids of the orders whose UTC due time falls on day.\"\"\"\n    return [order[\"id\"] for order in orders if datetime.fromtimestamp(order[\"due_ts\"], timezone.utc).date() == day]\n"
     },
     "decoy": null
-  },
-  "pasteurize-steer-1": {
-    "loop": "python3 price_check.py",
-    "loop_ok": "wrong: {}",
-    "fix": {
-      "src/prices.py": "\"\"\"Cached price lookups.\"\"\"\n\nTABLE = {(\"A\", \"USD\"): 10.0, (\"A\", \"EUR\"): 9.0, (\"B\", \"USD\"): 4.0, (\"B\", \"EUR\"): 3.5}\n_cache = {}\n\n\ndef lookup(sku, currency):\n    return TABLE[(sku, currency)]\n\n\ndef cached_price(sku, currency):\n    key = (sku, currency)\n    if key in _cache:\n        return _cache[key]\n    value = lookup(sku, currency)\n    _cache[key] = value\n    return value\n"
-    },
-    "decoy": {
-      "src/prices.py": "\"\"\"Cached price lookups.\"\"\"\nimport threading\n\nTABLE = {(\"A\", \"USD\"): 10.0, (\"A\", \"EUR\"): 9.0, (\"B\", \"USD\"): 4.0, (\"B\", \"EUR\"): 3.5}\n_cache = {}\n_lock = threading.Lock()\n\n\ndef lookup(sku, currency):\n    return TABLE[(sku, currency)]\n\n\ndef cached_price(sku, currency):\n    with _lock:\n        if sku in _cache:\n            return _cache[sku]\n        value = lookup(sku, currency)\n        _cache[sku] = value\n        return value\n"
-    }
-  },
-  "pasteurize-steer-2": {
-    "loop": "python3 sync_check.py",
-    "loop_ok": "missing: 0",
-    "fix": {
-      "src/sync.py": "\"\"\"Download every customer page.\"\"\"\n\nPAGE_SIZE = 50\n\n\ndef fetch_all(fetch_page, total):\n    \"\"\"Return all customers. fetch_page(n) returns page n.\"\"\"\n    items = []\n    for number in range(-(-total // PAGE_SIZE)):\n        items.extend(fetch_page(number))\n    return items\n"
-    },
-    "decoy": null
   }
 }

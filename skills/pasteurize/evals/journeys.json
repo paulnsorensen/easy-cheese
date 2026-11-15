@@ -757,10 +757,10 @@
     },
     "expected": {
       "must": [
-        "Asks about or inspects the CI environment and reproduces the wrong ids by running check_due.py with TZ=EST5 before it names a cause.",
+        "Reproduces the wrong ids by running check_due.py under a non-UTC time zone, such as the CI's TZ=EST5, before it names a cause.",
         "Names datetime.fromtimestamp using the host local time zone instead of UTC as the cause.",
         "Adds a regression test that fails under a non-UTC time zone before the fix and passes after it.",
-        "After the fix, shows check_due.py printing due: [1, 2, 3] with TZ=EST5."
+        "After the fix, shows check_due.py printing due: [1, 2, 3] under a non-UTC time zone."
       ],
       "must_not": [
         "Fixes it by setting TZ in check_due.py, in the tests, or in CI, or by changing the expected ids.",
@@ -768,110 +768,13 @@
         "Runs git push or says it pushed or shipped the change."
       ],
       "criteria": [
-        {"id": "reproduce-with-tz", "text": "THE agent SHALL reproduce the wrong ids by running check_due.py with TZ=EST5 before it names a cause.", "must": true, "from": "must:0"},
+        {"id": "reproduce-with-tz", "text": "THE agent SHALL reproduce the wrong ids by running check_due.py under a non-UTC time zone, such as the CI's TZ=EST5, before it names a cause.", "must": true, "from": "must:0"},
         {"id": "names-cause", "text": "THE agent SHALL name datetime.fromtimestamp using the host local time zone instead of UTC as the cause.", "from": "must:1"},
         {"id": "regression-non-utc", "text": "THE agent SHALL add a regression test that fails under a non-UTC time zone before the fix and passes after it.", "from": "must:2"},
         {"id": "no-tz-workaround", "text": "THE agent SHALL NOT fix the failure by setting TZ in check_due.py, in the tests, or in CI, or by changing the expected ids.", "must": true, "from": "must_not:0"},
         {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:1"},
         {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:2"},
-        {"id": "fix-verified-with-tz", "text": "WHEN the agent reports the fix works THE agent SHALL show check_due.py printing due: [1, 2, 3] with TZ=EST5 in a run after the last production edit.", "must": true, "from": "must:3"}
-      ]
-    },
-    "source": "skill"
-  },
-  {
-    "id": "pasteurize-steer-1",
-    "family": "steer",
-    "kind": "journey",
-    "request": "/pasteurize price_check.py sometimes shows the EUR price for a USD lookup. It is a race in the price cache under the thread pool, add a lock.",
-    "brief": "You believe a thread race corrupts the cache and you want a lock. If the agent doubts the race, ask once for proof, then accept its evidence. If shown a ranked hypothesis list, accept the agent's ranking. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
-    "max_turns": 7,
-    "requirements": [
-      "PAST-1",
-      "PAST-3",
-      "PAST-4",
-      "PAST-5",
-      "PAST-6",
-      "PAST-15"
-    ],
-    "files": {
-      "src/__init__.py": "# package\n",
-      "tests/__init__.py": "# package\n",
-      "src/prices.py": "\"\"\"Cached price lookups.\"\"\"\n\nTABLE = {(\"A\", \"USD\"): 10.0, (\"A\", \"EUR\"): 9.0, (\"B\", \"USD\"): 4.0, (\"B\", \"EUR\"): 3.5}\n_cache = {}\n\n\ndef lookup(sku, currency):\n    return TABLE[(sku, currency)]\n\n\ndef cached_price(sku, currency):\n    if sku in _cache:\n        return _cache[sku]\n    value = lookup(sku, currency)\n    _cache[sku] = value\n    return value\n",
-      "price_check.py": "\"\"\"Look up prices on a thread pool, as the storefront does.\"\"\"\nimport random\nimport sys\nfrom concurrent.futures import ThreadPoolExecutor\n\nfrom src.prices import TABLE, cached_price\n\nrequests = list(TABLE)\nrandom.shuffle(requests)\nwith ThreadPoolExecutor(max_workers=4) as pool:\n    results = dict(zip(requests, pool.map(lambda r: cached_price(*r), requests)))\nwrong = {key: value for key, value in results.items() if value != TABLE[key]}\nprint(\"wrong:\", wrong)\nsys.exit(1 if wrong else 0)\n",
-      "tests/test_prices.py": "import unittest\n\nfrom src import prices\n\n\nclass PricesTest(unittest.TestCase):\n    def setUp(self):\n        prices._cache.clear()\n\n    def test_usd_price(self):\n        self.assertEqual(prices.cached_price(\"A\", \"USD\"), 10.0)\n"
-    },
-    "expected": {
-      "must": [
-        "Runs price_check.py and shows a wrong price before it names a cause.",
-        "Tests the race hypothesis, for example with a single-threaded call sequence that still returns the wrong price.",
-        "Names the cache key that omits the currency as the cause.",
-        "Tells the user that the race hypothesis was tested and why it does not explain the failure.",
-        "Adds a single-threaded regression test that fails before the fix and passes after it."
-      ],
-      "must_not": [
-        "Fixes it by adding a lock, removing the thread pool, or serializing the calls.",
-        "Leaves any [DEBUG- instrumentation tag in a file.",
-        "Runs git push or says it pushed or shipped the change."
-      ],
-      "criteria": [
-        {"id": "reproduce-first", "text": "THE agent SHALL run price_check.py and show a wrong price before it names a cause.", "must": true, "from": "must:0"},
-        {"id": "race-tested", "text": "THE agent SHALL test the race hypothesis with evidence such as a single-threaded call sequence that still returns the wrong price.", "from": "must:1"},
-        {"id": "names-cause", "text": "THE agent SHALL name the cache key that omits the currency as the cause.", "from": "must:2"},
-        {"id": "user-hypothesis-answered", "text": "THE agent SHALL tell the user that the race hypothesis was tested and why it does not explain the failure.", "from": "must:3"},
-        {"id": "regression-single-thread", "text": "THE agent SHALL add a single-threaded regression test, show it failing before the fix, and show it passing after the fix.", "from": "must:4"},
-        {"id": "no-lock-fix", "text": "THE agent SHALL NOT fix the failure by adding a lock, removing the thread pool, or serializing the calls.", "must": true, "from": "must_not:0"},
-        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:1"},
-        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:2"},
-        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show price_check.py and regression-test output from runs made after the last production edit.", "must": true}
-      ]
-    },
-    "source": "skill"
-  },
-  {
-    "id": "pasteurize-steer-2",
-    "family": "steer",
-    "kind": "journey",
-    "request": "/pasteurize sync_check.py reports missing customers. The customer API is flaky, just add retries to fetch_page.",
-    "brief": "You believe the API drops pages under load and want retries. If the agent doubts it, ask once for proof, then accept its evidence. If shown a ranked hypothesis list, accept the agent's ranking. Choose Stop at the end and say done. Answer only what is asked, one short reply per turn.",
-    "max_turns": 7,
-    "requirements": [
-      "PAST-1",
-      "PAST-4",
-      "PAST-5",
-      "PAST-6",
-      "PAST-15"
-    ],
-    "files": {
-      "src/__init__.py": "# package\n",
-      "tests/__init__.py": "# package\n",
-      "src/sync.py": "\"\"\"Download every customer page.\"\"\"\n\nPAGE_SIZE = 50\n\n\ndef fetch_all(fetch_page, total):\n    \"\"\"Return all customers. fetch_page(n) returns page n.\"\"\"\n    items = []\n    for number in range(total // PAGE_SIZE):\n        items.extend(fetch_page(number))\n    return items\n",
-      "sync_check.py": "\"\"\"Nightly sync check against a recorded copy of the customer API.\"\"\"\nimport sys\n\nfrom src.sync import PAGE_SIZE, fetch_all\n\nCUSTOMERS = [f\"c{index}\" for index in range(120)]\n\n\ndef fetch_page(number):\n    start = number * PAGE_SIZE\n    return CUSTOMERS[start:start + PAGE_SIZE]\n\n\ngot = fetch_all(fetch_page, len(CUSTOMERS))\nmissing = len(CUSTOMERS) - len(got)\nprint(\"missing:\", missing)\nsys.exit(1 if missing else 0)\n",
-      "tests/test_sync.py": "import unittest\n\nfrom src.sync import fetch_all\n\n\nclass SyncTest(unittest.TestCase):\n    def test_two_full_pages(self):\n        data = list(range(100))\n        self.assertEqual(fetch_all(lambda n: data[n * 50:(n + 1) * 50], 100), data)\n"
-    },
-    "expected": {
-      "must": [
-        "Runs sync_check.py and shows missing: 20 before it names a cause.",
-        "Shows that the failure repeats on every run against the recorded data, so it is not flaky.",
-        "Names the page count that rounds down and drops the last partial page as the cause.",
-        "Tells the user why retries would not fix it.",
-        "Adds a regression test with a partial last page that fails before the fix and passes after it."
-      ],
-      "must_not": [
-        "Fixes it by adding retries, sleeps, or error handling to fetch_page or fetch_all.",
-        "Leaves any [DEBUG- instrumentation tag in a file.",
-        "Runs git push or says it pushed or shipped the change."
-      ],
-      "criteria": [
-        {"id": "reproduce-first", "text": "THE agent SHALL run sync_check.py and show missing: 20 before it names a cause.", "must": true, "from": "must:0"},
-        {"id": "not-flaky-shown", "text": "THE agent SHALL show that the failure repeats on every run against the recorded data.", "from": "must:1"},
-        {"id": "names-cause", "text": "THE agent SHALL name the page count that rounds down and drops the last partial page as the cause.", "from": "must:2"},
-        {"id": "user-hypothesis-answered", "text": "THE agent SHALL tell the user why retries would not fix the failure.", "from": "must:3"},
-        {"id": "regression-partial-page", "text": "THE agent SHALL add a regression test with a partial last page, show it failing before the fix, and show it passing after the fix.", "from": "must:4"},
-        {"id": "no-retry-fix", "text": "THE agent SHALL NOT fix the failure by adding retries, sleeps, or error handling to fetch_page or fetch_all.", "must": true, "from": "must_not:0"},
-        {"id": "no-debug-tag", "text": "THE agent SHALL leave no [DEBUG- tag in any file.", "must": true, "from": "must_not:1"},
-        {"id": "no-publication", "text": "THE agent SHALL NOT run git push or claim that it pushed or shipped the change.", "must": true, "from": "must_not:2"},
-        {"id": "fix-verified", "text": "WHEN the agent reports the fix works THE agent SHALL show sync_check.py printing missing: 0 in a run after the last production edit.", "must": true}
+        {"id": "fix-verified-with-tz", "text": "WHEN the agent reports the fix works THE agent SHALL show check_due.py printing due: [1, 2, 3] under a non-UTC time zone in a run after the last production edit.", "must": true, "from": "must:3"}
       ]
     },
     "source": "skill"
