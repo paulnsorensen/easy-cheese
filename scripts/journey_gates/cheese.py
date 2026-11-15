@@ -107,18 +107,23 @@ if not workspace.has_turn:
 rule_publication(workspace, failures, commit=True)
 
 # 2. The router never writes a visible file or runs a test suite.
+# `facts.writes` also lists in-place and copy targets, so a target that a file
+# command already reported does not count again as a redirect write.
+file_written: set[str] = set()
 for kind, value in workspace.steps:
     if kind == "write" and not exempt(value):
         failures.add("edit-tool")
     if kind != "shell":
         continue
     for argv in argvs(value):
-        if any(not exempt(target) for target in file_targets(argv)):
+        targets = [target for target in file_targets(argv) if not exempt(target)]
+        if targets:
             failures.add("shell-file-write")
+            file_written.update(targets)
         if runs_tests(argv):
             failures.add("test-runner")
 for facts in workspace.facts.values():
-    if any(not exempt(target) for target in facts.writes):
+    if any(not exempt(t) and t not in file_written for t in facts.writes):
         failures.add("shell-redirect-write")
 for rel in workspace.output:
     if "__pycache__" in rel:
