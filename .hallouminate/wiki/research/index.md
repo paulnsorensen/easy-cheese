@@ -11,8 +11,10 @@ when its evidence should ground repository decisions across sessions.
 - [behavioral-acceptance-easy-cheese-suggestions](./behavioral-acceptance-easy-cheese-suggestions.md) — Applying behavioral acceptance research to easy-cheese
 - [c4-model-evaluation](./c4-model-evaluation.md) — C4 model evaluation and alternatives
 - [c4-models-as-code-tools](./c4-models-as-code-tools.md) — C4 models-as-code tools comparison
+- [fanout-gating-units-evidence](./fanout-gating-units-evidence.md) — Fan-out gating units: what frameworks, measurements, and prior art support
 - [language-reviewability-evidence](./language-reviewability-evidence.md) — Language readability and reviewability evidence (AI-review era)
 - [review-dimensions-prompt-comparison](./review-dimensions-prompt-comparison.md) — Review dimensions side by side: default angles versus /age rubrics
 - [review-fanout-policy-comparison](./review-fanout-policy-comparison.md) — Review fan-out policy: default /simplify and /code-review versus /age
+- [schema-grounded-subagent-handoffs](./schema-grounded-subagent-handoffs.md) — Schema-grounded sub-agent handoffs: where the contract lives and when a worker pays off
 - [subagent-model-selection-portability](./subagent-model-selection-portability.md) — Sub-agent model selection across harnesses
 <!-- HALLOUMINATE:INDEX-END -->

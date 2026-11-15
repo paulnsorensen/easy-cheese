@@ -129,6 +129,12 @@
 
 - 2026-11-01 · affinage:pr-848 · curated · adr/mold-review-canvas-010.md, adr/mold-review-canvas-008.md, adr/index.md · review fixes: moved the requirements, fork-settlement, and phone-pane decisions into amending ADR 010; made `settled_fork_ids` cumulative; named waiting and dependency-error states in the canvas contract.
 - 2026-11-02 · affinage:pr-848 · curated · adr/mold-review-canvas-010.md · the phone shapes minimum now applies to the shape content below the tabs (it measured 106 px at 375x667 and 124 px at 844x390); recomputed test citations.
-- 2026-11-02 · cook:issue-849 · curated · adr/mold-review-canvas-010.md · `review publish` returns non-blocking `warnings` for malformed, missing, open-and-settled, and cyclic fork dependencies and for dropped requirement IDs; it warns and does not reject, so ADR 008 stays true and the browser defence stays testable.
+- 2026-11-02 · cook:issue-849 · curated · adr/mold-review-canvas-010.md · `review publish` returns non-blocking `warnings` for malformed, missing, open-and-settled, and cyclic fork dependencies and for dropped requirement IDs; it warns and does not reject, so ADR 008 stays true and the browser defence stays testable.<<<<<<< ours
 
 - 2026-11-08 · wiki-harvest · curated · fanout-engine-entities.md, architecture/workflow-contract-map.md · recorded the shared Wiring graph algorithm in `wiring_graph.py` (PR #414, now four callers) and the optional `ReviewRequest.review_kind` field (PR #405). Both facts are verified against current source.
+
+||||||| original
+
+=======
+- 2026-11-15 · affinage:pr-358 · curated · research/fanout-gating-units-evidence.md, research/schema-grounded-subagent-handoffs.md, architecture/fanout-artifact-format-question.md · promoted the fan-out sizing research and the schema-handoff research from `.cheese/` scratch, and replaced the stale `MIN_CURD_SURFACE`, `MAX_WAVE_SIZE`, and `n=1/2/5` text in the #313 page with ADR-005 links (fork B leaves the #313 disposition at no).
+>>>>>>> theirs
