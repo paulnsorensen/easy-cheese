@@ -322,3 +322,34 @@ def test_culture_rules(
     tmp_path: Path, step: tuple[str, str], out: dict[str, Any], fails: set[str]
 ) -> None:
     check(tmp_path, "culture", CULTURE_CLEAN.but(out=out, then=[step]), fails)
+
+
+@pytest.mark.parametrize(
+    ("step", "out"),
+    [
+        (("write", "/tmp/probe.py"), {}),
+        (("write", ".cheese/scratch/probe.py"), {}),
+        (("write", "tmp/probe.py"), {"tmp/probe.py": "x = 1\n"}),
+        (("shell", "printf x > tmp/probe.py"), {"tmp/probe.py": "x"}),
+        (("shell", "printf x > .cheese/scratch/probe.py"), {}),
+        (("shell", "cp src/worker.py /tmp/worker.py"), {}),
+    ],
+)
+def test_culture_scratch_and_hidden_writes_pass(
+    tmp_path: Path, step: tuple[str, str], out: dict[str, Any]
+) -> None:
+    check(tmp_path, "culture", CULTURE_CLEAN.but(out=out, then=[step]))
+
+
+@pytest.mark.parametrize(
+    ("step", "out", "fails"),
+    [
+        (("write", "src/tmp/probe.py"), {"src/tmp/probe.py": "x = 1\n"}, {"write-tool-source-file", "new-source-file"}),
+        (("shell", "printf x > src/tmp.py"), {"src/tmp.py": "x"}, {"bash-writes-source-file", "new-source-file"}),
+        (("write", ".cheese/specs/retry.md"), {}, {"spec-written-by-tool"}),
+    ],
+)
+def test_culture_scratch_exemption_keeps_source_and_spec_checks(
+    tmp_path: Path, step: tuple[str, str], out: dict[str, Any], fails: set[str]
+) -> None:
+    check(tmp_path, "culture", CULTURE_CLEAN.but(out=out, then=[step]), fails)
