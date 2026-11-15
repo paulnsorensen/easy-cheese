@@ -33,7 +33,7 @@ Show one batch gate before every `post-reply` call.
 Show the gate after `/cure` returns.
 Include every drafted reply in the gate.
 A drafted reply is an applied reply, a deferred reply, a push-back draft, or an investigation note.
-Read the applied and deferred replies from `.cheese/cure/pr-<n>.md`.
+Use the applied and deferred replies that Flow step 11 drafts from `.cheese/cure/pr-<n>.md`.
 Also list each `## Already-addressed` thread to resolve.
 Every option except **Skip posting** resolves these threads.
 
@@ -61,6 +61,10 @@ handoff_context:
 ```
 
 `/cure` confirms each selected identifier and applies the fixes.
-It runs its `/age --scope` loop but does not run terminal `/plate`.
+With `--auto`, it runs its scoped `/age --auto` chain.
+Without `--auto`, it only recommends a scoped review.
+Affinage runs that review at Flow step 12.
+For the Flow step 12 `/cure`, set `source_report` to the scoped `/age` report.
+`/cure` does not run terminal `/plate`.
 Affinage owns publication because `source_skill` is `/affinage`.
 Pass `--safe`, `--open-pr`, and `--hard` to `/cure` when they apply.

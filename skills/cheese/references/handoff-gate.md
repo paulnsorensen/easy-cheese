@@ -28,13 +28,13 @@ handoff_gate:
   source_skill: /cook
   id: post-cook-next-step
   prompt: What should happen next?
-  recommended: harden-tests
+  recommended: review-change
   multi: false
   options:
-    - id: harden-tests
-      label: Harden tests before review
-      description: Strengthen regression coverage before review.
-      dispatch: /press <slug>
+    - id: review-change
+      label: Review the change
+      description: Review the diff after Cook's Press loop passes.
+      dispatch: /age <slug>
       context:
         slug: <slug>
         source_report: .cheese/cook/<slug>.md
@@ -42,7 +42,7 @@ handoff_gate:
     - id: plate-it
       label: Plate it
       description: Run the remaining review chain, then publish through /plate.
-      dispatch: /press <slug> --auto --open-pr
+      dispatch: /age <slug> --auto --open-pr
       context:
         slug: <slug>
         source_report: .cheese/cook/<slug>.md
@@ -73,7 +73,7 @@ Every gate must include:
   **description** of its effect or tradeoff.
 - Exactly one action per option:
   - **Dispatch** — the exact command for a skill transition
-    (`/press <slug>`, `/age <slug> --hard`, …), including slug/path/scope and
+    (`/age <slug>`, `/age <slug> --hard`, …), including slug/path/scope and
     propagated flags such as `--hard`.
   - **Continue** — a short identifier for an in-skill action the current skill
     knows how to execute (e.g. `ask-for-decomposition-change`,

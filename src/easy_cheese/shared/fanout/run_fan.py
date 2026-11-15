@@ -59,10 +59,14 @@ from easy_cheese_schemas import (
 )
 from easy_cheese_schemas.schema_runtime import ContractValidationError
 
-from easy_cheese.shared.fanout.press_types import (
-    PressGateResult,
-    PressStopClassification,
-    PressStopRecord,
+from easy_cheese.shared.fanout.acceptance_types import (
+    AcceptanceCheckResult,
+    AcceptanceStopClassification,
+    AcceptanceStopRecord,
+    PressOutcome,
+    PressRequest,
+    PressRoundRecord,
+    PressRoundResult,
     normalize_gate_failures,
 )
 from easy_cheese.shared.fanout.remediation import bind_event_identity
@@ -84,7 +88,7 @@ from easy_cheese.shared.remediation_artifacts import (
     path_component,
 )
 
-PressDispatcher = Callable[[RemediationScopeKey, int], PressGateResult]
+AcceptanceChecker = Callable[[RemediationScopeKey, int], AcceptanceCheckResult]
 
 
 # Host programming errors propagate; they never become a blocked scope.
@@ -93,17 +97,22 @@ _MAX_REASON = 2048
 _TRACEBACK_FRAMES = 6
 _DIGEST_SUFFIX_LENGTH = 12
 CALLBACK_FAULT_ROLE = "callback-fault"
-PRESS_STOP_ROLE = "press-stop"
+ACCEPTANCE_STOP_ROLE = "acceptance-stop"
 CURE_INTENT_ROLE = "cure-intent"
+PRESS_ROUND_ROLE = "press-round"
+LEGACY_PRESS_ROLES = ("press-result", "press-stop")
+MAX_PRESS_CORRECTIONS = 2
+MAX_COVERAGE_RETRIES = 1
+MAX_PRESS_ROUNDS = 6
 
 
-def _require_press_baseline(value: PressGateResult) -> PressGateResult:
+def _require_acceptance_baseline(value: AcceptanceCheckResult) -> AcceptanceCheckResult:
     if not value.baseline_id:
-        raise ValueError("Press gate result requires a baseline identity")
+        raise ValueError("Acceptance check result requires a baseline identity")
     return value
 
 
-NextStep = Literal["done", "press", "mold"]
+NextStep = Literal["done", "mold"]
 POSTMERGE_SCOPE_ID = "postmerge"
 
 
@@ -136,6 +145,8 @@ class CureDispatchOutcome:
 
 # Dispatch seam the orchestrator owns. Each worker receives immutable context.
 CookWorker = Callable[[SemanticCurd], CurdResult]
+PressDispatcher = Callable[[SemanticCurd, PressRequest], PressRoundResult]
+CookCorrector = Callable[[SemanticCurd, PressRoundResult], CurdResult]
 AgeReviewer = Callable[[RemediationEventContext], ReviewDispatchOutcome]
 CureWorker = Callable[[RemediationEventContext], CureDispatchOutcome]
 
@@ -162,7 +173,10 @@ class FanContext:
     cook: CookWorker
     age: AgeReviewer
     cure: CureWorker
+    acceptance_check: AcceptanceChecker | None = None
     press: PressDispatcher | None = None
+    cook_correction: CookCorrector | None = None
+    press_exempt: frozenset[str] = frozenset()
     result_sink: Callable[[CurdResult], None] | None = None
     checkpoint_sink: Callable[[], None] | None = None
     max_rounds: int = 8
@@ -176,7 +190,7 @@ class FanExecutionOutcome:
     full scope identity to its final remediation state. ``next_step`` is
     the top-level Cook handoff verdict: ``done`` only when every curd and the
     post-merge review are clean, ``mold`` when coverage or remediation is
-    incomplete, and ``press`` only for a complete clean run without post-merge.
+    incomplete. Press runs inside each per-curd Cook dispatch, never after the merge.
     ``remediation_scopes`` names every scope that stalled and needs Mold.
     """
 
@@ -234,17 +248,17 @@ def _persist_ref(
     atomic_write(path, raw)
     return build_artifact_ref(path, raw, artifact_id=name, role=role)
 
-def _persist_press_stop(
+def _persist_acceptance_stop(
     context: FanContext,
     scope: RemediationScopeKey,
     *,
     gate_round: int,
     baseline_id: str | None,
-    classification: PressStopClassification,
+    classification: AcceptanceStopClassification,
     failure_reason: str,
     evidence: tuple[EvidenceRef, ...] = (),
 ) -> ArtifactRef:
-    record = PressStopRecord(
+    record = AcceptanceStopRecord(
         scope=scope,
         gate_round=gate_round,
         baseline_id=baseline_id,
@@ -253,7 +267,7 @@ def _persist_press_stop(
         evidence=evidence,
     )
     return _persist_ref(
-        context, f"{scope.scope_id}-press-stop-{gate_round}", PRESS_STOP_ROLE, record
+        context, f"{scope.scope_id}-acceptance-stop-{gate_round}", ACCEPTANCE_STOP_ROLE, record
     )
 
 
@@ -295,31 +309,31 @@ def _unique_evidence(*groups: Sequence[EvidenceRef]) -> tuple[EvidenceRef, ...]:
 
 def _gate_cure_observation(
     context: FanContext,
-    press: PressDispatcher,
+    acceptance_check: AcceptanceChecker,
     scope: RemediationScopeKey,
     round_number: int,
     observation: RemediationCureObservation,
     initial_evidence: tuple[EvidenceRef, ...],
 ) -> RemediationCureObservation:
-    """Fold the post-cure Press gate into the worker's Cure observation.
+    """Fold the post-cure acceptance check into the worker's Cure observation.
 
-    A Press fault adds one failure name. It never rewrites the applied keys or
+    An acceptance-check fault adds one failure name. It never rewrites the applied keys or
     the touched paths the worker reported.
     """
     try:
-        gate = _require_press_baseline(press(scope, round_number))
+        gate = _require_acceptance_baseline(acceptance_check(scope, round_number))
     except _HOST_BUGS:
         raise
     except Exception as error:
-        _ = _persist_fault(context, scope, round_number, "press-callback", error)
-        fault = f"press-callback-failed:{type(error).__name__}"
+        _ = _persist_fault(context, scope, round_number, "acceptance-callback", error)
+        fault = f"acceptance-callback-failed:{type(error).__name__}"
         return attrs.evolve(
             observation,
             new_gate_failures=normalize_gate_failures(
                 (*observation.new_gate_failures, fault)
             ),
         )
-    gate_failures = () if gate.passed else ("press-gate-failed",)
+    gate_failures = () if gate.passed else ("acceptance-check-failed",)
     return attrs.evolve(
         observation,
         gate_evidence=_unique_evidence(
@@ -519,12 +533,12 @@ def _block_postmerge(
     state: RemediationState,
     *,
     baseline_id: str | None,
-    classification: PressStopClassification,
+    classification: AcceptanceStopClassification,
     failure_reason: str,
     evidence: tuple[EvidenceRef, ...] = (),
 ) -> RemediationState:
-    """Persist the Press stop, then publish the blocked terminal state."""
-    _ = _persist_press_stop(
+    """Persist the acceptance stop, then publish the blocked terminal state."""
+    _ = _persist_acceptance_stop(
         run.context,
         run.scope,
         gate_round=1,
@@ -544,19 +558,19 @@ def _block_postmerge(
 def _bootstrap_postmerge_gate(
     run: _ScopeRun, state: RemediationState
 ) -> tuple[RemediationState | None, tuple[EvidenceRef, ...]]:
-    """Run the initial Press gate. Return a blocked state or the gate evidence."""
-    press = run.context.press
-    if press is None:
+    """Run the initial acceptance check. Return a blocked state or the gate evidence."""
+    acceptance_check = run.context.acceptance_check
+    if acceptance_check is None:
         blocked = _block_postmerge(
             run,
             state,
             baseline_id=None,
-            classification=PressStopClassification.ABSENT,
-            failure_reason="initial Press gate is absent",
+            classification=AcceptanceStopClassification.ABSENT,
+            failure_reason="initial acceptance check is absent",
         )
         return blocked, ()
     try:
-        gate = _require_press_baseline(press(run.scope, 1))
+        gate = _require_acceptance_baseline(acceptance_check(run.scope, 1))
     except _HOST_BUGS:
         raise
     except Exception as error:
@@ -564,7 +578,7 @@ def _bootstrap_postmerge_gate(
             run,
             state,
             baseline_id=None,
-            classification=PressStopClassification.ERROR,
+            classification=AcceptanceStopClassification.ERROR,
             failure_reason=_failure_reason("project gate callback failed", error),
         )
         return blocked, ()
@@ -574,8 +588,8 @@ def _bootstrap_postmerge_gate(
         run,
         state,
         baseline_id=gate.baseline_id,
-        classification=PressStopClassification.FAILED,
-        failure_reason="; ".join(gate.new_failures) or "initial Press gate failed",
+        classification=AcceptanceStopClassification.FAILED,
+        failure_reason="; ".join(gate.new_failures) or "initial acceptance check failed",
         evidence=gate.evidence,
     )
     return blocked, gate.evidence
@@ -665,11 +679,11 @@ def _run_cure_round(run: _ScopeRun, state: RemediationState) -> RemediationState
     observation, request_digest, outcome_unknown = _cure_once(
         run, state, cure_round, intent_path
     )
-    press = run.context.press
-    if press is not None and run.scope.scope_kind is RemediationScopeKind.POSTMERGE:
-        # The Press round stays review-based: round 1 is the initial gate.
+    acceptance_check = run.context.acceptance_check
+    if acceptance_check is not None and run.scope.scope_kind is RemediationScopeKind.POSTMERGE:
+        # The check round stays review-based: round 1 is the initial check.
         observation = _gate_cure_observation(
-            run.context, press, run.scope, cure_round + 1, observation, run.gate_evidence
+            run.context, acceptance_check, run.scope, cure_round + 1, observation, run.gate_evidence
         )
     name = _artifact_name(run.scope, "cure", cure_round, request_digest)
     next_state, _verdict = apply_event(
@@ -847,6 +861,10 @@ def _seed_resumed_scopes(fan: _FanRun) -> None:
         if result is None:
             continue
         if result.disposition is CurdDisposition.PASSED:
+            progress = _replay_press_rounds(fan.context, curd)
+            if curd.curd_id not in fan.context.press_exempt and not progress.settled:
+                _finish_curd(fan, curd, result, progress)
+                continue
             final = _remediate_curd(fan, curd, result)
             if final is not result:
                 fan.record(curd.curd_id, final)
@@ -886,10 +904,200 @@ def run_fan_locked(
     return _run_fan_locked(plan, context, selected=selected, results=results)
 
 
-def _cook_and_remediate(fan: _FanRun, curd: SemanticCurd) -> None:
-    """Cook one ready curd, then remediate it or publish its blocked state."""
+def _press_halt(
+    fan: _FanRun,
+    curd: SemanticCurd,
+    *,
+    request: PressRequest,
+    result: PressRoundResult,
+    halt: str,
+) -> CurdResult:
+    _ = _persist_press_round(fan.context, curd, request, result, halt=halt)
+    reason = f"halt: {halt}"
+    return _blocked_result(fan.plan, curd, reason=reason, unresolved=(reason,))
+
+
+def _persist_press_round(
+    context: FanContext,
+    curd: SemanticCurd,
+    request: PressRequest,
+    result: PressRoundResult,
+    *,
+    halt: str | None = None,
+    checkpoint: bool = True,
+) -> ArtifactRef:
+    record = PressRoundRecord(
+        curd_id=curd.curd_id,
+        round_number=request.round_number,
+        outcome=result.outcome,
+        attack_id=result.attack_id,
+        summary=result.summary[:_MAX_REASON],
+        halt=halt,
+        evidence=result.evidence,
+    )
+    ref = _persist_ref(
+        context, f"{curd.curd_id}-press-{request.round_number}", PRESS_ROUND_ROLE, record
+    )
+    if checkpoint and context.checkpoint_sink is not None:
+        context.checkpoint_sink()
+    return ref
+
+
+@attrs.define
+class _PressProgress:
+    """Replayable Press round counters for one curd."""
+
+    round_number: int = 0
+    attack_id: str | None = None
+    findings: dict[str | None, int] = attrs.field(factory=dict)
+    coverage_gaps: int = 0
+    settled: bool = False
+    halted: str | None = None
+
+
+def _press_round_files(
+    context: FanContext, curd: SemanticCurd
+) -> list[tuple[Path, dict[str, object]]]:
+    """Return a curd's persisted press-round files with their records, by round."""
+    role_dir = (
+        Path(context.artifact_directory).resolve() / "remediation"
+        / path_component(context.run_id) / path_component(PRESS_ROUND_ROLE)
+    )
+    found: list[tuple[Path, dict[str, object]]] = []
+    for path in sorted(role_dir.glob("*.json")):
+        record = cast("dict[str, object]", json.loads(path.read_bytes()))
+        if record.get("curd_id") == curd.curd_id:
+            found.append((path, record))
+    found.sort(key=lambda item: cast(int, item[1]["round_number"]))
+    return found
+
+
+def _replay_press_rounds(context: FanContext, curd: SemanticCurd) -> _PressProgress:
+    """Restore a curd's Press counters from its persisted press-round records."""
+    progress = _PressProgress()
+    for _path, record in _press_round_files(context, curd):
+        progress.round_number = cast(int, record["round_number"])
+        halt = cast("str | None", record.get("halt"))
+        if halt is not None:
+            progress.halted = halt
+        outcome = record["outcome"]
+        if outcome in (PressOutcome.GREEN.value, PressOutcome.EXEMPT.value):
+            progress.settled = halt is None
+        elif outcome == PressOutcome.FINDING.value:
+            attack = cast("str | None", record.get("attack_id"))
+            progress.attack_id = attack
+            progress.findings[attack] = progress.findings.get(attack, 0) + 1
+        elif outcome == PressOutcome.COVERAGE_GAP.value:
+            progress.coverage_gaps += 1
+    return progress
+
+
+def _clear_press_rounds(context: FanContext, curd: SemanticCurd) -> None:
+    """Delete a curd's prior press-round files so a fresh Cook restarts at round 1."""
+    for path, _record in _press_round_files(context, curd):
+        path.unlink()
+
+
+def _press_fault(
+    fan: _FanRun, curd: SemanticCurd, source: str, round_number: int, error: Exception
+) -> CurdResult:
+    scope = _curd_scope(fan.context.run_id, fan.plan, curd.curd_id)
+    _ = _persist_fault(fan.context, scope, round_number, source, error)
+    reason = f"{source} failed: {type(error).__name__}"
+    return _blocked_result(fan.plan, curd, reason=reason, unresolved=(reason,))
+
+
+def _press_curd(
+    fan: _FanRun, curd: SemanticCurd, cook_result: CurdResult, progress: _PressProgress
+) -> CurdResult:
+    """Run the orchestrator-owned Press loop for one passed behavior curd.
+
+    Cook is the single round counter. Press has no memory across dispatches, so
+    each request carries the round number and the attack identity to replay.
+    Persisted press-round records restore the counters on resume. Findings are
+    capped per attack and the loop has a total round bound.
+    Returns the (possibly corrected) Cook result, or a blocked result that
+    names the halt.
+    """
     context = fan.context
-    cook_result = context.cook(curd)
+    if curd.curd_id in context.press_exempt:
+        exempt = PressRoundResult(
+            outcome=PressOutcome.EXEMPT, summary="non-behavior curd exempt from Press"
+        )
+        _ = _persist_press_round(
+            context, curd, PressRequest(round_number=1), exempt, checkpoint=False
+        )
+        return cook_result
+    if context.press is None:
+        raise RuntimeError(
+            f"behavior curd {curd.curd_id} requires a Press dispatcher; mark it in press_exempt only for non-behavior work"
+        )
+    if progress.halted is not None:
+        reason = f"halt: {progress.halted}"
+        return _blocked_result(fan.plan, curd, reason=reason, unresolved=(reason,))
+    if progress.settled:
+        return cook_result
+    while True:
+        request = PressRequest(
+            round_number=progress.round_number + 1, attack_id=progress.attack_id
+        )
+        try:
+            result = context.press(curd, request)
+        except _HOST_BUGS:
+            raise
+        except Exception as error:
+            return _press_fault(fan, curd, "press-callback", request.round_number, error)
+        progress.round_number = request.round_number
+        halt: str | None = None
+        if result.outcome is PressOutcome.GREEN:
+            _ = _persist_press_round(context, curd, request, result)
+            return cook_result
+        if result.outcome in (PressOutcome.INVALID_EVIDENCE, PressOutcome.EXEMPT):
+            halt = "invalid-evidence"
+        elif result.outcome is PressOutcome.PRODUCTION_CHANGED:
+            halt = "production-changed"
+        elif result.outcome is PressOutcome.FINDING:
+            progress.attack_id = result.attack_id
+            count = progress.findings.get(result.attack_id, 0) + 1
+            progress.findings[result.attack_id] = count
+            if count > MAX_PRESS_CORRECTIONS:
+                halt = "correction-cap"
+        else:
+            progress.coverage_gaps += 1
+            if progress.coverage_gaps > MAX_COVERAGE_RETRIES:
+                halt = "coverage-gap"
+        if halt is None and progress.round_number >= MAX_PRESS_ROUNDS:
+            halt = "press-round-limit"
+        if halt is not None:
+            return _press_halt(fan, curd, request=request, result=result, halt=halt)
+        _ = _persist_press_round(context, curd, request, result)
+        if context.cook_correction is None:
+            raise RuntimeError(
+                f"curd {curd.curd_id} needs a Cook correction but no corrector is configured"
+            )
+        try:
+            cook_result = context.cook_correction(curd, result)
+        except _HOST_BUGS:
+            raise
+        except Exception as error:
+            return _press_fault(fan, curd, "cook-correction", request.round_number, error)
+        if cook_result.disposition is not CurdDisposition.PASSED:
+            return cook_result
+
+
+def _finish_curd(
+    fan: _FanRun,
+    curd: SemanticCurd,
+    cook_result: CurdResult,
+    progress: _PressProgress | None = None,
+) -> None:
+    """Press a passed curd, then remediate it or publish its blocked state.
+
+    A resumed curd passes its replayed `progress`; a fresh Cook starts at zero.
+    """
+    context = fan.context
+    if cook_result.disposition is CurdDisposition.PASSED:
+        cook_result = _press_curd(fan, curd, cook_result, progress or _PressProgress())
     if cook_result.disposition is CurdDisposition.PASSED:
         fan.record(curd.curd_id, _remediate_curd(fan, curd, cook_result))
         return
@@ -905,6 +1113,12 @@ def _cook_and_remediate(fan: _FanRun, curd: SemanticCurd) -> None:
         blocked_state,
     )
     fan.record(curd.curd_id, cook_result)
+
+
+def _cook_and_remediate(fan: _FanRun, curd: SemanticCurd) -> None:
+    """Cook one ready curd, press it, then remediate it or publish its blocked state."""
+    _clear_press_rounds(fan.context, curd)
+    _finish_curd(fan, curd, fan.context.cook(curd))
 
 
 def _run_waves(fan: _FanRun) -> None:
@@ -997,7 +1211,9 @@ def _run_fan_locked(
     results: Mapping[str, CurdResult] | None,
 ) -> FanExecutionOutcome:
     """Run the fan stages while the caller holds the run lock."""
+    _reject_legacy_press_roles(context)
     fan = _FanRun(plan, context, selected, dict(results or {}))
+    _require_press_dispatcher(fan)
     _seed_resumed_scopes(fan)
     _run_waves(fan)
     ordered_results = fan.ordered_results()
@@ -1006,9 +1222,7 @@ def _run_fan_locked(
     )
     full_coverage = selected is None or set(selected) == {c.curd_id for c in plan.curds}
     postmerge_state = _run_postmerge(fan) if all_passed and full_coverage else None
-    next_step = _next_step(
-        all_passed, postmerge_state, fan.remediation_scopes, full_coverage=full_coverage
-    )
+    next_step = _next_step(all_passed, postmerge_state, fan.remediation_scopes)
     stop_evidence_refs = _load_stop_evidence_refs(context)
     remediation_request_ref = None
     if next_step == "mold":
@@ -1061,13 +1275,45 @@ def _scope_state_ref(context: FanContext, state: RemediationState) -> ArtifactRe
     )
 
 
+def _reject_legacy_press_roles(context: FanContext) -> None:
+    """Refuse a run whose persisted artifacts predate the acceptance-check change."""
+    run_root = Path(context.artifact_directory).resolve() / "remediation" / path_component(context.run_id)
+    for legacy in LEGACY_PRESS_ROLES:
+        if any((run_root / path_component(legacy)).glob("*.json")):
+            raise ValueError(
+                f"persisted role {legacy!r} predates the acceptance-check change; this run cannot resume, so start a fresh run"
+            )
+
+
+def _require_press_dispatcher(fan: _FanRun) -> None:
+    """Fail before any dispatch when a behavior curd has no Press dispatcher."""
+    context = fan.context
+    if context.press is not None:
+        return
+    scoped = set(fan.selected) if fan.selected is not None else None
+    for curd in fan.plan.curds:
+        if scoped is not None and curd.curd_id not in scoped:
+            continue
+        if curd.curd_id in context.press_exempt:
+            continue
+        if curd.curd_id in fan.recorded and _replay_press_rounds(context, curd).settled:
+            continue
+        raise RuntimeError(
+            f"behavior curd {curd.curd_id} requires a Press dispatcher; mark it in press_exempt only for non-behavior work"
+        )
+
+
 def _load_stop_evidence_refs(context: FanContext) -> tuple[ArtifactRef, ...]:
-    """Load every persisted Press stop and callback fault for this run."""
+    """Load every persisted acceptance stop, callback fault, and press halt."""
     run_root = Path(context.artifact_directory).resolve() / "remediation" / path_component(context.run_id)
     refs: list[ArtifactRef] = []
-    for role in (PRESS_STOP_ROLE, CALLBACK_FAULT_ROLE):
+    for role in (ACCEPTANCE_STOP_ROLE, CALLBACK_FAULT_ROLE, PRESS_ROUND_ROLE):
         for path in sorted((run_root / path_component(role)).glob("*.json")):
             raw = path.read_bytes()
+            if role == PRESS_ROUND_ROLE:
+                record = cast("dict[str, object]", json.loads(raw))
+                if record.get("halt") is None:
+                    continue
             refs.append(build_artifact_ref(path, raw, artifact_id=path.stem, role=role))
     return tuple(refs)
 
@@ -1120,19 +1366,13 @@ def _next_step(
     all_passed: bool,
     postmerge_state: RemediationState | None,
     remediation_scopes: Sequence[str],
-    *,
-    full_coverage: bool = True,
 ) -> NextStep:
-    if remediation_scopes:
-        return "mold"
-    if not all_passed:
-        # Incomplete work never publishes and never presses (AC-12); route the
-        # blocked curds to Mold for a replan.
-        return "mold"
-    if postmerge_state is None:
-        # Partial coverage needs Mold to plan the omitted work.
-        return "mold" if not full_coverage else "press"
-    if postmerge_state.disposition is RemediationDisposition.CLEAN:
-        return "done"
-    # A non-clean post-merge review refuses publication (AC-10).
-    return "mold"
+    clean = (
+        not remediation_scopes
+        and all_passed
+        and postmerge_state is not None
+        and postmerge_state.disposition is RemediationDisposition.CLEAN
+    )
+    # Incomplete work, partial coverage, and a non-clean post-merge review all
+    # route to Mold; only the clean conjunction publishes (AC-10, AC-12).
+    return "done" if clean else "mold"

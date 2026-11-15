@@ -15,14 +15,15 @@ class RouteError(ValueError):
 
 _ROUTES: dict[str, dict[str, str]] = {
     "age": {"cure": CURD_PLAN_SCHEMA_URI},
+    # Cook runs its Press loop in-phase, so Cook never hands off to Press.
     "cook": {
         "age": CURD_RESULT_SCHEMA_URI,
         "mold": PLANNER_REQUEST_SCHEMA_URI,
-        "press": CURD_RESULT_SCHEMA_URI,
     },
     "cure": {"age": CURD_RESULT_SCHEMA_URI},
     "mold": {"cook": CURD_PLAN_SCHEMA_URI},
-    "press": {"age": CURD_RESULT_SCHEMA_URI},
+    # Press hands a finding or a coverage gap back to Cook as a correction.
+    "press": {"age": CURD_RESULT_SCHEMA_URI, "cook": CURD_RESULT_SCHEMA_URI},
 }
 
 

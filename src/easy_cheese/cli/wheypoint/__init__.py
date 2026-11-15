@@ -104,7 +104,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
             flags it may name the work id, and when absent the intent starts empty
         note_dir
             directory the readable projection is mirrored into (default:
-            <git toplevel>/.cheese/notes)
+            `<git toplevel>`/.cheese/notes; no mirror outside a repository)
         no_note
             write no mirror; the checkpoint stays canonical-local
         work_id
@@ -346,7 +346,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         ref
             an absolute projection path, a work id, or a slug
         legacy
-            resolve a pre-kernel .cheese/notes/<slug>.md instead
+            resolve a pre-kernel .cheese/notes/`<slug>`.md instead
         corpus_root
             the corpus to resolve in; defaults to this project's XDG corpus
         project
@@ -604,7 +604,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
             the new work id (default: the bundle's work id)
         note_dir
             directory the readable projection is mirrored into (default:
-            <git toplevel>/.cheese/notes)
+            `<git toplevel>`/.cheese/notes; no mirror outside a repository)
         no_note
             write no mirror; the import stays canonical-local
         workspace_root

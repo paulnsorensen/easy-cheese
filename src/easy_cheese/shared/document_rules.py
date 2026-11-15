@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
-DOCUMENT_RULES = {   'mold-spec': {   'cross_field_rules': [   {   'description': 'Every Acceptance ID must appear exactly once in the Test Contracts table.',
+DOCUMENT_RULES = {   'mold-spec': {   'cross_field_rules': [   {   'description': 'Strict validation requires seven non-empty demonstration fields or an n/a line.',
+                                                  'rule_id': 'acceptance-demonstration-complete'},
+                                              {   'description': 'Every Acceptance ID must appear exactly once in the Test Contracts table.',
                                                   'rule_id': 'ac-coverage-exactly-once'},
                                               {   'description': 'Tracer rows must leave Interface version and Matrix rows blank.',
                                                   'rule_id': 'tracer-row-blank-matrix-cells'},
@@ -33,6 +35,12 @@ DOCUMENT_RULES = {   'mold-spec': {   'cross_field_rules': [   {   'description'
                                      {'name': 'Approach', 'optional': False, 'table': None},
                                      {'name': 'Decisions', 'optional': False, 'table': None},
                                      {'name': 'Acceptance', 'optional': False, 'table': None},
+                                     {   'name': 'Acceptance demonstration',
+                                         'optional': True,
+                                         'table': {   'columns': ['Field', 'Value'],
+                                                      'per_row': [   'the seven declared Field names each appear exactly once',
+                                                                     'every Value cell is non-empty',
+                                                                     "non-behavior work uses one 'n/a: <reason>' line instead"]}},
                                      {   'name': 'Test Contracts',
                                          'optional': True,
                                          'table': {   'columns': [   'Acceptance ID',

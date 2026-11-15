@@ -42,7 +42,7 @@ def test_explicit_target_root_owns_default_corpus_and_resolution(
     written = write_artifact(
         slug="cross-root",
         status="ok",
-        next_skill="press",
+        next_skill="age",
         artifact="",
         orientation="target repository checkpoint",
         body=None,
@@ -82,7 +82,7 @@ def test_explicit_corpus_and_project_overrides_remain_authoritative(
     _ = write_artifact(
         slug="explicit-root",
         status="ok",
-        next_skill="press",
+        next_skill="age",
         artifact="",
         orientation="explicit corpus checkpoint",
         body=None,

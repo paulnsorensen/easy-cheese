@@ -1,12 +1,12 @@
 ---
-applyTo: "scripts/**/*.sh,tests/bash/**/*.bats"
+applyTo: "scripts/**/*.sh,tests/**/*.bats"
 ---
 
-# Shell review checklist (install script and bats tests)
+# Shell review checklist (shell scripts and bats tests)
 
-`scripts/install.sh` is the only entry point most users see. `tests/bash/`
-exercises it under bats. ShellCheck runs in CI (`just lint-sh`), so don't
-spend review budget on lint nits — focus on behavior.
+The repo ships no install script. Shell scripts and bats tests, such as
+`tests/fanout/bash/`, still follow these rules. Focus review on behavior,
+not lint nits.
 
 ## Hard rules
 
@@ -29,11 +29,10 @@ spend review budget on lint nits — focus on behavior.
   vulnerability when `$var` touches user input.
 - `rm -rf "$var"` without guarding against empty `$var`. Use
   `rm -rf -- "${var:?}"` or check first.
-- Silent failures in `install.sh` — every failed step should print what
-  failed and exit non-zero. This is the user's first impression of the
-  repo; a half-installed state is worse than a clean abort.
-- bats tests that exercise the happy path only. Each new flag or branch in
-  `install.sh` should have a failure-mode test in `test_install.bats`.
+- Silent failures — every failed step should print what failed and exit
+  non-zero.
+- bats tests that exercise the happy path only. Each new flag or branch
+  should have a failure-mode test.
 
 ## What not to flag
 
@@ -53,6 +52,4 @@ spend review budget on lint nits — focus on behavior.
 - Stub external commands (`curl`, `brew`, `claude`, `gh`) via `PATH`
   injection or helper wrappers. A bats test that actually hits the network
   or shells out to real `brew` is a flake waiting to happen.
-- The real-install smoke test in `validate.yml` (the `--skip-mcp` job)
-  intentionally bypasses stubs to catch breakage in upstream package
-  resolution. Don't add stubbing there; do add it to `test_install.bats`.
+- Keep bats tests offline. Do not add tests that call the network or a real package manager.

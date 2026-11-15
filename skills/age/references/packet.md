@@ -10,7 +10,7 @@ Every review rebuilds its packet; there is no persistent cross-run cache.
 
 1. **Target and requirement** — Identify the exact diff or overall scope, source snapshot, and located specification or issue. State when no specification exists. For a specification, include its fired `leverage:` triggers.
 2. **Component roles** — Include relevant dependency manifests and the component/path map. Distinguish library exports, application entry points, tests, build systems, and documentation.
-3. **Shared impact evidence** — Include changed symbols, caller and callee relationships, affected contracts, and relevant enclosing functions. Collect these once with the selected code-intelligence backend.
+3. **Shared impact evidence** — Include changed symbols, caller and callee relationships, affected contracts, and relevant enclosing functions. Collect these once with the selected code-intelligence backend. Include the factual change inventory, requirement mapping, and unresolved scope questions from scope interrogation.
 4. **Project-helper index** — Detect source roots from manifests or changed paths. Find task-relevant existing helpers such as sanitization, validation, escaping, retry, and logging mechanisms.
 5. **Instruction sources** — Include review-instructions output with source identities, scope, hashes, and line citations. Distinguish collected candidates from host-supplied active instructions. Report unresolved authority or unavailable sources explicitly.
 6. **Context and plan** — Include subject applicability, risk evidence, policy version, input digest, assignments, capability restrictions, and dispatch batches. A zero workload weight never removes a path from relevance analysis.

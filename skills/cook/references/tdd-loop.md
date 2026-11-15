@@ -10,6 +10,24 @@ When a change adds or modifies behavior, write the test before the implementatio
 
 A test that passes against unimplemented code gives a false positive. Check that the test fails for the expected reason when that is cheap to do.
 
+Shape each new test by [`../../cheese/references/test-shape.md`](../../cheese/references/test-shape.md).
+Extend the existing test file.
+Write one table row for each equivalence class.
+Use a property test instead of `range(N)` trials.
+Stack tables only when each axis selects a branch.
+
+### First acceptance coverage
+
+For behavior work, Cook owns the acceptance demonstration before Press. This is a reported obligation, not a gate. It adds no gate, no receipt, and no enforcement command.
+
+1. Run the smallest complete path first.
+2. For a bug fix, confirm the check detects the original failure. For new behavior, confirm the check rejects an absent or incorrect result.
+3. Run the check against the final integrated artifact.
+4. Record the revision, environment, command, and observed result in the package report's `### Acceptance evidence`.
+
+Apply a live check only where the claim depends on a live boundary.
+When a live check cannot run, report the behavior `unverified` and name the reduced claim. Never substitute an offline check silently.
+
 ## Implement — minimal green
 
 For behavior work, make the smallest production change that makes the tests green.
@@ -34,11 +52,11 @@ Write the change so the taste-test and `/age` pass on the first round. Most rule
 
 These rules do not license speculative types, helpers, or abstractions. Scope and Simplify still apply.
 
-Before handoff to Press, make every inner test and relevant gate GREEN.
+Before the Press loop, make every inner test and relevant gate GREEN.
 
-For non-behavior work, complete the requested non-behavior verification and taste-test. Then, hand off directly to Age. Non-behavior work has no Test Contracts for Press to attack.
+For non-behavior work, complete the requested non-behavior verification and taste-test. Then, hand off directly to Age. Non-behavior work has no Press loop.
 
-A corrective Cook (`correction = true`) applies only to the active Press correction. It must not weaken, replace, or bypass an existing test.
+A corrective Cook (`correction = true`) applies only to the active Press finding or `coverage_gap`. It must not weaken, replace, or bypass an existing test.
 
 If Cook reports partial or skipped work, **stop and resolve it before taste-test**.
 
@@ -57,7 +75,7 @@ Dispatch the fresh-context reviewer unless all four conditions are true:
 - The diff has <~40 changed lines.
 - The diff has no risk flag.
 
-If all four conditions are true, run the coder self-check. If one condition is false, route the review to 1 fresh opus reviewer.
+If all four conditions are true, run the coder self-check. If one condition is false, dispatch 1 fresh `reviewer (taste-test)` at the tier that **Who runs it** names below.
 
 ### Risk flag
 

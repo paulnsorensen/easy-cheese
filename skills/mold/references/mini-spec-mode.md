@@ -52,6 +52,20 @@ Add exactly one row for each probe. Record the real outcome. Never invent a row.
 - AC-1: <verifiable check 1>
 - AC-2: <verifiable check 2>
 
+## Acceptance demonstration
+Optional on a Quick-tier mini-spec (`source: agent-mini-spec`); include it when a realistic end-to-end check is not obvious from `## Acceptance`. Required on an early curd (`source: mold-curd-mini-spec`). When present, `validate-spec --strict` checks it: behavior work fills all seven rows, each non-empty, and non-behavior work writes one line instead: `n/a: <reason>`.
+Include one plausible false success and how the check rejects it. Keep rows independent of the implementation.
+
+| Field | Value |
+| --- | --- |
+| User task | <what the user wants done> |
+| Input | <concrete input> |
+| Entrypoint | <command, API, or UI the user touches> |
+| Expected result | <observable outcome> |
+| Real boundaries | <real systems crossed, not mocked> |
+| False success | <plausible wrong result and how the check rejects it> |
+| Evidence | <artifact or output that proves it> |
+
 ## Test Contracts
 Optional. Include this section only when the spec benefits from it.
 

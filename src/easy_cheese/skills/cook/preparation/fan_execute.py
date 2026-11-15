@@ -10,7 +10,7 @@ import json
 import os
 import stat
 import subprocess
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol, cast
 from urllib.parse import urlsplit
@@ -48,13 +48,15 @@ from easy_cheese.shared import workflow
 from easy_cheese.shared.fanout.run_fan import (
     CureDispatchOutcome,
     FanContext,
-    FanExecutionOutcome,
+    LEGACY_PRESS_ROLES,
     PressDispatcher,
+    FanExecutionOutcome,
+    AcceptanceChecker,
     RemediationEventContext,
     ReviewDispatchOutcome,
     run_fan_locked,
 )
-from easy_cheese.shared.fanout.press_types import PressGateResult
+from easy_cheese.shared.fanout.acceptance_types import AcceptanceCheckResult, PressRoundResult
 from easy_cheese.shared.fanout.remediation import finding_key
 from easy_cheese.shared.artifacts import resolve_file_path, restrict_local_path
 from easy_cheese.shared.bounded_read import read_bounded_file
@@ -91,7 +93,7 @@ class _PostmergeExecution:
 
 @attrs.define
 class _FanAdapters:
-    """Host-owned Cook, Press, Age, and Cure adapters for one fan run."""
+    """Host-owned Cook, acceptance-check, Age, and Cure adapters for one fan run."""
 
     plan: CurdPlan
     root: Path
@@ -104,11 +106,12 @@ class _FanAdapters:
     dispatch_writer: workflow.WriterDispatch
     dispatch_review: workflow.ReviewDispatch
     dispatch_diagnosis: workflow.DiagnosisDispatch
+    dispatch_acceptance: AcceptanceChecker | None
     dispatch_press: PressDispatcher | None
     committed_refs: list[ArtifactRef]
     journal_path: Path
     journal_results: dict[str, CurdResult]
-    press_refs: list[ArtifactRef] = attrs.field(factory=list)
+    acceptance_refs: list[ArtifactRef] = attrs.field(factory=list)
     scopes: dict[str, _ScopeExecution] = attrs.field(factory=dict)
     aggregate_curd: SemanticCurd | None = None
     postmerge: _PostmergeExecution | None = None
@@ -116,7 +119,7 @@ class _FanAdapters:
     postmerge_gate_evidence: list[EvidenceRef] = attrs.field(factory=list)
 
     def checkpoint_manifest(self) -> None:
-        refs = [*self.committed_refs, *self.press_refs]
+        refs = [*self.committed_refs, *self.acceptance_refs]
         if self.journal_path.exists():
             journal_ref = _path_ref(
                 self.journal_path, artifact_id=f"{self.run_id}/results",
@@ -141,6 +144,20 @@ class _FanAdapters:
         self.checkpoint_manifest()
 
     def cook(self, curd: SemanticCurd) -> CurdResult:
+        return self._run_writer(curd, None)
+
+    def correct(self, curd: SemanticCurd, press: PressRoundResult) -> CurdResult:
+        """Re-run the Cook writer with a correction brief from one Press round."""
+        return self._run_writer(curd, {
+            "correction": True,
+            "press_outcome": press.outcome.value,
+            "press_attack_id": press.attack_id,
+            "press_summary": press.summary,
+        })
+
+    def _run_writer(
+        self, curd: SemanticCurd, extra_context: Mapping[str, object] | None
+    ) -> CurdResult:
         try:
             writer = workflow.execute_curd_writer(
                 self.plan, curd, self.indexed[curd.curd_id],
@@ -149,6 +166,7 @@ class _FanAdapters:
                 durable_evidence=self.durable_evidence,
                 shared_inputs=self.shared_inputs, phase="cook",
                 provenance_refs=(), dispatch_writer=self.dispatch_writer,
+                extra_context=extra_context,
             )
         except Exception as error:
             return workflow.blocked_result(
@@ -178,16 +196,18 @@ class _FanAdapters:
         self.persist_result(writer.result)
         return writer.result
 
-    def press(self, scope: RemediationScopeKey, gate_round: int) -> PressGateResult:
-        if self.dispatch_press is None:
-            raise RuntimeError("postmerge Press dispatcher is required")
+    def acceptance_check(
+        self, scope: RemediationScopeKey, gate_round: int
+    ) -> AcceptanceCheckResult:
+        if self.dispatch_acceptance is None:
+            raise RuntimeError("integrated acceptance check runner is required")
         value = attrs.evolve(
-            self.dispatch_press(scope, gate_round),
+            self.dispatch_acceptance(scope, gate_round),
             scope=scope, gate_round=gate_round,
         )
-        self.press_refs.append(_persist_runtime_ref(
-            self.artifacts, self.run_id, f"{scope.scope_id}-press-{gate_round}",
-            "press-result", value,
+        self.acceptance_refs.append(_persist_runtime_ref(
+            self.artifacts, self.run_id, f"{scope.scope_id}-acceptance-{gate_round}",
+            "acceptance-result", value,
         ))
         if scope.scope_kind is RemediationScopeKind.POSTMERGE:
             if not self.latest_postmerge_gate_evidence:
@@ -739,14 +759,14 @@ def _evidence_from_json(value: object) -> EvidenceRef:
     )
 
 
-def _press_result_from_json(value: object) -> PressGateResult:
-    payload = _json_object(value, "persisted Press result must be an object")
+def _acceptance_result_from_json(value: object) -> AcceptanceCheckResult:
+    payload = _json_object(value, "persisted acceptance result must be an object")
     failures_value = payload.get("new_failures", [])
     evidence_value = payload.get("evidence", [])
     if not isinstance(failures_value, list) or not isinstance(evidence_value, list):
-        raise ValueError("persisted Press result fields are invalid")
+        raise ValueError("persisted acceptance result fields are invalid")
     failures = tuple(
-        _json_string(item, "Press failure must be a string")
+        _json_string(item, "Acceptance failure must be a string")
         for item in cast(list[object], failures_value)
     )
     evidence = tuple(
@@ -755,42 +775,42 @@ def _press_result_from_json(value: object) -> PressGateResult:
     scope_value = payload.get("scope")
     scope = None
     if scope_value is not None:
-        scope_payload = _json_object(scope_value, "Press scope must be an object")
+        scope_payload = _json_object(scope_value, "Acceptance scope must be an object")
         plan_payload = _json_object(
-            scope_payload.get("source_plan_ref"), "Press plan must be an object"
+            scope_payload.get("source_plan_ref"), "Acceptance plan must be an object"
         )
         try:
             scope_kind = RemediationScopeKind(
-                _json_string(scope_payload.get("scope_kind"), "Press scope kind must be a string")
+                _json_string(scope_payload.get("scope_kind"), "Acceptance scope kind must be a string")
             )
         except ValueError as error:
-            raise ValueError("Press scope kind is invalid") from error
+            raise ValueError("Acceptance scope kind is invalid") from error
         scope = RemediationScopeKey(
-            run_id=_json_string(scope_payload.get("run_id"), "Press run ID must be a string"),
+            run_id=_json_string(scope_payload.get("run_id"), "Acceptance run ID must be a string"),
             source_plan_ref=SourcePlanRef(
-                plan_id=_json_string(plan_payload.get("plan_id"), "Press plan ID must be a string"),
+                plan_id=_json_string(plan_payload.get("plan_id"), "Acceptance plan ID must be a string"),
                 revision=_json_int(
-                    plan_payload.get("revision"), "Press plan revision must be an integer"
+                    plan_payload.get("revision"), "Acceptance plan revision must be an integer"
                 ),
                 digest=_json_string(
-                    plan_payload.get("digest"), "Press plan digest must be a string"
+                    plan_payload.get("digest"), "Acceptance plan digest must be a string"
                 ),
             ),
             scope_kind=scope_kind,
             scope_id=_json_string(
-                scope_payload.get("scope_id"), "Press scope ID must be a string"
+                scope_payload.get("scope_id"), "Acceptance scope ID must be a string"
             ),
         )
     gate_round = payload.get("gate_round")
     if gate_round is not None:
-        gate_round = _json_int(gate_round, "Press gate round must be an integer")
+        gate_round = _json_int(gate_round, "Acceptance gate round must be an integer")
     passed = payload.get("passed")
     if not isinstance(passed, bool):
-        raise ValueError("Press passed flag must be a boolean")
-    return PressGateResult(
+        raise ValueError("Acceptance passed flag must be a boolean")
+    return AcceptanceCheckResult(
         passed=passed,
         baseline_id=_json_string(
-            payload.get("baseline_id"), "Press baseline ID must be a string"
+            payload.get("baseline_id"), "Acceptance baseline ID must be a string"
         ),
         new_failures=failures,
         evidence=evidence,
@@ -799,16 +819,20 @@ def _press_result_from_json(value: object) -> PressGateResult:
     )
 
 
-def _load_persisted_press_results(
+def _load_persisted_acceptance_results(
     artifact_directory: Path,
     refs: Sequence[ArtifactRef],
-) -> tuple[PressGateResult, ...]:
-    """Load only Press envelopes admitted by the validated checkpoint manifest."""
+) -> tuple[AcceptanceCheckResult, ...]:
+    """Load only acceptance envelopes admitted by the validated checkpoint manifest."""
     if isinstance(refs, (str, bytes)):
         raise TypeError("manifest references must be a sequence of ArtifactRef")
-    values: list[PressGateResult] = []
+    values: list[AcceptanceCheckResult] = []
     for ref in refs:
-        if ref.role != "press-result":
+        if ref.role in LEGACY_PRESS_ROLES:
+            raise ContractValidationError(
+                f"checkpoint artifact {ref.artifact_id} has role {ref.role!r}, which predates the acceptance-check change; this run cannot resume, so start a fresh run"
+            )
+        if ref.role != "acceptance-result":
             continue
         try:
             parsed = urlsplit(ref.uri)
@@ -824,12 +848,12 @@ def _load_persisted_press_results(
             raise ContractValidationError(
                 f"checkpoint artifact digest mismatch: {ref.artifact_id}"
             )
-        values.append(_press_result_from_json(cast(object, json.loads(raw))))
+        values.append(_acceptance_result_from_json(cast(object, json.loads(raw))))
     if any(value.scope is None or value.gate_round is None for value in values):
-        raise ContractValidationError("persisted Press envelope lacks scope identity or gate round")
+        raise ContractValidationError("persisted acceptance envelope lacks scope identity or gate round")
     rounds = [cast(int, value.gate_round) for value in values]
     if len(set(rounds)) != len(rounds) or sorted(rounds) != list(range(1, len(rounds) + 1)):
-        raise ContractValidationError("persisted Press gate rounds are not unique and sequential")
+        raise ContractValidationError("persisted acceptance gate rounds are not unique and sequential")
     return tuple(sorted(values, key=lambda value: cast(int, value.gate_round)))
 
 
@@ -937,7 +961,9 @@ def execute_fan(
     evidence: Mapping[str, EvidenceRef] | None,
     selected: Sequence[str],
     execution_id: str | None = None,
+    dispatch_acceptance: AcceptanceChecker | None = None,
     dispatch_press: PressDispatcher | None = None,
+    non_behavior_curds: Collection[str] = (),
     results: Mapping[str, CurdResult] | None = None,
 ) -> FanExecutionOutcome:
     """Run selected curds while holding the complete fan-run lock."""
@@ -954,7 +980,9 @@ def execute_fan(
             evidence=evidence,
             selected=selected,
             execution_id=execution_id,
+            dispatch_acceptance=dispatch_acceptance,
             dispatch_press=dispatch_press,
+            non_behavior_curds=non_behavior_curds,
             results=results,
         )
 
@@ -970,7 +998,9 @@ def _execute_fan_locked(
     evidence: Mapping[str, EvidenceRef] | None,
     selected: Sequence[str],
     execution_id: str | None = None,
+    dispatch_acceptance: AcceptanceChecker | None = None,
     dispatch_press: PressDispatcher | None = None,
+    non_behavior_curds: Collection[str] = (),
     results: Mapping[str, CurdResult] | None = None,
 ) -> FanExecutionOutcome:
     """Run fan adapters while the caller holds the complete fan-run lock."""
@@ -1000,10 +1030,11 @@ def _execute_fan_locked(
         shared_inputs=shared_inputs, resolved_evidence=resolved_evidence,
         durable_evidence=durable_evidence, run_id=run_id,
         dispatch_writer=dispatch_writer, dispatch_review=dispatch_review,
-        dispatch_diagnosis=dispatch_diagnosis, dispatch_press=dispatch_press,
+        dispatch_diagnosis=dispatch_diagnosis, dispatch_acceptance=dispatch_acceptance,
+        dispatch_press=dispatch_press,
         committed_refs=committed_refs, journal_path=journal_path,
         journal_results=dict(results or {}),
-        press_refs=[ref for ref in committed_refs if ref.role == "press-result"],
+        acceptance_refs=[ref for ref in committed_refs if ref.role == "acceptance-result"],
     )
     adapters.checkpoint_manifest()
     for curd in plan.curds:
@@ -1033,12 +1064,12 @@ def _execute_fan_locked(
                 writer=restored.writer,
                 latest_review=restored.latest_review,
             )
-    persisted_press = _load_persisted_press_results(artifacts, committed_refs)
+    persisted_acceptance = _load_persisted_acceptance_results(artifacts, committed_refs)
     adapters.latest_postmerge_gate_evidence[:] = (
-        persisted_press[0].evidence if persisted_press else ()
+        persisted_acceptance[0].evidence if persisted_acceptance else ()
     )
     adapters.postmerge_gate_evidence[:] = [
-        item for gate in persisted_press for item in gate.evidence
+        item for gate in persisted_acceptance for item in gate.evidence
     ]
 
     context = FanContext(
@@ -1047,12 +1078,17 @@ def _execute_fan_locked(
         cook=adapters.cook,
         age=adapters.age,
         cure=adapters.cure,
-        press=adapters.press if dispatch_press is not None else None,
+        acceptance_check=(
+            adapters.acceptance_check if dispatch_acceptance is not None else None
+        ),
         result_sink=adapters.persist_result,
         checkpoint_sink=adapters.checkpoint_manifest,
+        press=dispatch_press,
+        cook_correction=adapters.correct,
+        press_exempt=frozenset(non_behavior_curds),
     )
     outcome = run_fan_locked(plan, context, selected=selected, results=results)
-    refs: list[ArtifactRef] = list(adapters.press_refs)
+    refs: list[ArtifactRef] = list(adapters.acceptance_refs)
     journal_path = adapters.journal_path
     if journal_path.exists():
         refs.append(_path_ref(journal_path, artifact_id=f"{run_id}/results", role="curd-results"))

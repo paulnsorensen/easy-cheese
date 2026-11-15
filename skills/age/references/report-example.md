@@ -7,6 +7,8 @@ Read this with `SKILL.md § Output` for a concrete report skeleton.
 Write the body in this order.
 Start with `# Age Report — <slug>`.
 Add `## Orientation` with 1-2 sentences.
+Then add `## Change inventory` with factual changes and unresolved scope questions before findings.
+Cite requirements, user decisions, or demonstrated technical constraints for necessity.
 Add `## Press findings` only when a press report exists.
 Add `## Wiki context` only when hallouminate grounding returns a hit.
 Add `## Agent resolution` after the severity sections.
@@ -75,7 +77,7 @@ When ten or more `low` findings exist, collapse the `## Low` section to one line
 <`certain` | `speculating` | `don't know`> — <one-line justification including which evidence sources were unavailable>
 
 ## Next step
-<when press was skipped, lead with>: Hardening was skipped for this diff — run `/press <slug>` before curing, or continue reviewing as-is.
+<when press was skipped, lead with>: Hardening was skipped for this diff — re-run `/cook` or `/press <slug>`, or continue reviewing as-is.
 Auto-fixing the recommended set via `/cure` (or the selection prompt on a reason to ask / `--safe`).
 ```
 
@@ -98,6 +100,11 @@ press: skipped
 # Age Report — <slug>
 ## Orientation
 <one or two factual sentences about what the diff does>
+
+## Change inventory
+<list factual changes by category with citations to requirements, user decisions, or demonstrated technical constraints.
+Distinguish documented intent, inference, and unresolved scope questions.>
+
 ## Press findings
 <omit this section when `.cheese/press/<slug>.md` does not exist.
 When that report exists, copy each unresolved press item into one or two bullets.
@@ -140,7 +147,7 @@ A sub-agent adds `verifier: skipped (sub-agent)` on its own line.
 <one bullet per escalated claim that the verifier could not settle, with the missing evidence>
 
 ## Next step
-<when press was skipped, lead with>: Hardening was skipped for this diff. Run `/press <slug>` before curing, or continue the review.
+<when press was skipped, lead with>: Hardening was skipped for this diff. Re-run `/cook` or `/press <slug>`, or continue the review.
 <when the plan has a non-null `degraded_reason`, or verification is recorded as unavailable or skipped>:
 State that recorded reason and its effect on coverage.
 Do not infer degradation from the surface score.

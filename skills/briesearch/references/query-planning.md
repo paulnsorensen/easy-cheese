@@ -11,7 +11,7 @@ PLAN
 - Fact: <single fact to verify>
 - Fresh as of: <absolute date or window>
 - Authority: <preferred primary source type>
-- Done when: <authoritative current source answers it; independent check if stakes require>
+- Done when: <authoritative current source answers it; independent check if stakes require; or the remaining uncertainty requires execution rather than more sources>
 ```
 
 Examples include the latest stable release, current maintainer, active support status, or a present vendor policy. Route only the capabilities needed to verify that fact.
@@ -24,14 +24,14 @@ Use the full plan for a multi-part question, a comparison, a best-practice quest
 2. **Extract constraints.** Use dates, versions, repository scope, languages, geographies, and deal-breakers as routing inputs.
 3. **Clarify only if it changes the capability plan.** Ask at most one question.
 4. **Decompose the question into 2-5 focused subqueries.** One coherent source set must answer each subquery.
-5. **Name stop criteria.** Define the evidence that makes the research complete.
+5. **Name stop criteria.** Define the evidence that makes the research complete. Stop when the remaining uncertainty requires execution rather than more sources. Report that remainder as a local check.
 
 ```text
 PLAN
 - Decision: <what the user does next>
 - Constraints: <versions, dates, scope, language>
 - Subqueries: 1) <q1>  2) <q2>  3) <q3>
-- Done when: <concrete evidence signal>
+- Done when: <concrete evidence signal, or the remaining uncertainty requires execution rather than more sources>
 - Source priority: <vendor docs > repository knowledge > local code > examples>
 ```
 

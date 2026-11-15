@@ -101,7 +101,7 @@ See `../hard-cheese/references/composition.md`.
 
 ## Handoff
 
-**Pipeline:** culture → **[mold]** → cook → press → age → cure → plate
+**Pipeline:** culture → **[mold]** → cook (⇄ press) → age → cure → plate
 
 After Curdle's phase two finishes, run [`python3 skills/mold/scripts/mold.pyz curd-count`](references/curd-count.md) for the blast-radius digest. A draft offers no Cook command. On explicit Cook selection, retain the selected spec path for standalone work. Bound curd work dispatches the printed finalize command, `/cook --auto --result <result-path>`; the result carries `request_id`, `spec_ref`, `planner_result_ref`, `plan_ref`, and exact `coverage`. Prompt through the shared handoff gate ([policy](../cheese/references/handoff-gate.md)); never pre-select. Keep applicability, contract, and taste review metadata unchanged. Append `--hard` when the user passed it.
 
@@ -110,7 +110,7 @@ The digest's `mode` is orientation, not a skill or Cook gate. Render the fixed b
 ## Rules
 
 - Dialogue first; artifacts are the by-product.
-- **Tiered lettered options.** Consequential forks use `A/B/C/D` choices via the question transport at `../cheese/references/ask-user-question.md`. Never decide them silently. Everything below the leverage line is `[AGENT-DECIDED]` by default: make the call, log a one-line vetoable alternative in the ledger, and do not ask. A fork is valid only after its depth was contributed in-dialogue first. Precede every structured question with visible prose that weighs the fork and the evidence. Keep one open picker.
+- **Tiered lettered options.** Consequential forks use `A/B/C/D` choices via the question transport at `../cheese/references/ask-user-question.md`. Never decide them silently. Everything below the leverage line is `[AGENT-DECIDED]` by default: make the call, log a one-line vetoable alternative in the ledger, and do not ask. A fork is valid only after its depth was contributed in-dialogue first. Precede every structured question with visible prose that weighs the fork and the evidence. Keep one open picker in conversation. In the optional review canvas, independent, already-explained fork cards may share one batch; dependent forks wait for agent reconciliation.
 - **Fork cards.** Before each consequential question, show a fork card: what it decides, what it moves, and each branch as a symbol table or plain-text graph. Offer `Explain more` as a choice; an unclear reply re-renders the same fork with more context ([fork-questions](references/fork-questions.md)).
 - **Altitude tag.** Every `Asking` fork names the acceptance criterion, public seam, or non-goal it moves. A fork that moves none, or that sits below the leverage line, is `[AGENT-DECIDED]` or a follow-up candidate, never a user question.
 - **Decision ledger.** Each round prints `Goal / Decided / Asking / [AGENT-DECIDED]`, the goal verbatim. Curdle persists consequential decisions to [ADRs](references/adr.md) and minor ones to the spec. The taste verdict names every settled consequential entry exactly once.

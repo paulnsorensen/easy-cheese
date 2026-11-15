@@ -301,7 +301,6 @@ def set_post_review(
     reviewed_tree_oid: str,
     diff_hash: str,
     scope: list[str],
-    press_slug: str | None = None,
     age_slug: str | None = None,
     cure_slug: str | None = None,
     findings_applied: int | None = None,
@@ -321,8 +320,6 @@ def set_post_review(
         Review context diff hash.
     scope
         Review context scope paths (repeatable).
-    press_slug
-        Slug of the /press artifact for this review, if any.
     age_slug
         Slug of the /age artifact for this review, if any.
     cure_slug
@@ -350,8 +347,6 @@ def set_post_review(
         existing_dict = cast("dict[str, object]", existing) if isinstance(existing, dict) else {}
         post_review = dict(existing_dict)
         post_review["review_context"] = {**context, "scope": list(scope)}
-        if press_slug is not None:
-            post_review["press_slug"] = press_slug
         if age_slug is not None:
             post_review["age_slug"] = age_slug
         if cure_slug is not None:

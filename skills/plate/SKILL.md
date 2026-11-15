@@ -57,6 +57,7 @@ New-PR work loads its references in this sequence. Load each reference alone. Cl
 2. Load `references/ordinary-pr.md` for the `single` or `orthogonal_flat` shape. Load `references/stacks.md` for a stacked shape.
 3. Load exactly one provider reference from `references/stacks.md` for a stacked shape.
    The provider references are [`gt.md`](references/gt.md), [`git-town.md`](references/git-town.md), and [`gh-stack.md`](references/gh-stack.md).
+   When no provider is usable, `references/stacks.md` routes to [`setup.md`](references/setup.md).
 
 When an existing pull request uses a stack, load `references/stacks.md`. Do not use a bare single-branch push.
 
@@ -110,6 +111,7 @@ Commit-only work and ordinary PR work use this transaction. Stacked work uses th
    Do not bypass hooks.
 6. **Verify** — Inspect the status and the committed file set.
 7. **Publish when requested** — Follow [`references/ordinary-pr.md`](references/ordinary-pr.md). Read the PR after publication. Verify it.
+   Draw any PR diagram by [`diagrams.md`](../cheese/references/diagrams.md) from [`diagram-templates.md`](../cheese/references/diagram-templates.md).
 
 Commit-only mode stops after verification. It does not push or open a PR.
 

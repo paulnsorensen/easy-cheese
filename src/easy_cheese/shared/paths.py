@@ -59,7 +59,8 @@ XDG_PHASES: frozenset[str] = frozenset({"specs", "research"})
 # the working directory so artifacts live with the branch being worked on.
 REPO_LOCAL_ROOT = Path(".cheese")
 
-# Phases of the cook → press → age → cure pipeline chain.
+# Phases of the cook → age → cure pipeline chain. `press` stays listed because
+# a manual `/press <slug>` run still writes and resumes its own artifact.
 CHAIN_PHASES: tuple[str, ...] = ("cook", "press", "age", "cure")
 
 # Phase token -> on-disk directory name, when the two diverge. The phase TOKEN

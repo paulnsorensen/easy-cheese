@@ -256,8 +256,6 @@ class TestSetPostReview:
             "sha256:" + "C" * 64,
             "--scope",
             "src",
-            "--press-slug",
-            ".cheese/press/feature.md",
             "--age-slug",
             ".cheese/age/feature.md",
             "--cure-slug",
@@ -278,7 +276,6 @@ class TestSetPostReview:
         assert data["current_review"] == context
         assert data["post_review"] == {
             "review_context": context,
-            "press_slug": ".cheese/press/feature.md",
             "age_slug": ".cheese/age/feature.md",
             "cure_slug": ".cheese/cure/feature.md",
             "findings_applied": 2,

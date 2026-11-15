@@ -39,10 +39,15 @@ from types import ModuleType
 from typing import TYPE_CHECKING, Protocol, TypedDict, cast
 
 from easy_cheese.shared.document_rules import DOCUMENT_RULES
-from easy_cheese.shared.frontmatter_lists import frontmatter_string_list
+from easy_cheese.shared.frontmatter_lists import (
+    frontmatter_mapping_list,
+    frontmatter_string_list,
+    strip_flow_comment,
+)
 
 if TYPE_CHECKING:
     from easy_cheese_schemas.contracts import (
+        AcceptanceDemonstration,
         GroundingOutcome,
         GroundingProbe,
         GroundingRow,
@@ -76,6 +81,8 @@ class _SpecFormatModule(Protocol):
 
 
 class _SchemaModule(Protocol):
+    ACCEPTANCE_DEMONSTRATION_SECTION: str
+    AcceptanceDemonstration: type[AcceptanceDemonstration]
     GroundingOutcome: type[GroundingOutcome]
     GroundingProbe: type[GroundingProbe]
     GroundingRow: type[GroundingRow]
@@ -190,6 +197,8 @@ def _rule_id(rule_id: str) -> str:
     return rule_id
 
 
+DEMONSTRATION_RULE = _rule_id("acceptance-demonstration-complete")
+NA_LINE_RE = re.compile(r"^n/a:(.*)$", re.IGNORECASE)
 AC_COVERAGE_RULE = _rule_id("ac-coverage-exactly-once")
 TRACER_ROW_RULE = _rule_id("tracer-row-blank-matrix-cells")
 CONTRACT_MATRIX_ROW_RULE = _rule_id("contract-matrix-row-requires-both")
@@ -230,6 +239,8 @@ def _split_frontmatter(text: str) -> tuple[dict[str, object], str]:
 
 def _frontmatter_scalar(value: str) -> object:
     value = value.strip()
+    if value.startswith(("[", "{")):
+        value = strip_flow_comment(value)
     if value in {"{}", "[]"}:
         return {} if value == "{}" else []
     if value.lower() in {"true", "false"}:
@@ -440,6 +451,14 @@ def _schema_module() -> _SchemaModule:
     return cast(_SchemaModule, cast(object, module))
 
 
+DEMONSTRATION_SECTION = _schema_module().ACCEPTANCE_DEMONSTRATION_SECTION
+_DEMONSTRATION_TABLE = next(
+    s for s in SECTIONS if s["name"] == DEMONSTRATION_SECTION
+)["table"]
+if _DEMONSTRATION_TABLE is None:
+    raise RuntimeError(f"{DEMONSTRATION_SECTION} must declare a table rule")
+DEMONSTRATION_COLUMNS: tuple[str, ...] = tuple(_DEMONSTRATION_TABLE["columns"])
+
 def _matrix_rows(value: str) -> tuple[str, ...]:
     return tuple(
         row.strip()
@@ -451,6 +470,8 @@ def _matrix_rows(value: str) -> tuple[str, ...]:
 def _typed_errors(message: str, path: Path) -> tuple[str, ...]:
     if "Test Contracts table must cover" in message:
         return (f"ERROR: {AC_COVERAGE_RULE} {message} in {path}",)
+    if DEMONSTRATION_SECTION in message:
+        return (f"ERROR: {DEMONSTRATION_RULE} {message} in {path}",)
     if "tracer mode" in message:
         return (f"ERROR: {TRACER_ROW_RULE} {message} in {path}",)
     if "contract-matrix mode" in message:
@@ -593,6 +614,71 @@ def _typed_grounding_rows(
     return typed, had_error
 
 
+def _typed_demonstration(
+    schema: _SchemaModule,
+    lines: list[str],
+    path: Path,
+    errors: list[str],
+) -> tuple[AcceptanceDemonstration | None, bool]:
+    """Parse the demonstration section into its typed form.
+
+    Returns the typed value (None when the section is unparseable) and whether
+    an error was recorded.
+    """
+    body = [line.strip() for line in lines if line.strip()]
+    prefix = f"ERROR: {DEMONSTRATION_RULE} "
+    if body and not any(line.startswith("|") for line in body):
+        match = NA_LINE_RE.match(body[0]) if len(body) == 1 else None
+        if match is None:
+            errors.append(
+                prefix
+                + f"{DEMONSTRATION_SECTION} must be a Field/Value table or one "
+                + f"'n/a: <reason>' line in {path}"
+            )
+            return None, True
+        reason = match.group(1).strip()
+        if not reason:
+            errors.append(
+                prefix + f"{DEMONSTRATION_SECTION} n/a reason is empty in {path}"
+            )
+            return None, True
+        return schema.AcceptanceDemonstration(na_reason=reason), False
+    if any(NA_LINE_RE.match(line) for line in body):
+        errors.append(
+            prefix
+            + f"{DEMONSTRATION_SECTION} is either a field table or an n/a line, "
+            + f"not both in {path}"
+        )
+        return None, True
+    errors_before = len(errors)
+    rows = _declared_table_rows(
+        lines,
+        DEMONSTRATION_COLUMNS,
+        DEMONSTRATION_SECTION,
+        DEMONSTRATION_RULE,
+        path,
+        errors,
+    )
+    if len(errors) > errors_before:
+        return None, True
+    names = [row[0] for row in rows]
+    duplicated = sorted({name for name in names if names.count(name) > 1})
+    if duplicated:
+        errors.append(
+            prefix
+            + f"{DEMONSTRATION_SECTION} repeats fields {duplicated} in {path}"
+        )
+        return None, True
+    try:
+        return (
+            schema.AcceptanceDemonstration(fields={row[0]: row[1] for row in rows}),
+            False,
+        )
+    except (TypeError, ValueError) as error:
+        errors.extend(_typed_errors(str(error), path))
+        return None, True
+
+
 def _validate_typed_document(
     frontmatter: Mapping[str, object],
     policy: _SpecFormatPolicy,
@@ -600,6 +686,7 @@ def _validate_typed_document(
     test_rows: list[list[str]],
     grounding_rows: list[list[str]],
     grounding_present: bool,
+    demonstration_lines: list[str] | None,
     path: Path,
     errors: list[str],
 ) -> None:
@@ -622,7 +709,13 @@ def _validate_typed_document(
             )
             for probe in schema.GroundingProbe
         ]
-    if contract_errors or grounding_errors:
+    demonstration: AcceptanceDemonstration | None = None
+    demonstration_failed = False
+    if demonstration_lines is not None:
+        demonstration, demonstration_failed = _typed_demonstration(
+            schema, demonstration_lines, path, errors
+        )
+    if contract_errors or grounding_errors or demonstration_failed:
         return
     try:
         _ = schema.MoldSpecDocument(
@@ -630,6 +723,7 @@ def _validate_typed_document(
             acceptance_ids=tuple(acceptance_ids),
             test_contract_rows=tuple(typed_contracts),
             grounding_rows=tuple(typed_grounding),
+            acceptance_demonstration=demonstration,
         )
     except (TypeError, ValueError) as error:
         errors.extend(_typed_errors(str(error), path))
@@ -650,6 +744,16 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
         except ValueError as error:
             errors.append(f"ERROR: {error} in {path}")
             frontmatter["execution_holds"] = ()
+    if "entity_referent_bindings" in frontmatter:
+        # The subset YAML reader drops block lists and rejects unquoted flow
+        # keys; read the binding records with the reader taste-test shares.
+        try:
+            frontmatter["entity_referent_bindings"] = frontmatter_mapping_list(
+                text, "entity_referent_bindings"
+            )
+        except ValueError as error:
+            errors.append(f"ERROR: {error} in {path}")
+            frontmatter["entity_referent_bindings"] = ()
     policy = spec_format_policy(frontmatter, strict=strict)
     found_sections, duplicate_headings = _find_sections(body)
     source = frontmatter.get("source")
@@ -678,6 +782,12 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
     for name, default_required in section_requirements:
         required = policy.requires_section(name, default_required=default_required)
         if required and _canonical_heading(name) not in found_sections:
+            if name == DEMONSTRATION_SECTION:
+                errors.append(
+                    f"ERROR: {DEMONSTRATION_RULE} missing-required-section "
+                    + f"'{name}' section not found in {path}"
+                )
+                continue
             errors.append(
                 f"ERROR: missing-required-section '{name}' section not "
                 + f"found in {path}"
@@ -728,6 +838,7 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
         test_rows,
         grounding_rows,
         grounding_lines is not None,
+        found_sections.get(_canonical_heading(DEMONSTRATION_SECTION)),
         path,
         errors,
     )

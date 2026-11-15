@@ -1,0 +1,667 @@
+{
+  "skill_name": "mold",
+  "evals": [
+    {
+      "id": 0,
+      "name": "al-kep-credential-plugin",
+      "family": "alt-runtime",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/al-kep-credential-plugin/problem.md holds the problem, its actors, the announced tier (`tier: full`), and the user's recorded fork decisions. Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write the spec from the recorded decisions. Nobody answers a question in this run. Stop at the readiness check, and do not run Curdle or Cook. Write the draft spec to answer/spec.md and the readiness message to answer/answer.md.",
+      "expected_output": "a draft spec whose Problem states that operators wait for agent releases and that maintainers carry vendor code; that reflects D-1 (an external executable behind a versioned message over standard input and output) and D-2 (a cache duration that the agent caches) as user decisions, with the user's reason for each rejected option; that keeps the removal of the built-in vendor code open with an `execution_holds` entry; that gives its depth to the message version contract and the cache rules; that opens Approach with a C4 Container view of the node agent, the credential executable, and the registry; and that marks each non-goal that the fixture does not state as `[AGENT-INTRODUCED]`, with a scope audit row",
+      "files": [
+        "evals/files/al-kep-credential-plugin/problem.md"
+      ],
+      "assertions": [
+        "[R-ALT-ACTOR | pass-fail | Ubiquitous] THE Problem section SHALL state what is broken or missing today and who feels it.",
+        "[R-ALT-GOAL | pass-fail | Ubiquitous] THE spec SHALL state one goal that the problem in the fixture supports.",
+        "[R-ALT-SEAMS | pass-fail | Ubiquitous] THE Interface sketches section SHALL hold no code body, helper signature, or internal pseudocode beyond the Placement block with one public signature for each new or changed export.",
+        "[R-ALT-CRUX | pass-fail | Ubiquitous] THE spec SHALL give its depth to the consequential decisions, their edge cases, and their seams.",
+        "[R-ALT-ROUTINE | pass-fail | Ubiquitous] THE spec SHALL give each routine part one line or one `[AGENT-DECIDED]` entry.",
+        "[R-ALT-DECIDE | pass-fail | Event] WHEN the spec records a material choice THE spec SHALL give a reason for each rejected option.",
+        "[R-ALT-HOLD-USER | critical | Event] WHEN the fixture records a user decision THE spec SHALL record that choice as the user's decision.",
+        "[R-ALT-HOLD-OPEN | critical | Event] WHEN the fixture leaves a consequential fork open THE spec SHALL keep that fork open with a `[TBD]`, `[?]`, or `[BLOCKED]` marker and an `execution_holds` entry.",
+        "[R-ALT-SCOPE | pass-fail | Ubiquitous] THE spec SHALL trace each non-goal to a statement in the fixture, or mark it `[AGENT-INTRODUCED]` with a `non-goal` row in the scope audit table.",
+        "[R-ALT-READY | pass-fail | Unwanted] IF an execution hold or a scope audit row stays unresolved THE readiness message SHALL not call the draft ready.",
+        "[R-ALT-DIAGRAM | pass-fail | Ubiquitous] THE Approach section SHALL open with the one diagram whose view the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-ALT-C4-FLOWCHART | pass-fail | Optional] WHERE the spec draws a static C4 view THE spec SHALL draw it as a Mermaid `flowchart`, not `C4Context`.",
+        "[R-ALT-LIMIT | pass-fail | Ubiquitous] THE spec SHALL hold at most two diagrams after the opening diagram."
+      ]
+    },
+    {
+      "id": 1,
+      "name": "al-kep-credential-plugin-pick",
+      "family": "alt-runtime",
+      "prompt": "Use the mold skill. evals/files/al-kep-credential-plugin-pick/drafts.md holds three spec drafts of one design, labeled X, Y, and Z. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Judge the altitude of each draft against the Mold rules. Write one line per label to answer/answer.md in the form 'X: too-low | right | too-high: <reason with a quoted span>'. Choose one verdict for each label.",
+      "expected_output": "X: too-high, Y: right, Z: too-low",
+      "files": [
+        "evals/files/al-kep-credential-plugin-pick/drafts.md"
+      ],
+      "assertions": [
+        "[R-ALT-PICK | critical | Ubiquitous] THE answer SHALL give each label the verdict that `expected_output` names.",
+        "[R-ALT-PICK-QUOTE | pass-fail | Ubiquitous] THE answer SHALL quote a span of the draft on each verdict line.",
+        "[R-ALT-PICK-WHY | pass-fail | Ubiquitous] THE answer SHALL quote for each verdict a span that supports it: a strength for `right`, and the defect for `too-low` or `too-high`."
+      ]
+    },
+    {
+      "id": 2,
+      "name": "al-rfc-dyn-trait",
+      "family": "alt-language",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/al-rfc-dyn-trait/problem.md holds the problem, its actors, the announced tier (`tier: full`), and the user's recorded fork decisions. Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write the spec from the recorded decisions. Nobody answers a question in this run. Stop at the readiness check, and do not run Curdle or Cook. Write the draft spec to answer/spec.md and the readiness message to answer/answer.md.",
+      "expected_output": "a draft spec whose Problem states that learners confuse a trait object with a concrete type, that reviewers cannot see the cost of dynamic dispatch, and that the bare form blocks the language team; that reflects D-1 (a prefix keyword, with the object-like word, the other-language keyword, and the wrapper type rejected for the user's reasons) and D-2 (a lint first, an error at the next edition) as user decisions; that keeps the default of the lint open with an `execution_holds` entry; that gives its depth to the lint-then-edition migration; that opens Approach with a state or flow diagram of the migration and no C4 view; and that marks each non-goal that the fixture does not state as `[AGENT-INTRODUCED]`, with a scope audit row",
+      "files": [
+        "evals/files/al-rfc-dyn-trait/problem.md"
+      ],
+      "assertions": [
+        "[R-ALT-ACTOR | pass-fail | Ubiquitous] THE Problem section SHALL state what is broken or missing today and who feels it.",
+        "[R-ALT-GOAL | pass-fail | Ubiquitous] THE spec SHALL state one goal that the problem in the fixture supports.",
+        "[R-ALT-SEAMS | pass-fail | Ubiquitous] THE Interface sketches section SHALL hold no code body, helper signature, or internal pseudocode beyond the Placement block with one public signature for each new or changed export.",
+        "[R-ALT-CRUX | pass-fail | Ubiquitous] THE spec SHALL give its depth to the consequential decisions, their edge cases, and their seams.",
+        "[R-ALT-ROUTINE | pass-fail | Ubiquitous] THE spec SHALL give each routine part one line or one `[AGENT-DECIDED]` entry.",
+        "[R-ALT-DECIDE | pass-fail | Event] WHEN the spec records a material choice THE spec SHALL give a reason for each rejected option.",
+        "[R-ALT-HOLD-USER | critical | Event] WHEN the fixture records a user decision THE spec SHALL record that choice as the user's decision.",
+        "[R-ALT-HOLD-OPEN | critical | Event] WHEN the fixture leaves a consequential fork open THE spec SHALL keep that fork open with a `[TBD]`, `[?]`, or `[BLOCKED]` marker and an `execution_holds` entry.",
+        "[R-ALT-SCOPE | pass-fail | Ubiquitous] THE spec SHALL trace each non-goal to a statement in the fixture, or mark it `[AGENT-INTRODUCED]` with a `non-goal` row in the scope audit table.",
+        "[R-ALT-READY | pass-fail | Unwanted] IF an execution hold or a scope audit row stays unresolved THE readiness message SHALL not call the draft ready.",
+        "[R-ALT-DIAGRAM | pass-fail | Ubiquitous] THE Approach section SHALL open with the one diagram whose view the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-ALT-C4-FLOWCHART | pass-fail | Optional] WHERE the spec draws a static C4 view THE spec SHALL draw it as a Mermaid `flowchart`, not `C4Context`.",
+        "[R-ALT-LIMIT | pass-fail | Ubiquitous] THE spec SHALL hold at most two diagrams after the opening diagram."
+      ]
+    },
+    {
+      "id": 3,
+      "name": "al-rfc-dyn-trait-pick",
+      "family": "alt-language",
+      "prompt": "Use the mold skill. evals/files/al-rfc-dyn-trait-pick/drafts.md holds three spec drafts of one design, labeled X, Y, and Z. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Judge the altitude of each draft against the Mold rules. Write one line per label to answer/answer.md in the form 'X: too-low | right | too-high: <reason with a quoted span>'. Choose one verdict for each label.",
+      "expected_output": "X: too-low, Y: too-high, Z: right",
+      "files": [
+        "evals/files/al-rfc-dyn-trait-pick/drafts.md"
+      ],
+      "assertions": [
+        "[R-ALT-PICK | critical | Ubiquitous] THE answer SHALL give each label the verdict that `expected_output` names.",
+        "[R-ALT-PICK-QUOTE | pass-fail | Ubiquitous] THE answer SHALL quote a span of the draft on each verdict line.",
+        "[R-ALT-PICK-WHY | pass-fail | Ubiquitous] THE answer SHALL quote for each verdict a span that supports it: a strength for `right`, and the defect for `too-low` or `too-high`."
+      ]
+    },
+    {
+      "id": 4,
+      "name": "al-pep-dataclasses",
+      "family": "alt-language",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/al-pep-dataclasses/problem.md holds the problem, its actors, the announced tier (`tier: full`), and the user's recorded fork decisions. Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write the spec from the recorded decisions. Nobody answers a question in this run. Stop at the readiness check, and do not run Curdle or Cook. Write the draft spec to answer/spec.md and the readiness message to answer/answer.md.",
+      "expected_output": "a draft spec whose Problem states that developers repeat the same methods and that type checkers need the fields with no plugin; that reflects D-1 (a class decorator, with the tuple-based factory and a default restricted layout rejected for the user's reasons) as the user's decision; that keeps ordering by default open with an `execution_holds` entry; that gives its depth to default values and field inheritance; that opens Approach with a flow or sequence diagram and no C4 view; and that marks each non-goal that the fixture does not state as `[AGENT-INTRODUCED]`, with a scope audit row",
+      "files": [
+        "evals/files/al-pep-dataclasses/problem.md"
+      ],
+      "assertions": [
+        "[R-ALT-ACTOR | pass-fail | Ubiquitous] THE Problem section SHALL state what is broken or missing today and who feels it.",
+        "[R-ALT-GOAL | pass-fail | Ubiquitous] THE spec SHALL state one goal that the problem in the fixture supports.",
+        "[R-ALT-SEAMS | pass-fail | Ubiquitous] THE Interface sketches section SHALL hold no code body, helper signature, or internal pseudocode beyond the Placement block with one public signature for each new or changed export.",
+        "[R-ALT-CRUX | pass-fail | Ubiquitous] THE spec SHALL give its depth to the consequential decisions, their edge cases, and their seams.",
+        "[R-ALT-ROUTINE | pass-fail | Ubiquitous] THE spec SHALL give each routine part one line or one `[AGENT-DECIDED]` entry.",
+        "[R-ALT-DECIDE | pass-fail | Event] WHEN the spec records a material choice THE spec SHALL give a reason for each rejected option.",
+        "[R-ALT-HOLD-USER | critical | Event] WHEN the fixture records a user decision THE spec SHALL record that choice as the user's decision.",
+        "[R-ALT-HOLD-OPEN | critical | Event] WHEN the fixture leaves a consequential fork open THE spec SHALL keep that fork open with a `[TBD]`, `[?]`, or `[BLOCKED]` marker and an `execution_holds` entry.",
+        "[R-ALT-SCOPE | pass-fail | Ubiquitous] THE spec SHALL trace each non-goal to a statement in the fixture, or mark it `[AGENT-INTRODUCED]` with a `non-goal` row in the scope audit table.",
+        "[R-ALT-READY | pass-fail | Unwanted] IF an execution hold or a scope audit row stays unresolved THE readiness message SHALL not call the draft ready.",
+        "[R-ALT-DIAGRAM | pass-fail | Ubiquitous] THE Approach section SHALL open with the one diagram whose view the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-ALT-C4-FLOWCHART | pass-fail | Optional] WHERE the spec draws a static C4 view THE spec SHALL draw it as a Mermaid `flowchart`, not `C4Context`.",
+        "[R-ALT-LIMIT | pass-fail | Ubiquitous] THE spec SHALL hold at most two diagrams after the opening diagram."
+      ]
+    },
+    {
+      "id": 5,
+      "name": "al-pep-dataclasses-pick",
+      "family": "alt-language",
+      "prompt": "Use the mold skill. evals/files/al-pep-dataclasses-pick/drafts.md holds three spec drafts of one design, labeled X, Y, and Z. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Judge the altitude of each draft against the Mold rules. Write one line per label to answer/answer.md in the form 'X: too-low | right | too-high: <reason with a quoted span>'. Choose one verdict for each label.",
+      "expected_output": "X: right, Y: too-low, Z: too-high",
+      "files": [
+        "evals/files/al-pep-dataclasses-pick/drafts.md"
+      ],
+      "assertions": [
+        "[R-ALT-PICK | critical | Ubiquitous] THE answer SHALL give each label the verdict that `expected_output` names.",
+        "[R-ALT-PICK-QUOTE | pass-fail | Ubiquitous] THE answer SHALL quote a span of the draft on each verdict line.",
+        "[R-ALT-PICK-WHY | pass-fail | Ubiquitous] THE answer SHALL quote for each verdict a span that supports it: a strength for `right`, and the defect for `too-low` or `too-high`."
+      ]
+    },
+    {
+      "id": 6,
+      "name": "al-oxide-control-plane-db",
+      "family": "alt-rack",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/al-oxide-control-plane-db/problem.md holds the problem, its actors, the announced tier (`tier: full`), and the user's recorded fork decisions. Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write the spec from the recorded decisions. Nobody answers a question in this run. Stop at the readiness check, and do not run Curdle or Cook. Write the draft spec to answer/spec.md and the readiness message to answer/answer.md.",
+      "expected_output": "a draft spec whose Problem states that the control plane needs a relational, consistent store that survives a machine loss and that customers feel any outage; that reflects D-1 (a distributed SQL store, with the single-writer replicated store and the key-value store rejected for the user's reasons, and the maturity risk accepted with the platform lead as the fault-test owner) as the user's decision; that keeps the license check open with an `execution_holds` entry and does not claim that the license allows shipping; that opens Approach with a C4 Container view that shows the new data store; and that marks each non-goal that the fixture does not state as `[AGENT-INTRODUCED]`, with a scope audit row",
+      "files": [
+        "evals/files/al-oxide-control-plane-db/problem.md"
+      ],
+      "assertions": [
+        "[R-ALT-ACTOR | pass-fail | Ubiquitous] THE Problem section SHALL state what is broken or missing today and who feels it.",
+        "[R-ALT-GOAL | pass-fail | Ubiquitous] THE spec SHALL state one goal that the problem in the fixture supports.",
+        "[R-ALT-SEAMS | pass-fail | Ubiquitous] THE Interface sketches section SHALL hold no code body, helper signature, or internal pseudocode beyond the Placement block with one public signature for each new or changed export.",
+        "[R-ALT-CRUX | pass-fail | Ubiquitous] THE spec SHALL give its depth to the consequential decisions, their edge cases, and their seams.",
+        "[R-ALT-ROUTINE | pass-fail | Ubiquitous] THE spec SHALL give each routine part one line or one `[AGENT-DECIDED]` entry.",
+        "[R-ALT-DECIDE | pass-fail | Event] WHEN the spec records a material choice THE spec SHALL give a reason for each rejected option.",
+        "[R-ALT-HOLD-USER | critical | Event] WHEN the fixture records a user decision THE spec SHALL record that choice as the user's decision.",
+        "[R-ALT-HOLD-OPEN | critical | Event] WHEN the fixture leaves a consequential fork open THE spec SHALL keep that fork open with a `[TBD]`, `[?]`, or `[BLOCKED]` marker and an `execution_holds` entry.",
+        "[R-ALT-SCOPE | pass-fail | Ubiquitous] THE spec SHALL trace each non-goal to a statement in the fixture, or mark it `[AGENT-INTRODUCED]` with a `non-goal` row in the scope audit table.",
+        "[R-ALT-READY | pass-fail | Unwanted] IF an execution hold or a scope audit row stays unresolved THE readiness message SHALL not call the draft ready.",
+        "[R-ALT-DIAGRAM | pass-fail | Ubiquitous] THE Approach section SHALL open with the one diagram whose view the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-ALT-C4-FLOWCHART | pass-fail | Optional] WHERE the spec draws a static C4 view THE spec SHALL draw it as a Mermaid `flowchart`, not `C4Context`.",
+        "[R-ALT-LIMIT | pass-fail | Ubiquitous] THE spec SHALL hold at most two diagrams after the opening diagram."
+      ]
+    },
+    {
+      "id": 7,
+      "name": "al-oxide-control-plane-db-pick",
+      "family": "alt-rack",
+      "prompt": "Use the mold skill. evals/files/al-oxide-control-plane-db-pick/drafts.md holds three spec drafts of one design, labeled X, Y, and Z. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Judge the altitude of each draft against the Mold rules. Write one line per label to answer/answer.md in the form 'X: too-low | right | too-high: <reason with a quoted span>'. Choose one verdict for each label.",
+      "expected_output": "X: too-high, Y: too-low, Z: right",
+      "files": [
+        "evals/files/al-oxide-control-plane-db-pick/drafts.md"
+      ],
+      "assertions": [
+        "[R-ALT-PICK | critical | Ubiquitous] THE answer SHALL give each label the verdict that `expected_output` names.",
+        "[R-ALT-PICK-QUOTE | pass-fail | Ubiquitous] THE answer SHALL quote a span of the draft on each verdict line.",
+        "[R-ALT-PICK-WHY | pass-fail | Ubiquitous] THE answer SHALL quote for each verdict a span that supports it: a strength for `right`, and the defect for `too-low` or `too-high`."
+      ]
+    },
+    {
+      "id": 8,
+      "name": "al-oxide-bootstrap-network",
+      "family": "alt-rack",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/al-oxide-bootstrap-network/problem.md holds the problem, its actors, the announced tier (`tier: full`), and the user's recorded fork decisions. Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write the spec from the recorded decisions. Nobody answers a question in this run. Stop at the readiness check, and do not run Curdle or Cook. Write the draft spec to answer/spec.md and the readiness message to answer/answer.md.",
+      "expected_output": "a draft spec whose Problem states that an installer must bring up a rack with no address server and that one broadcast fault can reach every sled; that reflects D-1 (routed links, with the shared domain and the hybrid rejected for the user's reasons) and D-2 (slot-derived addresses, with peer discovery kept separate) as user decisions; that keeps the wrong-slot behavior open with an `execution_holds` entry; that gives its depth to the slot-to-address rule; that opens Approach with either a C4 Deployment view of the switches and the sleds or a flow of the routed links; and that marks each non-goal that the fixture does not state as `[AGENT-INTRODUCED]`, with a scope audit row",
+      "files": [
+        "evals/files/al-oxide-bootstrap-network/problem.md"
+      ],
+      "assertions": [
+        "[R-ALT-ACTOR | pass-fail | Ubiquitous] THE Problem section SHALL state what is broken or missing today and who feels it.",
+        "[R-ALT-GOAL | pass-fail | Ubiquitous] THE spec SHALL state one goal that the problem in the fixture supports.",
+        "[R-ALT-SEAMS | pass-fail | Ubiquitous] THE Interface sketches section SHALL hold no code body, helper signature, or internal pseudocode beyond the Placement block with one public signature for each new or changed export.",
+        "[R-ALT-CRUX | pass-fail | Ubiquitous] THE spec SHALL give its depth to the consequential decisions, their edge cases, and their seams.",
+        "[R-ALT-ROUTINE | pass-fail | Ubiquitous] THE spec SHALL give each routine part one line or one `[AGENT-DECIDED]` entry.",
+        "[R-ALT-DECIDE | pass-fail | Event] WHEN the spec records a material choice THE spec SHALL give a reason for each rejected option.",
+        "[R-ALT-HOLD-USER | critical | Event] WHEN the fixture records a user decision THE spec SHALL record that choice as the user's decision.",
+        "[R-ALT-HOLD-OPEN | critical | Event] WHEN the fixture leaves a consequential fork open THE spec SHALL keep that fork open with a `[TBD]`, `[?]`, or `[BLOCKED]` marker and an `execution_holds` entry.",
+        "[R-ALT-SCOPE | pass-fail | Ubiquitous] THE spec SHALL trace each non-goal to a statement in the fixture, or mark it `[AGENT-INTRODUCED]` with a `non-goal` row in the scope audit table.",
+        "[R-ALT-READY | pass-fail | Unwanted] IF an execution hold or a scope audit row stays unresolved THE readiness message SHALL not call the draft ready.",
+        "[R-ALT-DIAGRAM | pass-fail | Ubiquitous] THE Approach section SHALL open with the one diagram whose view the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-ALT-C4-FLOWCHART | pass-fail | Optional] WHERE the spec draws a static C4 view THE spec SHALL draw it as a Mermaid `flowchart`, not `C4Context`.",
+        "[R-ALT-LIMIT | pass-fail | Ubiquitous] THE spec SHALL hold at most two diagrams after the opening diagram."
+      ]
+    },
+    {
+      "id": 9,
+      "name": "al-oxide-bootstrap-network-pick",
+      "family": "alt-rack",
+      "prompt": "Use the mold skill. evals/files/al-oxide-bootstrap-network-pick/drafts.md holds three spec drafts of one design, labeled X, Y, and Z. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Judge the altitude of each draft against the Mold rules. Write one line per label to answer/answer.md in the form 'X: too-low | right | too-high: <reason with a quoted span>'. Choose one verdict for each label.",
+      "expected_output": "X: too-low, Y: right, Z: too-high",
+      "files": [
+        "evals/files/al-oxide-bootstrap-network-pick/drafts.md"
+      ],
+      "assertions": [
+        "[R-ALT-PICK | critical | Ubiquitous] THE answer SHALL give each label the verdict that `expected_output` names.",
+        "[R-ALT-PICK-QUOTE | pass-fail | Ubiquitous] THE answer SHALL quote a span of the draft on each verdict line.",
+        "[R-ALT-PICK-WHY | pass-fail | Ubiquitous] THE answer SHALL quote for each verdict a span that supports it: a strength for `right`, and the defect for `too-low` or `too-high`."
+      ]
+    },
+    {
+      "id": 10,
+      "name": "al-ticket-hold",
+      "family": "alt-product",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/al-ticket-hold/problem.md holds the problem, its actors, the announced tier (`tier: light`), and the user's recorded fork decisions. Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write the spec from the recorded decisions. Nobody answers a question in this run. Stop at the readiness check, and do not run Curdle or Cook. Write the draft spec to answer/spec.md and the readiness message to answer/answer.md.",
+      "expected_output": "a draft spec whose Problem states that two buyers must never own one seat and that a buyer who leaves must free the seats; that reflects D-1 (a timed hold that the booking service owns, with the session row lock and the client-side hold rejected for the user's reasons) as the user's decision; that states the one-seat-one-owner invariant; that keeps the late-payment policy open with an `execution_holds` entry; that gives its depth to the race between payment and expiry; that opens Approach with a sequence diagram or Dynamic view of the booking service, the payment step, and the expiry job, and needs no Container view because no container changes; and that marks each non-goal that the fixture does not state as `[AGENT-INTRODUCED]`, with a scope audit row",
+      "files": [
+        "evals/files/al-ticket-hold/problem.md"
+      ],
+      "assertions": [
+        "[R-ALT-ACTOR | pass-fail | Ubiquitous] THE Problem section SHALL state what is broken or missing today and who feels it.",
+        "[R-ALT-GOAL | pass-fail | Ubiquitous] THE spec SHALL state one goal that the problem in the fixture supports.",
+        "[R-ALT-SEAMS | pass-fail | Ubiquitous] THE Interface sketches section SHALL hold no code body, helper signature, or internal pseudocode beyond the Placement block with one public signature for each new or changed export.",
+        "[R-ALT-CRUX | pass-fail | Ubiquitous] THE spec SHALL give its depth to the consequential decisions, their edge cases, and their seams.",
+        "[R-ALT-ROUTINE | pass-fail | Ubiquitous] THE spec SHALL give each routine part one line or one `[AGENT-DECIDED]` entry.",
+        "[R-ALT-DECIDE | pass-fail | Event] WHEN the spec records a material choice THE spec SHALL give a reason for each rejected option.",
+        "[R-ALT-HOLD-USER | critical | Event] WHEN the fixture records a user decision THE spec SHALL record that choice as the user's decision.",
+        "[R-ALT-HOLD-OPEN | critical | Event] WHEN the fixture leaves a consequential fork open THE spec SHALL keep that fork open with a `[TBD]`, `[?]`, or `[BLOCKED]` marker and an `execution_holds` entry.",
+        "[R-ALT-SCOPE | pass-fail | Ubiquitous] THE spec SHALL trace each non-goal to a statement in the fixture, or mark it `[AGENT-INTRODUCED]` with a `non-goal` row in the scope audit table.",
+        "[R-ALT-READY | pass-fail | Unwanted] IF an execution hold or a scope audit row stays unresolved THE readiness message SHALL not call the draft ready.",
+        "[R-ALT-DIAGRAM | pass-fail | Ubiquitous] THE Approach section SHALL open with the one diagram whose view the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-ALT-C4-FLOWCHART | pass-fail | Optional] WHERE the spec draws a static C4 view THE spec SHALL draw it as a Mermaid `flowchart`, not `C4Context`.",
+        "[R-ALT-LIMIT | pass-fail | Ubiquitous] THE spec SHALL hold at most two diagrams after the opening diagram."
+      ]
+    },
+    {
+      "id": 11,
+      "name": "al-ticket-hold-pick",
+      "family": "alt-product",
+      "prompt": "Use the mold skill. evals/files/al-ticket-hold-pick/drafts.md holds three spec drafts of one design, labeled X, Y, and Z. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Judge the altitude of each draft against the Mold rules. Write one line per label to answer/answer.md in the form 'X: too-low | right | too-high: <reason with a quoted span>'. Choose one verdict for each label.",
+      "expected_output": "X: right, Y: too-high, Z: too-low",
+      "files": [
+        "evals/files/al-ticket-hold-pick/drafts.md"
+      ],
+      "assertions": [
+        "[R-ALT-PICK | critical | Ubiquitous] THE answer SHALL give each label the verdict that `expected_output` names.",
+        "[R-ALT-PICK-QUOTE | pass-fail | Ubiquitous] THE answer SHALL quote a span of the draft on each verdict line.",
+        "[R-ALT-PICK-WHY | pass-fail | Ubiquitous] THE answer SHALL quote for each verdict a span that supports it: a strength for `right`, and the defect for `too-low` or `too-high`."
+      ]
+    },
+    {
+      "id": 12,
+      "name": "al-rate-limiter-outage",
+      "family": "alt-runtime",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/al-rate-limiter-outage/problem.md holds the problem, its actors, the announced tier (`tier: light`), and the user's recorded fork decisions. Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write the spec from the recorded decisions. Nobody answers a question in this run. Stop at the readiness check, and do not run Curdle or Cook. Write the draft spec to answer/spec.md and the readiness message to answer/answer.md.",
+      "expected_output": "a draft spec whose Problem states that a store outage must not become an API outage and that backend teams still need a limit; that reflects D-1 (fail open under a local cap on each gateway, with fail closed and uncapped fail open rejected for the user's reasons) as the user's decision and names who is affected; that keeps the client signal during an outage open with an `execution_holds` entry; that gives its depth to the local cap; that opens Approach with either a C4 Container view or a flow of the gateways, the counter store, and the backends; and that marks each non-goal that the fixture does not state as `[AGENT-INTRODUCED]`, with a scope audit row",
+      "files": [
+        "evals/files/al-rate-limiter-outage/problem.md"
+      ],
+      "assertions": [
+        "[R-ALT-ACTOR | pass-fail | Ubiquitous] THE Problem section SHALL state what is broken or missing today and who feels it.",
+        "[R-ALT-GOAL | pass-fail | Ubiquitous] THE spec SHALL state one goal that the problem in the fixture supports.",
+        "[R-ALT-SEAMS | pass-fail | Ubiquitous] THE Interface sketches section SHALL hold no code body, helper signature, or internal pseudocode beyond the Placement block with one public signature for each new or changed export.",
+        "[R-ALT-CRUX | pass-fail | Ubiquitous] THE spec SHALL give its depth to the consequential decisions, their edge cases, and their seams.",
+        "[R-ALT-ROUTINE | pass-fail | Ubiquitous] THE spec SHALL give each routine part one line or one `[AGENT-DECIDED]` entry.",
+        "[R-ALT-DECIDE | pass-fail | Event] WHEN the spec records a material choice THE spec SHALL give a reason for each rejected option.",
+        "[R-ALT-HOLD-USER | critical | Event] WHEN the fixture records a user decision THE spec SHALL record that choice as the user's decision.",
+        "[R-ALT-HOLD-OPEN | critical | Event] WHEN the fixture leaves a consequential fork open THE spec SHALL keep that fork open with a `[TBD]`, `[?]`, or `[BLOCKED]` marker and an `execution_holds` entry.",
+        "[R-ALT-SCOPE | pass-fail | Ubiquitous] THE spec SHALL trace each non-goal to a statement in the fixture, or mark it `[AGENT-INTRODUCED]` with a `non-goal` row in the scope audit table.",
+        "[R-ALT-READY | pass-fail | Unwanted] IF an execution hold or a scope audit row stays unresolved THE readiness message SHALL not call the draft ready.",
+        "[R-ALT-DIAGRAM | pass-fail | Ubiquitous] THE Approach section SHALL open with the one diagram whose view the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-ALT-C4-FLOWCHART | pass-fail | Optional] WHERE the spec draws a static C4 view THE spec SHALL draw it as a Mermaid `flowchart`, not `C4Context`.",
+        "[R-ALT-LIMIT | pass-fail | Ubiquitous] THE spec SHALL hold at most two diagrams after the opening diagram."
+      ]
+    },
+    {
+      "id": 13,
+      "name": "al-rate-limiter-outage-pick",
+      "family": "alt-runtime",
+      "prompt": "Use the mold skill. evals/files/al-rate-limiter-outage-pick/drafts.md holds three spec drafts of one design, labeled X, Y, and Z. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Judge the altitude of each draft against the Mold rules. Write one line per label to answer/answer.md in the form 'X: too-low | right | too-high: <reason with a quoted span>'. Choose one verdict for each label.",
+      "expected_output": "X: too-high, Y: too-low, Z: right",
+      "files": [
+        "evals/files/al-rate-limiter-outage-pick/drafts.md"
+      ],
+      "assertions": [
+        "[R-ALT-PICK | critical | Ubiquitous] THE answer SHALL give each label the verdict that `expected_output` names.",
+        "[R-ALT-PICK-QUOTE | pass-fail | Ubiquitous] THE answer SHALL quote a span of the draft on each verdict line.",
+        "[R-ALT-PICK-WHY | pass-fail | Ubiquitous] THE answer SHALL quote for each verdict a span that supports it: a strength for `right`, and the defect for `too-low` or `too-high`."
+      ]
+    },
+    {
+      "id": 14,
+      "name": "al-crux-depth",
+      "family": "alt-product",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/al-crux-depth/problem.md holds the problem, its actors, the announced tier (`tier: light`), and the user's recorded fork decisions. Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write the spec from the recorded decisions. Nobody answers a question in this run. Stop at the readiness check, and do not run Curdle or Cook. Write the draft spec to answer/spec.md and the readiness message to answer/answer.md.",
+      "expected_output": "a draft spec whose Problem states that users want one digest a day and that a support engineer must explain a missing digest; that gives one line to each routine part; that reflects D-1 (a late run sends once until local midnight, then skips and logs) as the user's decision; that keeps the choice of the morning hour open with an `execution_holds` entry; that gives its depth to safe delivery through the provider's idempotency key and to send timing across time zones; that opens Approach with an asynchronous sequence of the scheduler, the sender, and the email provider; and that marks each non-goal that the fixture does not state as `[AGENT-INTRODUCED]`, with a scope audit row",
+      "files": [
+        "evals/files/al-crux-depth/problem.md"
+      ],
+      "assertions": [
+        "[R-ALT-ACTOR | pass-fail | Ubiquitous] THE Problem section SHALL state what is broken or missing today and who feels it.",
+        "[R-ALT-GOAL | pass-fail | Ubiquitous] THE spec SHALL state one goal that the problem in the fixture supports.",
+        "[R-ALT-SEAMS | pass-fail | Ubiquitous] THE Interface sketches section SHALL hold no code body, helper signature, or internal pseudocode beyond the Placement block with one public signature for each new or changed export.",
+        "[R-ALT-CRUX | pass-fail | Ubiquitous] THE spec SHALL give its depth to the consequential decisions, their edge cases, and their seams.",
+        "[R-ALT-ROUTINE | pass-fail | Ubiquitous] THE spec SHALL give each routine part one line or one `[AGENT-DECIDED]` entry.",
+        "[R-ALT-DECIDE | pass-fail | Event] WHEN the spec records a material choice THE spec SHALL give a reason for each rejected option.",
+        "[R-ALT-HOLD-USER | critical | Event] WHEN the fixture records a user decision THE spec SHALL record that choice as the user's decision.",
+        "[R-ALT-HOLD-OPEN | critical | Event] WHEN the fixture leaves a consequential fork open THE spec SHALL keep that fork open with a `[TBD]`, `[?]`, or `[BLOCKED]` marker and an `execution_holds` entry.",
+        "[R-ALT-SCOPE | pass-fail | Ubiquitous] THE spec SHALL trace each non-goal to a statement in the fixture, or mark it `[AGENT-INTRODUCED]` with a `non-goal` row in the scope audit table.",
+        "[R-ALT-READY | pass-fail | Unwanted] IF an execution hold or a scope audit row stays unresolved THE readiness message SHALL not call the draft ready.",
+        "[R-ALT-DIAGRAM | pass-fail | Ubiquitous] THE Approach section SHALL open with the one diagram whose view the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-ALT-C4-FLOWCHART | pass-fail | Optional] WHERE the spec draws a static C4 view THE spec SHALL draw it as a Mermaid `flowchart`, not `C4Context`.",
+        "[R-ALT-LIMIT | pass-fail | Ubiquitous] THE spec SHALL hold at most two diagrams after the opening diagram."
+      ]
+    },
+    {
+      "id": 15,
+      "name": "al-crux-depth-pick",
+      "family": "alt-product",
+      "prompt": "Use the mold skill. evals/files/al-crux-depth-pick/drafts.md holds three spec drafts of one design, labeled X, Y, and Z. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Judge the altitude of each draft against the Mold rules. Write one line per label to answer/answer.md in the form 'X: too-low | right | too-high: <reason with a quoted span>'. Choose one verdict for each label.",
+      "expected_output": "X: too-low, Y: right, Z: too-high",
+      "files": [
+        "evals/files/al-crux-depth-pick/drafts.md"
+      ],
+      "assertions": [
+        "[R-ALT-PICK | critical | Ubiquitous] THE answer SHALL give each label the verdict that `expected_output` names.",
+        "[R-ALT-PICK-QUOTE | pass-fail | Ubiquitous] THE answer SHALL quote a span of the draft on each verdict line.",
+        "[R-ALT-PICK-WHY | pass-fail | Ubiquitous] THE answer SHALL quote for each verdict a span that supports it: a strength for `right`, and the defect for `too-low` or `too-high`."
+      ]
+    },
+    {
+      "id": 16,
+      "name": "dg-view-container",
+      "family": "diag-structure",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/dg-view-container/change.md holds the change, its actors, and the announced tier (`tier: full`). Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write only the diagrams of the spec Approach to answer/diagrams.md, in the order the spec shows them. Put each diagram in a mermaid fence, then its `Title:` line after the fence. Do not write the rest of the spec, and do not run Curdle or Cook.",
+      "expected_output": "a Container view as a `flowchart` opens Approach, titled 'Container view: <scope>', with the web app, the report service, its worker, the main database, and the reports bucket; no flow diagram",
+      "files": [
+        "evals/files/dg-view-container/change.md"
+      ],
+      "assertions": [
+        "[R-DIAG-VIEW | critical | Ubiquitous] THE first diagram SHALL draw the one view that the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-DIAG-TITLE | pass-fail | Ubiquitous] THE title line of each diagram SHALL name the view that the diagram draws.",
+        "[R-DIAG-OVERLAP | pass-fail | Ubiquitous] THE answer SHALL hold no view that an overlap rule of `diagrams.md` replaces.",
+        "[R-DIAG-C4-FLOWCHART | pass-fail | Optional] WHERE a diagram draws a static C4 view THE diagram SHALL use a Mermaid `flowchart`, not `C4Context`.",
+        "[R-DIAG-SIZE | pass-fail | Ubiquitous] THE answer SHALL hold at most 15 nodes in each diagram.",
+        "[R-DIAG-MERMAID | pass-fail | Ubiquitous] THE answer SHALL hold no node id `end` and no `%%{init`, `style`, or `classDef` line.",
+        "[Q-DIAG-SCOPE | quality | Ubiquitous] THE answer SHALL show only the touched elements and their neighbors in each diagram.",
+        "[Q-DIAG-LABEL | quality | Optional] WHERE a diagram draws a C4 view THE diagram SHALL label each element with its name, its type, and its responsibility."
+      ]
+    },
+    {
+      "id": 17,
+      "name": "dg-view-component",
+      "family": "diag-structure",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/dg-view-component/change.md holds the change, its actors, and the announced tier (`tier: full`). Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write only the diagrams of the spec Approach to answer/diagrams.md, in the order the spec shows them. Put each diagram in a mermaid fence, then its `Title:` line after the fence. Do not write the rest of the spec, and do not run Curdle or Cook.",
+      "expected_output": "one Component view of the checkout service as a `flowchart`, titled 'Component view: <scope>'; no Container view and no flow diagram",
+      "files": [
+        "evals/files/dg-view-component/change.md"
+      ],
+      "assertions": [
+        "[R-DIAG-VIEW | critical | Ubiquitous] THE first diagram SHALL draw the one view that the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-DIAG-TITLE | pass-fail | Ubiquitous] THE title line of each diagram SHALL name the view that the diagram draws.",
+        "[R-DIAG-OVERLAP | pass-fail | Ubiquitous] THE answer SHALL hold no view that an overlap rule of `diagrams.md` replaces.",
+        "[R-DIAG-C4-FLOWCHART | pass-fail | Optional] WHERE a diagram draws a static C4 view THE diagram SHALL use a Mermaid `flowchart`, not `C4Context`.",
+        "[R-DIAG-SIZE | pass-fail | Ubiquitous] THE answer SHALL hold at most 15 nodes in each diagram.",
+        "[R-DIAG-MERMAID | pass-fail | Ubiquitous] THE answer SHALL hold no node id `end` and no `%%{init`, `style`, or `classDef` line.",
+        "[Q-DIAG-SCOPE | quality | Ubiquitous] THE answer SHALL show only the touched elements and their neighbors in each diagram.",
+        "[Q-DIAG-LABEL | quality | Optional] WHERE a diagram draws a C4 view THE diagram SHALL label each element with its name, its type, and its responsibility."
+      ]
+    },
+    {
+      "id": 18,
+      "name": "dg-view-context",
+      "family": "diag-structure",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/dg-view-context/change.md holds the change, its actors, and the announced tier (`tier: light`). Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write only the diagrams of the spec Approach to answer/diagrams.md, in the order the spec shows them. Put each diagram in a mermaid fence, then its `Title:` line after the fence. Do not write the rest of the spec, and do not run Curdle or Cook.",
+      "expected_output": "one System Context view as a `flowchart`, titled 'System Context view: <scope>', with the finance staff, the external auditor, and the ledger app; no Container view",
+      "files": [
+        "evals/files/dg-view-context/change.md"
+      ],
+      "assertions": [
+        "[R-DIAG-VIEW | critical | Ubiquitous] THE first diagram SHALL draw the one view that the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-DIAG-TITLE | pass-fail | Ubiquitous] THE title line of each diagram SHALL name the view that the diagram draws.",
+        "[R-DIAG-OVERLAP | pass-fail | Ubiquitous] THE answer SHALL hold no view that an overlap rule of `diagrams.md` replaces.",
+        "[R-DIAG-C4-FLOWCHART | pass-fail | Optional] WHERE a diagram draws a static C4 view THE diagram SHALL use a Mermaid `flowchart`, not `C4Context`.",
+        "[R-DIAG-SIZE | pass-fail | Ubiquitous] THE answer SHALL hold at most 15 nodes in each diagram.",
+        "[R-DIAG-MERMAID | pass-fail | Ubiquitous] THE answer SHALL hold no node id `end` and no `%%{init`, `style`, or `classDef` line.",
+        "[Q-DIAG-SCOPE | quality | Ubiquitous] THE answer SHALL show only the touched elements and their neighbors in each diagram.",
+        "[Q-DIAG-LABEL | quality | Optional] WHERE a diagram draws a C4 view THE diagram SHALL label each element with its name, its type, and its responsibility."
+      ]
+    },
+    {
+      "id": 19,
+      "name": "dg-view-landscape",
+      "family": "diag-structure",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/dg-view-landscape/change.md holds the change, its actors, and the announced tier (`tier: full`). Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write only the diagrams of the spec Approach to answer/diagrams.md, in the order the spec shows them. Put each diagram in a mermaid fence, then its `Title:` line after the fence. Do not write the rest of the spec, and do not run Curdle or Cook.",
+      "expected_output": "one System Landscape view as a `flowchart`, titled 'System Landscape view: <scope>', with the CRM, the billing system, and the support desk",
+      "files": [
+        "evals/files/dg-view-landscape/change.md"
+      ],
+      "assertions": [
+        "[R-DIAG-VIEW | critical | Ubiquitous] THE first diagram SHALL draw the one view that the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-DIAG-TITLE | pass-fail | Ubiquitous] THE title line of each diagram SHALL name the view that the diagram draws.",
+        "[R-DIAG-OVERLAP | pass-fail | Ubiquitous] THE answer SHALL hold no view that an overlap rule of `diagrams.md` replaces.",
+        "[R-DIAG-C4-FLOWCHART | pass-fail | Optional] WHERE a diagram draws a static C4 view THE diagram SHALL use a Mermaid `flowchart`, not `C4Context`.",
+        "[R-DIAG-SIZE | pass-fail | Ubiquitous] THE answer SHALL hold at most 15 nodes in each diagram.",
+        "[R-DIAG-MERMAID | pass-fail | Ubiquitous] THE answer SHALL hold no node id `end` and no `%%{init`, `style`, or `classDef` line.",
+        "[Q-DIAG-SCOPE | quality | Ubiquitous] THE answer SHALL show only the touched elements and their neighbors in each diagram.",
+        "[Q-DIAG-LABEL | quality | Optional] WHERE a diagram draws a C4 view THE diagram SHALL label each element with its name, its type, and its responsibility."
+      ]
+    },
+    {
+      "id": 20,
+      "name": "dg-view-deployment",
+      "family": "diag-structure",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/dg-view-deployment/change.md holds the change, its actors, and the announced tier (`tier: light`). Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write only the diagrams of the spec Approach to answer/diagrams.md, in the order the spec shows them. Put each diagram in a mermaid fence, then its `Title:` line after the fence. Do not write the rest of the spec, and do not run Curdle or Cook.",
+      "expected_output": "one Deployment view as a `flowchart` with one `subgraph` for each region, titled 'Deployment view: <scope>'; no flow diagram",
+      "files": [
+        "evals/files/dg-view-deployment/change.md"
+      ],
+      "assertions": [
+        "[R-DIAG-VIEW | critical | Ubiquitous] THE first diagram SHALL draw the one view that the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-DIAG-TITLE | pass-fail | Ubiquitous] THE title line of each diagram SHALL name the view that the diagram draws.",
+        "[R-DIAG-OVERLAP | pass-fail | Ubiquitous] THE answer SHALL hold no view that an overlap rule of `diagrams.md` replaces.",
+        "[R-DIAG-C4-FLOWCHART | pass-fail | Optional] WHERE a diagram draws a static C4 view THE diagram SHALL use a Mermaid `flowchart`, not `C4Context`.",
+        "[R-DIAG-SIZE | pass-fail | Ubiquitous] THE answer SHALL hold at most 15 nodes in each diagram.",
+        "[R-DIAG-MERMAID | pass-fail | Ubiquitous] THE answer SHALL hold no node id `end` and no `%%{init`, `style`, or `classDef` line.",
+        "[Q-DIAG-SCOPE | quality | Ubiquitous] THE answer SHALL show only the touched elements and their neighbors in each diagram.",
+        "[Q-DIAG-LABEL | quality | Optional] WHERE a diagram draws a C4 view THE diagram SHALL label each element with its name, its type, and its responsibility."
+      ]
+    },
+    {
+      "id": 21,
+      "name": "dg-view-sequence",
+      "family": "diag-behavior",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/dg-view-sequence/change.md holds the change, its actors, and the announced tier (`tier: light`). Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write only the diagrams of the spec Approach to answer/diagrams.md, in the order the spec shows them. Put each diagram in a mermaid fence, then its `Title:` line after the fence. Do not write the rest of the spec, and do not run Curdle or Cook.",
+      "expected_output": "one `sequenceDiagram` titled as a sequence or Dynamic view, with the fraud call before the card provider call, request and reply arrows, the rejection path, and no asynchronous arrow; no Container view, because no call is added or removed",
+      "files": [
+        "evals/files/dg-view-sequence/change.md"
+      ],
+      "assertions": [
+        "[R-DIAG-VIEW | critical | Ubiquitous] THE first diagram SHALL draw the one view that the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-DIAG-TITLE | pass-fail | Ubiquitous] THE title line of each diagram SHALL name the view that the diagram draws.",
+        "[R-DIAG-OVERLAP | pass-fail | Ubiquitous] THE answer SHALL hold no view that an overlap rule of `diagrams.md` replaces.",
+        "[R-DIAG-C4-FLOWCHART | pass-fail | Optional] WHERE a diagram draws a static C4 view THE diagram SHALL use a Mermaid `flowchart`, not `C4Context`.",
+        "[R-DIAG-SIZE | pass-fail | Ubiquitous] THE answer SHALL hold at most 15 nodes in each diagram.",
+        "[R-DIAG-MERMAID | pass-fail | Ubiquitous] THE answer SHALL hold no node id `end` and no `%%{init`, `style`, or `classDef` line.",
+        "[Q-DIAG-SCOPE | quality | Ubiquitous] THE answer SHALL show only the touched elements and their neighbors in each diagram.",
+        "[Q-DIAG-LABEL | quality | Optional] WHERE a diagram draws a C4 view THE diagram SHALL label each element with its name, its type, and its responsibility."
+      ]
+    },
+    {
+      "id": 22,
+      "name": "dg-view-async-sequence",
+      "family": "diag-behavior",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/dg-view-async-sequence/change.md holds the change, its actors, and the announced tier (`tier: light`). Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write only the diagrams of the spec Approach to answer/diagrams.md, in the order the spec shows them. Put each diagram in a mermaid fence, then its `Title:` line after the fence. Do not write the rest of the spec, and do not run Curdle or Cook.",
+      "expected_output": "one asynchronous `sequenceDiagram`, titled as a sequence view or a Dynamic view (the two are alternatives), with the asynchronous publish, the acknowledgment after the email provider accepts, and the delayed retry; no Container view, because no application, store, or queue is added",
+      "files": [
+        "evals/files/dg-view-async-sequence/change.md"
+      ],
+      "assertions": [
+        "[R-DIAG-VIEW | critical | Ubiquitous] THE first diagram SHALL draw the one view that the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-DIAG-TITLE | pass-fail | Ubiquitous] THE title line of each diagram SHALL name the view that the diagram draws.",
+        "[R-DIAG-OVERLAP | pass-fail | Ubiquitous] THE answer SHALL hold no view that an overlap rule of `diagrams.md` replaces.",
+        "[R-DIAG-C4-FLOWCHART | pass-fail | Optional] WHERE a diagram draws a static C4 view THE diagram SHALL use a Mermaid `flowchart`, not `C4Context`.",
+        "[R-DIAG-SIZE | pass-fail | Ubiquitous] THE answer SHALL hold at most 15 nodes in each diagram.",
+        "[R-DIAG-MERMAID | pass-fail | Ubiquitous] THE answer SHALL hold no node id `end` and no `%%{init`, `style`, or `classDef` line.",
+        "[Q-DIAG-SCOPE | quality | Ubiquitous] THE answer SHALL show only the touched elements and their neighbors in each diagram.",
+        "[Q-DIAG-LABEL | quality | Optional] WHERE a diagram draws a C4 view THE diagram SHALL label each element with its name, its type, and its responsibility."
+      ]
+    },
+    {
+      "id": 23,
+      "name": "dg-view-agent-handoff",
+      "family": "diag-behavior",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/dg-view-agent-handoff/change.md holds the change, its actors, and the announced tier (`tier: light`). Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write only the diagrams of the spec Approach to answer/diagrams.md, in the order the spec shows them. Put each diagram in a mermaid fence, then its `Title:` line after the fence. Do not write the rest of the spec, and do not run Curdle or Cook.",
+      "expected_output": "one agent handoff `sequenceDiagram` titled as a sequence view, with the planner, the code-explorer sub-agent, and the reviewer; no asynchronous arrow",
+      "files": [
+        "evals/files/dg-view-agent-handoff/change.md"
+      ],
+      "assertions": [
+        "[R-DIAG-VIEW | critical | Ubiquitous] THE first diagram SHALL draw the one view that the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-DIAG-TITLE | pass-fail | Ubiquitous] THE title line of each diagram SHALL name the view that the diagram draws.",
+        "[R-DIAG-OVERLAP | pass-fail | Ubiquitous] THE answer SHALL hold no view that an overlap rule of `diagrams.md` replaces.",
+        "[R-DIAG-C4-FLOWCHART | pass-fail | Optional] WHERE a diagram draws a static C4 view THE diagram SHALL use a Mermaid `flowchart`, not `C4Context`.",
+        "[R-DIAG-SIZE | pass-fail | Ubiquitous] THE answer SHALL hold at most 15 nodes in each diagram.",
+        "[R-DIAG-MERMAID | pass-fail | Ubiquitous] THE answer SHALL hold no node id `end` and no `%%{init`, `style`, or `classDef` line.",
+        "[Q-DIAG-SCOPE | quality | Ubiquitous] THE answer SHALL show only the touched elements and their neighbors in each diagram.",
+        "[Q-DIAG-LABEL | quality | Optional] WHERE a diagram draws a C4 view THE diagram SHALL label each element with its name, its type, and its responsibility."
+      ]
+    },
+    {
+      "id": 24,
+      "name": "dg-view-database",
+      "family": "diag-data",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/dg-view-database/change.md holds the change, its actors, and the announced tier (`tier: light`). Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write only the diagrams of the spec Approach to answer/diagrams.md, in the order the spec shows them. Put each diagram in a mermaid fence, then its `Title:` line after the fence. Do not write the rest of the spec, and do not run Curdle or Cook.",
+      "expected_output": "one database diagram as an `erDiagram` or a `classDiagram`, titled 'Database view: <scope>'; no flow diagram",
+      "files": [
+        "evals/files/dg-view-database/change.md"
+      ],
+      "assertions": [
+        "[R-DIAG-VIEW | critical | Ubiquitous] THE first diagram SHALL draw the one view that the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-DIAG-TITLE | pass-fail | Ubiquitous] THE title line of each diagram SHALL name the view that the diagram draws.",
+        "[R-DIAG-OVERLAP | pass-fail | Ubiquitous] THE answer SHALL hold no view that an overlap rule of `diagrams.md` replaces.",
+        "[R-DIAG-C4-FLOWCHART | pass-fail | Optional] WHERE a diagram draws a static C4 view THE diagram SHALL use a Mermaid `flowchart`, not `C4Context`.",
+        "[R-DIAG-SIZE | pass-fail | Ubiquitous] THE answer SHALL hold at most 15 nodes in each diagram.",
+        "[R-DIAG-MERMAID | pass-fail | Ubiquitous] THE answer SHALL hold no node id `end` and no `%%{init`, `style`, or `classDef` line.",
+        "[Q-DIAG-SCOPE | quality | Ubiquitous] THE answer SHALL show only the touched elements and their neighbors in each diagram.",
+        "[Q-DIAG-LABEL | quality | Optional] WHERE a diagram draws a C4 view THE diagram SHALL label each element with its name, its type, and its responsibility."
+      ]
+    },
+    {
+      "id": 25,
+      "name": "dg-view-state",
+      "family": "diag-data",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/dg-view-state/change.md holds the change, its actors, and the announced tier (`tier: light`). Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write only the diagrams of the spec Approach to answer/diagrams.md, in the order the spec shows them. Put each diagram in a mermaid fence, then its `Title:` line after the fence. Do not write the rest of the spec, and do not run Curdle or Cook.",
+      "expected_output": "one `stateDiagram-v2` titled 'State view: <scope>', with the five refund states and the retry move from failed to approved; no database diagram and no flow diagram",
+      "files": [
+        "evals/files/dg-view-state/change.md"
+      ],
+      "assertions": [
+        "[R-DIAG-VIEW | critical | Ubiquitous] THE first diagram SHALL draw the one view that the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-DIAG-TITLE | pass-fail | Ubiquitous] THE title line of each diagram SHALL name the view that the diagram draws.",
+        "[R-DIAG-OVERLAP | pass-fail | Ubiquitous] THE answer SHALL hold no view that an overlap rule of `diagrams.md` replaces.",
+        "[R-DIAG-C4-FLOWCHART | pass-fail | Optional] WHERE a diagram draws a static C4 view THE diagram SHALL use a Mermaid `flowchart`, not `C4Context`.",
+        "[R-DIAG-SIZE | pass-fail | Ubiquitous] THE answer SHALL hold at most 15 nodes in each diagram.",
+        "[R-DIAG-MERMAID | pass-fail | Ubiquitous] THE answer SHALL hold no node id `end` and no `%%{init`, `style`, or `classDef` line.",
+        "[Q-DIAG-SCOPE | quality | Ubiquitous] THE answer SHALL show only the touched elements and their neighbors in each diagram.",
+        "[Q-DIAG-LABEL | quality | Optional] WHERE a diagram draws a C4 view THE diagram SHALL label each element with its name, its type, and its responsibility."
+      ]
+    },
+    {
+      "id": 26,
+      "name": "dg-view-flow",
+      "family": "diag-behavior",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/dg-view-flow/change.md holds the change, its actors, and the announced tier (`tier: light`). Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write only the diagrams of the spec Approach to answer/diagrams.md, in the order the spec shows them. Put each diagram in a mermaid fence, then its `Title:` line after the fence. Do not write the rest of the spec, and do not run Curdle or Cook.",
+      "expected_output": "one flow diagram as a `flowchart`, titled 'Flow view: <scope>', with the three priority branches; no Container view",
+      "files": [
+        "evals/files/dg-view-flow/change.md"
+      ],
+      "assertions": [
+        "[R-DIAG-VIEW | critical | Ubiquitous] THE first diagram SHALL draw the one view that the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-DIAG-TITLE | pass-fail | Ubiquitous] THE title line of each diagram SHALL name the view that the diagram draws.",
+        "[R-DIAG-OVERLAP | pass-fail | Ubiquitous] THE answer SHALL hold no view that an overlap rule of `diagrams.md` replaces.",
+        "[R-DIAG-C4-FLOWCHART | pass-fail | Optional] WHERE a diagram draws a static C4 view THE diagram SHALL use a Mermaid `flowchart`, not `C4Context`.",
+        "[R-DIAG-SIZE | pass-fail | Ubiquitous] THE answer SHALL hold at most 15 nodes in each diagram.",
+        "[R-DIAG-MERMAID | pass-fail | Ubiquitous] THE answer SHALL hold no node id `end` and no `%%{init`, `style`, or `classDef` line.",
+        "[Q-DIAG-SCOPE | quality | Ubiquitous] THE answer SHALL show only the touched elements and their neighbors in each diagram.",
+        "[Q-DIAG-LABEL | quality | Optional] WHERE a diagram draws a C4 view THE diagram SHALL label each element with its name, its type, and its responsibility."
+      ]
+    },
+    {
+      "id": 27,
+      "name": "dg-view-overlap-async",
+      "family": "diag-behavior",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/dg-view-overlap-async/change.md holds the change, its actors, and the announced tier (`tier: light`). Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write only the diagrams of the spec Approach to answer/diagrams.md, in the order the spec shows them. Put each diagram in a mermaid fence, then its `Title:` line after the fence. Do not write the rest of the spec, and do not run Curdle or Cook.",
+      "expected_output": "one asynchronous `sequenceDiagram`, titled as a sequence view or a Dynamic view (the two are alternatives), with the dead-letter topic; no plain sequence diagram of the same messages, and no flow diagram",
+      "files": [
+        "evals/files/dg-view-overlap-async/change.md"
+      ],
+      "assertions": [
+        "[R-DIAG-VIEW | critical | Ubiquitous] THE first diagram SHALL draw the one view that the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-DIAG-TITLE | pass-fail | Ubiquitous] THE title line of each diagram SHALL name the view that the diagram draws.",
+        "[R-DIAG-OVERLAP | pass-fail | Ubiquitous] THE answer SHALL hold no view that an overlap rule of `diagrams.md` replaces.",
+        "[R-DIAG-C4-FLOWCHART | pass-fail | Optional] WHERE a diagram draws a static C4 view THE diagram SHALL use a Mermaid `flowchart`, not `C4Context`.",
+        "[R-DIAG-SIZE | pass-fail | Ubiquitous] THE answer SHALL hold at most 15 nodes in each diagram.",
+        "[R-DIAG-MERMAID | pass-fail | Ubiquitous] THE answer SHALL hold no node id `end` and no `%%{init`, `style`, or `classDef` line.",
+        "[Q-DIAG-SCOPE | quality | Ubiquitous] THE answer SHALL show only the touched elements and their neighbors in each diagram.",
+        "[Q-DIAG-LABEL | quality | Optional] WHERE a diagram draws a C4 view THE diagram SHALL label each element with its name, its type, and its responsibility."
+      ]
+    },
+    {
+      "id": 28,
+      "name": "dg-view-overlap-container",
+      "family": "diag-structure",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/dg-view-overlap-container/change.md holds the change, its actors, and the announced tier (`tier: full`). Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write only the diagrams of the spec Approach to answer/diagrams.md, in the order the spec shows them. Put each diagram in a mermaid fence, then its `Title:` line after the fence. Do not write the rest of the spec, and do not run Curdle or Cook.",
+      "expected_output": "one Container view as a `flowchart`, titled 'Container view: <scope>', with the web app, the search service, the search index, and the main database; no flow diagram",
+      "files": [
+        "evals/files/dg-view-overlap-container/change.md"
+      ],
+      "assertions": [
+        "[R-DIAG-VIEW | critical | Ubiquitous] THE first diagram SHALL draw the one view that the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-DIAG-TITLE | pass-fail | Ubiquitous] THE title line of each diagram SHALL name the view that the diagram draws.",
+        "[R-DIAG-OVERLAP | pass-fail | Ubiquitous] THE answer SHALL hold no view that an overlap rule of `diagrams.md` replaces.",
+        "[R-DIAG-C4-FLOWCHART | pass-fail | Optional] WHERE a diagram draws a static C4 view THE diagram SHALL use a Mermaid `flowchart`, not `C4Context`.",
+        "[R-DIAG-SIZE | pass-fail | Ubiquitous] THE answer SHALL hold at most 15 nodes in each diagram.",
+        "[R-DIAG-MERMAID | pass-fail | Ubiquitous] THE answer SHALL hold no node id `end` and no `%%{init`, `style`, or `classDef` line.",
+        "[Q-DIAG-SCOPE | quality | Ubiquitous] THE answer SHALL show only the touched elements and their neighbors in each diagram.",
+        "[Q-DIAG-LABEL | quality | Optional] WHERE a diagram draws a C4 view THE diagram SHALL label each element with its name, its type, and its responsibility."
+      ]
+    },
+    {
+      "id": 29,
+      "name": "dg-view-pressure",
+      "family": "diag-data",
+      "prompt": "Use the mold skill. The Bounds pass is done: evals/files/dg-view-pressure/change.md holds the change, its actors, and the announced tier (`tier: light`). Do not ask for the goal, the actors, or the tier again. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write only the diagrams of the spec Approach to answer/diagrams.md, in the order the spec shows them. Put each diagram in a mermaid fence, then its `Title:` line after the fence. Do not write the rest of the spec, and do not run Curdle or Cook.",
+      "expected_output": "at most three diagrams, and the first is a database diagram titled 'Database view: <scope>'",
+      "files": [
+        "evals/files/dg-view-pressure/change.md"
+      ],
+      "assertions": [
+        "[R-DIAG-VIEW | critical | Ubiquitous] THE first diagram SHALL draw the one view that the `diagrams.md` checklist and smallest-set rules select.",
+        "[R-DIAG-SMALLEST | pass-fail | Event] WHEN the author asks for many diagrams THE answer SHALL hold at most two diagrams after the opening diagram.",
+        "[R-DIAG-RISK | pass-fail | Event] WHEN the author asks for many diagrams THE answer SHALL keep the diagram of the riskiest change.",
+        "[R-DIAG-TITLE | pass-fail | Ubiquitous] THE title line of each diagram SHALL name the view that the diagram draws.",
+        "[R-DIAG-OVERLAP | pass-fail | Ubiquitous] THE answer SHALL hold no view that an overlap rule of `diagrams.md` replaces.",
+        "[R-DIAG-C4-FLOWCHART | pass-fail | Optional] WHERE a diagram draws a static C4 view THE diagram SHALL use a Mermaid `flowchart`, not `C4Context`.",
+        "[R-DIAG-SIZE | pass-fail | Ubiquitous] THE answer SHALL hold at most 15 nodes in each diagram.",
+        "[R-DIAG-MERMAID | pass-fail | Ubiquitous] THE answer SHALL hold no node id `end` and no `%%{init`, `style`, or `classDef` line.",
+        "[Q-DIAG-SCOPE | quality | Ubiquitous] THE answer SHALL show only the touched elements and their neighbors in each diagram.",
+        "[Q-DIAG-LABEL | quality | Optional] WHERE a diagram draws a C4 view THE diagram SHALL label each element with its name, its type, and its responsibility."
+      ]
+    },
+    {
+      "id": 30,
+      "name": "dg-fork-structure",
+      "family": "diag-structure",
+      "prompt": "Use the mold skill. The Bounds pass and Shape round 1 are done: evals/files/dg-fork-structure/state.md holds the ledger and the forks for round 2. Do not ask for the goal, the actors, or the tier again. The host is a terminal and does not render Mermaid. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write the fork card of each fork, F-1 to F-4 in order, to answer/answer.md. Do not ask the questions, and do not record a decision.",
+      "expected_output": "F-1 branches each draw a Container-level text graph, F-2 branches a Component-level graph, and F-3 branches a Deployment-level graph that shows how work reaches the worker; F-4 uses a symbol table and no graph; no mermaid fence",
+      "files": [
+        "evals/files/dg-fork-structure/state.md"
+      ],
+      "assertions": [
+        "[R-FORK-GRAPH | critical | Event] WHEN a fork changes flow, ownership, or order THE card SHALL draw each branch as a plain-text graph in a `text` fence.",
+        "[R-FORK-SHORT | pass-fail | Ubiquitous] THE answer SHALL hold eight lines or fewer in each branch graph.",
+        "[R-FORK-C4 | pass-fail | Event] WHEN a fork is an architecture fork THE graph SHALL name the C4 level and the elements that `diagrams.md` defines.",
+        "[R-FORK-TABLE | pass-fail | Unwanted] IF the branches of a fork differ only in properties, such as a metric, a person, a date, or a policy, THE card SHALL use a symbol table and no graph.",
+        "[R-FORK-NO-MERMAID | pass-fail | Unwanted] IF the host does not render Mermaid THE answer SHALL hold no mermaid fence.",
+        "[R-FORK-FIELDS | pass-fail | Ubiquitous] THE answer SHALL give each card the `F-n` title, `Decides:`, `Moves:`, `Today:`, the branches with their gains, costs, and risks, and a `Legend:` line.",
+        "[Q-FORK-SCOPE | quality | Ubiquitous] THE answer SHALL show in each graph only the elements that its branches change.",
+        "[Q-FORK-SYMBOLS | quality | Ubiquitous] THE answer SHALL use each `fork-questions.md` symbol with one meaning."
+      ]
+    },
+    {
+      "id": 31,
+      "name": "dg-fork-behavior",
+      "family": "diag-behavior",
+      "prompt": "Use the mold skill. The Bounds pass and Shape round 1 are done: evals/files/dg-fork-behavior/state.md holds the ledger and the forks for round 2. Do not ask for the goal, the actors, or the tier again. The host is a terminal and does not render Mermaid. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write the fork card of each fork, F-1 to F-4 in order, to answer/answer.md. Do not ask the questions, and do not record a decision.",
+      "expected_output": "F-1 branches each draw a graph of the call order with each wait for a reply, and the F-1 B and F-1 C branches mark with `⚠` that they can break AC-1; F-2 branches a message graph with the queue and the retry; F-3 branches a handoff graph of the triage agent and the risk analyst; F-4 uses a symbol table and no graph; no mermaid fence",
+      "files": [
+        "evals/files/dg-fork-behavior/state.md"
+      ],
+      "assertions": [
+        "[R-FORK-GRAPH | critical | Event] WHEN a fork changes flow, ownership, or order THE card SHALL draw each branch as a plain-text graph in a `text` fence.",
+        "[R-FORK-SHORT | pass-fail | Ubiquitous] THE answer SHALL hold eight lines or fewer in each branch graph.",
+        "[R-FORK-C4 | pass-fail | Event] WHEN a fork is an architecture fork THE graph SHALL name the C4 level and the elements that `diagrams.md` defines.",
+        "[R-FORK-TABLE | pass-fail | Unwanted] IF the branches of a fork differ only in properties, such as a metric, a person, a date, or a policy, THE card SHALL use a symbol table and no graph.",
+        "[R-FORK-NO-MERMAID | pass-fail | Unwanted] IF the host does not render Mermaid THE answer SHALL hold no mermaid fence.",
+        "[R-FORK-FIELDS | pass-fail | Ubiquitous] THE answer SHALL give each card the `F-n` title, `Decides:`, `Moves:`, `Today:`, the branches with their gains, costs, and risks, and a `Legend:` line.",
+        "[Q-FORK-SCOPE | quality | Ubiquitous] THE answer SHALL show in each graph only the elements that its branches change.",
+        "[Q-FORK-SYMBOLS | quality | Ubiquitous] THE answer SHALL use each `fork-questions.md` symbol with one meaning."
+      ]
+    },
+    {
+      "id": 32,
+      "name": "dg-fork-data",
+      "family": "diag-data",
+      "prompt": "Use the mold skill. The Bounds pass and Shape round 1 are done: evals/files/dg-fork-data/state.md holds the ledger and the forks for round 2. Do not ask for the goal, the actors, or the tier again. The host is a terminal and does not render Mermaid. This run has no human, no browser, no Git history, no issue tracker, and no wiki. Write the fork card of each fork, F-1 to F-3 in order, to answer/answer.md. Do not ask the questions, and do not record a decision.",
+      "expected_output": "F-1 branches each draw a graph of how a line reaches its invoice (a join, a nested value, or an event replay), and F-2 branches a graph of the states and the allowed moves; F-3 uses a symbol table and no graph; no mermaid fence",
+      "files": [
+        "evals/files/dg-fork-data/state.md"
+      ],
+      "assertions": [
+        "[R-FORK-GRAPH | critical | Event] WHEN a fork changes flow, ownership, or order THE card SHALL draw each branch as a plain-text graph in a `text` fence.",
+        "[R-FORK-SHORT | pass-fail | Ubiquitous] THE answer SHALL hold eight lines or fewer in each branch graph.",
+        "[R-FORK-C4 | pass-fail | Event] WHEN a fork is an architecture fork THE graph SHALL name the C4 level and the elements that `diagrams.md` defines.",
+        "[R-FORK-TABLE | pass-fail | Unwanted] IF the branches of a fork differ only in properties, such as a metric, a person, a date, or a policy, THE card SHALL use a symbol table and no graph.",
+        "[R-FORK-NO-MERMAID | pass-fail | Unwanted] IF the host does not render Mermaid THE answer SHALL hold no mermaid fence.",
+        "[R-FORK-FIELDS | pass-fail | Ubiquitous] THE answer SHALL give each card the `F-n` title, `Decides:`, `Moves:`, `Today:`, the branches with their gains, costs, and risks, and a `Legend:` line.",
+        "[Q-FORK-SCOPE | quality | Ubiquitous] THE answer SHALL show in each graph only the elements that its branches change.",
+        "[Q-FORK-SYMBOLS | quality | Ubiquitous] THE answer SHALL use each `fork-questions.md` symbol with one meaning."
+      ]
+    }
+  ]
+}

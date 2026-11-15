@@ -1,4 +1,6 @@
-# ADR-001: install.sh derives the durable root via the skill's bundled Python archive, not bash  [status: accepted]
+# ADR-001: install.sh derives the durable root via the skill's bundled Python archive, not bash  [status: superseded]
+
+> **Superseded 2026-10-18.** `scripts/install.sh` is removed. `npx skills add paulnsorensen/easy-cheese` is the only skill install path, and users run the `easy-cheese-setup` skill to register the global corpus. The `global --apply` CLI and the gotchas below stay valid for that skill.
 
 - **Context:** `install.sh` is `curl|bash` with no local checkout, and skills ship a self-contained Python archive — there is no `shared/scripts/` tree on the user's machine at install time. The corpus block must point at `corpus_home()`, whose single source of truth is `paths.py:210`.
 - **Decision:** Install the `easy-cheese-setup` skill first, then invoke its archive (`global --apply`) for the global corpus leg. One config-mutation implementation shared by installer and skill.

@@ -84,6 +84,21 @@ def store(corpus_root: Path) -> storage.WorkStore:
     return storage.WorkStore.open(WORK_ID, corpus_root=corpus_root)
 
 
+def _skip_fsync(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make `os.fsync` return at once for a test that bounds wall time.
+
+    A lock test uses a join timeout to catch a deadlock. Each promotion makes
+    six fsync calls, and under host I/O contention one fsync can take seconds.
+    The timeout then measures the disk and not the lock. The lock, the rename,
+    and the thread race stay real. `test_storage.py` tests the fsync order.
+    """
+
+    def skip(_fd: int) -> None:
+        return None
+
+    monkeypatch.setattr(os, "fsync", skip)
+
+
 def test_commit_promotes_the_next_revision_and_swaps_the_record(
     store: storage.WorkStore, make_promotion: Callable[..., Promotion]
 ) -> None:
@@ -485,8 +500,11 @@ def test_a_changed_request_against_a_stale_parent_promotes_nothing(
 
 
 def test_two_concurrent_writers_on_one_parent_promote_exactly_one_revision(
-    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
+    store: storage.WorkStore,
+    make_promotion: Callable[..., Promotion],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _skip_fsync(monkeypatch)
     seed = _seed(store, make_promotion)
     start = threading.Barrier(2)
     outcomes: list[object] = []
@@ -798,8 +816,11 @@ def test_lineage_reads_the_current_receipt_once_per_commit(
 
 
 def test_a_held_record_lock_blocks_the_transaction_until_it_is_released(
-    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
+    store: storage.WorkStore,
+    make_promotion: Callable[..., Promotion],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _skip_fsync(monkeypatch)
     seed = _seed(store, make_promotion)
     done = threading.Event()
 

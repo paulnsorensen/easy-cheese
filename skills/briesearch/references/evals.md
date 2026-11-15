@@ -15,6 +15,8 @@ These prompts must invoke /briesearch (or its router parent /cheese must hand of
 - "before I implement, what's the right approach for retry-with-backoff"
 - "look up the FastAPI streaming response API"
 - "what version of Tailwind do most production projects use"
+- "ground this plan in the current chezmoi docs before we design it"
+- "prepare a docs brief for using Prisma in this service"
 
 ## Should-not-trigger queries
 
@@ -47,6 +49,7 @@ For each completed /briesearch run, verify:
 13. **A CLI wins over an MCP for one provider.** When both routes are usable, the manifest `tool` names the CLI subcommand. Exception: `git-host` uses the host GitHub MCP before `gh`.
 14. **No quote rests on a model summary.** Each quoted claim cites a raw body from a retrieval route, not native fetch summary text.
 15. **The tier matches the question.** The routing block names the tier. The declared budget matches the tier in `budgets.md`, or an extension explains the difference.
+16. **A library docs brief checks freshness.** The run sends topic-scoped docs queries, not one whole-library query. It extracts at least one official release marker. The reply contains the `### Library brief` section.
 
 ## Failure modes to watch for
 

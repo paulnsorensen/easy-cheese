@@ -24,7 +24,7 @@ A `prototype` intent also bypasses the clarity check, because its loop settles t
 | research | — | `/briesearch` |
 | rubber-duck | — | `/culture` (only when the user explicitly opted out of writes) |
 | mold | optional `/briesearch` | `/mold` → `/cook` |
-| cook | — | `/cook --auto` (default — propagates through `/press → /age → /cure`) |
+| cook | — | `/cook --auto` (default — runs Cook's Press loop, then propagates through `/age → /cure`) |
 | prototype | — | `/cook --prototype` (steered loop; stabilize resumes the normal chain) |
 | debug | — | `/pasteurize --auto` (default) → `/cook --auto` |
 | affinage | — | `/affinage` |
@@ -135,7 +135,7 @@ Symptom-driven work with no confirmed cause. The user expects a code-level fix.
 | Visual / behavioural bug with a clear repro | "flash of white between two clips" with a file path |
 
 Route to `/pasteurize` to identify the cause, add a regression test, and apply the minimum fix.
-`/pasteurize` then hands off through `/cook`, `/press`, `/age`, and `/cure`.
+`/pasteurize` then hands off through `/cook` (with its Press loop), `/age`, and `/cure`.
 When the cause and a single-file fix are clear, route directly to `/cook`.
 Route a debug signal to `/culture` only when the user requests no writes.
 

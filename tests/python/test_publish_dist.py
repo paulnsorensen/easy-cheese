@@ -6,8 +6,10 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import cast
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -15,6 +17,8 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import publish_dist  # noqa: E402
 
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "publish-dist.yml"
+VALIDATE = REPO_ROOT / ".github" / "workflows" / "validate.yml"
+RELEASE = REPO_ROOT / ".github" / "workflows" / "release.yml"
 ARCHIVE = "skills/cook/scripts/cook.pyz"
 
 
@@ -131,14 +135,45 @@ def test_built_archives_replace_tracked_ones(source: Path, tmp_path: Path) -> No
     assert not (clone / "skills/gone").exists()
 
 
-def test_older_source_cannot_move_dist_back(source: Path, tmp_path: Path) -> None:
+def test_older_source_is_a_no_op(source: Path, tmp_path: Path) -> None:
+    """A late run for an older commit succeeds without moving dist back."""
     old = _git(source, "rev-parse", "HEAD")
     new = _commit(source, "two")
     newest = _publish(source, new, _stage(tmp_path / "s2", "v2"))
 
-    with pytest.raises(SystemExit, match="refusing to move dist back"):
-        _ = _publish(source, old, _stage(tmp_path / "s1", "v1"))
+    late = _publish(source, old, _stage(tmp_path / "s1", "v1"))
+
+    assert late.status == "superseded"
     assert _git(source, "ls-remote", "origin", "refs/heads/dist").split()[0] == newest.commit
+
+
+def test_diverged_source_cannot_move_dist_back(source: Path, tmp_path: Path) -> None:
+    base = _git(source, "rev-parse", "HEAD")
+    published = _publish(source, _commit(source, "two"), _stage(tmp_path / "s1", "v1"))
+    _ = _git(source, "reset", "-q", "--hard", base)
+    _ = (source / "src.txt").write_text("rewritten")
+    _ = _git(source, "commit", "-q", "-am", "rewritten")
+    _ = _git(source, "push", "-q", "-f", "origin", "HEAD:main")
+    _ = _git(source, "fetch", "-q", "origin")
+
+    with pytest.raises(SystemExit, match="refusing to move dist back"):
+        _ = _publish(source, "HEAD", _stage(tmp_path / "s2", "v2"))
+    assert _git(source, "ls-remote", "origin", "refs/heads/dist").split()[0] == published.commit
+
+
+def test_hand_pushed_tip_does_not_stall_publishing(source: Path, tmp_path: Path) -> None:
+    """A dist commit with no Source-Commit trailer is published over, not a dead end."""
+    first = _publish(source, _git(source, "rev-parse", "HEAD"), _stage(tmp_path / "s1", "v1"))
+    hand = _git(source, "commit-tree", f"{first.commit}^{{tree}}", "-p", first.commit, "-m", "hand")
+    _ = _git(source, "push", "-q", "origin", f"{hand}:refs/heads/dist")
+    sha = _commit(source, "two")
+
+    result = _publish(source, sha, _stage(tmp_path / "s2", "v2"))
+
+    assert result.status == "published"
+    clone = _clone_dist(source, tmp_path / "clone")
+    assert _git(clone, "log", "-1", "--format=%(trailers:key=Source-Commit,valueonly)") == sha
+    assert (clone / ARCHIVE).read_bytes().endswith(b"# v2\n")
 
 
 def test_source_off_main_is_refused(source: Path, tmp_path: Path) -> None:
@@ -181,3 +216,47 @@ def test_workflow_runs_one_publish_at_a_time() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     assert "group: publish-dist" in workflow
     assert "cancel-in-progress: false" in workflow
+
+
+def _load(path: Path) -> dict[object, object]:
+    return cast("dict[object, object]", yaml.safe_load(path.read_text(encoding="utf-8")))
+
+
+def _steps(path: Path, job: str) -> list[dict[str, object]]:
+    jobs = cast("dict[str, dict[str, list[dict[str, object]]]]", _load(path)["jobs"])
+    return jobs[job]["steps"]
+
+
+def test_workflow_publishes_the_main_tip_on_every_trigger() -> None:
+    """A cancelled or failed run loses nothing, because the next run publishes main's tip."""
+    triggers = cast("dict[str, object]", _load(WORKFLOW)[True])  # YAML reads `on` as True.
+    assert set(triggers) == {"push", "schedule", "workflow_dispatch"}
+    assert triggers["schedule"], "the hourly reconcile catches a lost or failed run"
+    steps = _steps(WORKFLOW, "publish")
+    checkout = next(s for s in steps if s.get("name") == "Checkout")
+    assert cast("dict[str, object]", checkout["with"])["ref"] == "main"
+    publish = str(next(s for s in steps if s.get("name") == "Publish dist commit")["run"])
+    assert "--source HEAD" in publish
+    assert "GITHUB_SHA" not in publish
+
+
+def test_validate_runs_the_publish_checks_before_merge() -> None:
+    """A change that would fail the dist publish fails its pull request first."""
+    runs = [str(s.get("run", "")) for s in _steps(VALIDATE, "test")]
+    order = [
+        next(i for i, run in enumerate(runs) if "just wedge-build" in run),
+        next(i for i, run in enumerate(runs) if "scripts/stage_release.py" in run),
+        next(i for i, run in enumerate(runs) if "gh skill publish --dry-run" in run),
+        next(i for i, run in enumerate(runs) if "--help" in run),
+    ]
+    assert order == sorted(order)
+
+
+@pytest.mark.parametrize(
+    "workflow", [WORKFLOW, VALIDATE, RELEASE], ids=["publish-dist", "validate", "release"]
+)
+def test_gh_install_makes_no_api_call(workflow: Path) -> None:
+    """An unauthenticated API call hits the shared runner rate limit and fails with 403."""
+    text = workflow.read_text(encoding="utf-8")
+    assert "gh skill publish --dry-run" in text
+    assert "api.github.com" not in text

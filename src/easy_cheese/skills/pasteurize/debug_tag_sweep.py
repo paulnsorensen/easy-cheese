@@ -196,7 +196,7 @@ def sweep_cmd(
         Directory to scan (default: cwd).
     session_tag
         Comma-separated /pasteurize session tags (e.g. a4f2); matches the
-        exact token [DEBUG-<tag>].
+        exact token [DEBUG-`<tag>`].
     tags
         Comma-separated tag tokens to scan for (default: pasteurize set).
     changed_only
