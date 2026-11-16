@@ -2130,6 +2130,7 @@ def test_write_then_logged_run_in_one_step_counts_as_verified(
         "perl -Mstrict -pi -e 's/a/b/' tests/test_pricing.py",
         "perl -i -pe's/a/b/' tests/test_pricing.py",
         "perl -pie 's/a/b/' tests/test_pricing.py",
+        "perl -i -pe'm/a/ && s/a/b/' tests/test_pricing.py",
         "cp /tmp/new.py tests/test_pricing.py",
         "mv /tmp/new.py tests/test_pricing.py",
         "cp -t tests /tmp/test_pricing.py",
