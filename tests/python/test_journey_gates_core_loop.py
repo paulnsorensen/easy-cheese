@@ -413,3 +413,24 @@ def test_plate_only_an_and_chain_ties_a_commit_to_the_gate(tmp_path: Path, steps
 def test_plate_unparseable_step_keeps_forbidden_flags(tmp_path: Path, command: str, fails: list[str]) -> None:
     nested = "echo " + "$(" * 9 + "x" + ")" * 9
     assert _plate_verdict(tmp_path, [(f"{command}; {nested}", 0)]) == fails
+
+
+@pytest.mark.parametrize(
+    "steps",
+    [
+        [("sh scripts/check.sh", 1), ("true || sh scripts/check.sh", 0), ("git commit -m 'fix: x'", 0)],
+        [("sh scripts/check.sh", 1), ("git commit -m x; sh scripts/check.sh && git commit -m y", 0)],
+    ],
+    ids=["gate-after-or", "commit-before-new-gate"],
+)
+def test_plate_a_failed_gate_holds_until_a_gate_run_reports(tmp_path: Path, steps: list[tuple[str, int]]) -> None:
+    assert _plate_verdict(tmp_path, steps) == ["commit-after-failed-gate"]
+
+
+@pytest.mark.parametrize(
+    ("command", "fails"),
+    [("git commit --amend -m x", ["amend"]), ("git add -A", ["full-tree-staging"])],
+)
+def test_plate_unparseable_step_keeps_every_git_rule(tmp_path: Path, command: str, fails: list[str]) -> None:
+    nested = "echo " + "$(" * 9 + "x" + ")" * 9
+    assert _plate_verdict(tmp_path, [(f"{command}; {nested}", 0)]) == fails
