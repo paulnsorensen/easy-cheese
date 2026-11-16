@@ -400,7 +400,7 @@ def test_compiler_check_names_drifted_suites_and_write_repairs_them(
     assert run_compiler(tmp_path, "--check").returncode == 0
     pasteurize = tmp_path / "scripts" / "journey_gates" / "pasteurize.py"
     pasteurize.write_text(
-        pasteurize.read_text(encoding="utf-8") + "\n# drift\n", encoding="utf-8"
+        pasteurize.read_text(encoding="utf-8") + "\nDRIFT = 1\n", encoding="utf-8"
     )
     drift = run_compiler(tmp_path, "--check")
     assert drift.returncode == 1
@@ -1958,6 +1958,19 @@ def test_compiler_derives_skills_from_the_gate_sources() -> None:
 @pytest.mark.parametrize("skill", ALL_GATE_SKILLS)
 def test_compiled_gate_fits_one_argv_string(skill: str) -> None:
     assert len(contract_argv(skill)[3].encode("utf-8")) < 65536
+
+
+def test_compiler_drops_comment_only_lines_but_keeps_hashes_in_code() -> None:
+    source = 'x = 1  # trailing\n    # alone\n# alone\ns = """\n# kept in a string\n"""\n'
+    assert load_compiler().without_comment_lines(source) == (
+        'x = 1  # trailing\ns = """\n# kept in a string\n"""\n'
+    )
+
+
+@pytest.mark.parametrize("skill", ALL_GATE_SKILLS)
+def test_compiled_gate_has_no_comment_only_lines(skill: str) -> None:
+    source = contract_argv(skill)[3]
+    assert load_compiler().without_comment_lines(source) == source
 
 
 # --- review fixes: compiler input validation ---------------------------------------
