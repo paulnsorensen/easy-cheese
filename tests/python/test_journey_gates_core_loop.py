@@ -391,3 +391,25 @@ def test_plate_check_then_commit_in_a_list_cannot_hide_a_failed_gate(tmp_path: P
     assert _plate_verdict(tmp_path, steps) == ["commit-after-failed-gate"]
     passing = [("sh scripts/check.sh", 1), ("sh scripts/check.sh && git commit -m 'fix: x'", 0)]
     assert _plate_verdict(tmp_path / "and", passing) == []
+
+
+@pytest.mark.parametrize(
+    "steps",
+    [
+        [("sh scripts/check.sh", 1), ("sh scripts/check.sh; git commit -m 'fix: a && b'", 0)],
+        [("sh scripts/check.sh", 1), ("sh scripts/check.sh; true", 0), ("git commit -m 'fix: x'", 0)],
+        [("sh scripts/check.sh; git commit -m 'fix: x'", 0)],
+    ],
+    ids=["quoted-and", "gate-then-true", "same-step-semicolon"],
+)
+def test_plate_only_an_and_chain_ties_a_commit_to_the_gate(tmp_path: Path, steps: list[tuple[str, int]]) -> None:
+    assert _plate_verdict(tmp_path, steps) == ["commit-after-failed-gate"]
+
+
+@pytest.mark.parametrize(
+    ("command", "fails"),
+    [("git commit -nm x", ["no-verify"]), ("git push --force origin HEAD", ["force-push"])],
+)
+def test_plate_unparseable_step_keeps_forbidden_flags(tmp_path: Path, command: str, fails: list[str]) -> None:
+    nested = "echo " + "$(" * 9 + "x" + ")" * 9
+    assert _plate_verdict(tmp_path, [(f"{command}; {nested}", 0)]) == fails
