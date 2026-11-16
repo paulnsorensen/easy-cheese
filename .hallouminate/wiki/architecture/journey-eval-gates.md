@@ -11,6 +11,7 @@ The compiler finds each skill from its gate module, so a new suite needs only `s
 - skillz also accepts a `gate` file under `evals/gates/`, but that file would be Python under `skills/`.
 - Inline `argv` keeps the doctrine and still gives the sources lint, type checks, and unit tests.
 - `common.py` holds the shared code. Each skill module imports it inside a `# gate:strip-begin` / `# gate:strip-end` block, which the compiler drops. The compiler exits 2 on an unpaired marker or CRLF.
+- Each compiled gate is one argv string, which must stay under 64 KiB (`test_compiled_gate_fits_one_argv_string`). Every gate inlines all of `common.py`, so the gates sit near the limit (about 58-62 KB after the compiler drops comment-only lines). Watch the size when you grow `common.py` or a gate module.
 - The strip block also drops the skill module's own imports. A module that `common.py` does not import (for example `shutil` or `tempfile`) must sit below `# gate:strip-end`, or the compiled gate raises `NameError`. Put the `# pyright:` pragma inside the strip block.
 
 ## Runtime limits that shape the code
