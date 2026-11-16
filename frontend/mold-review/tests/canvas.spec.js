@@ -445,6 +445,7 @@ for (const viewport of [{width: 375, height: 667}, {width: 844, height: 390}]) {
     try {
       await page.setViewportSize(viewport);
       await page.goto(s.url);
+      await expect(page.locator('main.mc-shell--requirements')).toBeAttached();
       const stack = page.locator('.mc-shapes > .mc-stack');
       await stack.scrollIntoViewIfNeeded();
       expect(await stack.evaluate(element => element.clientHeight)).toBeGreaterThanOrEqual(160);
