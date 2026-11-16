@@ -399,8 +399,9 @@ def test_plate_check_then_commit_in_a_list_cannot_hide_a_failed_gate(tmp_path: P
         [("sh scripts/check.sh", 1), ("sh scripts/check.sh; git commit -m 'fix: a && b'", 0)],
         [("sh scripts/check.sh", 1), ("sh scripts/check.sh; true", 0), ("git commit -m 'fix: x'", 0)],
         [("sh scripts/check.sh; git commit -m 'fix: x'", 0)],
+        [("sh scripts/check.sh; git commit -m 'fix: x' && true", 0)],
     ],
-    ids=["quoted-and", "gate-then-true", "same-step-semicolon"],
+    ids=["quoted-and", "gate-then-true", "same-step-semicolon", "semicolon-then-and"],
 )
 def test_plate_only_an_and_chain_ties_a_commit_to_the_gate(tmp_path: Path, steps: list[tuple[str, int]]) -> None:
     assert _plate_verdict(tmp_path, steps) == ["commit-after-failed-gate"]
@@ -429,7 +430,11 @@ def test_plate_a_failed_gate_holds_until_a_gate_run_reports(tmp_path: Path, step
 
 @pytest.mark.parametrize(
     ("command", "fails"),
-    [("git commit --amend -m x", ["amend"]), ("git add -A", ["full-tree-staging"])],
+    [
+        ("git commit --amend -m x", ["amend"]),
+        ("git add -A", ["full-tree-staging"]),
+        ("git commit '-n' -m x", ["no-verify"]),
+    ],
 )
 def test_plate_unparseable_step_keeps_every_git_rule(tmp_path: Path, command: str, fails: list[str]) -> None:
     nested = "echo " + "$(" * 9 + "x" + ")" * 9
