@@ -93,8 +93,8 @@ Do not leave `Evidence` blank. You can skip a probe, but do not assume its resul
 <chosen option summary>
 
 ## Decisions
-- <one-line decision> — <one-line rationale>
-- _Minor decisions:_ <one line capturing the `[AGENT-DECIDED]` calls the user did not veto — the per-round ledger's minor tier; major decisions get full ADRs per `adr.md`>
+- F-n: <the ledger's EARS requirement, verbatim> — <one-line rationale>
+- _Minor decisions:_ <one line capturing the `[AGENT-DECIDED]` EARS entries the user did not veto, each with its veto alternative — the per-round ledger's minor tier; major decisions get full ADRs per `adr.md`>
 
 ## Acceptance
 

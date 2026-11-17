@@ -29,15 +29,15 @@
       "items": [
         {
           "id": "F-1",
-          "text": "SQLite, one file at `.cheese/db/store.sqlite`"
+          "text": "THE store SHALL keep every record in one SQLite file at `.cheese/db/store.sqlite`."
         },
         {
           "id": "F-2",
-          "text": "WAL mode plus a writer lock file carrying the pid"
+          "text": "WHEN two agents write at once THE store SHALL serialize the writes through a writer lock file that carries the pid."
         },
         {
           "id": "F-3",
-          "text": "Store facade: open, put, get, query"
+          "text": "THE store SHALL expose only `open`, `put`, `get`, and `query` through one Store facade."
         }
       ]
     },
@@ -161,15 +161,15 @@
     "settled": [
       {
         "id": "F-1",
-        "text": "SQLite, one file at `.cheese/db/store.sqlite`"
+        "text": "THE store SHALL keep every record in one SQLite file at `.cheese/db/store.sqlite`."
       },
       {
         "id": "F-2",
-        "text": "WAL mode plus a writer lock file carrying the pid"
+        "text": "WHEN two agents write at once THE store SHALL serialize the writes through a writer lock file that carries the pid."
       },
       {
         "id": "F-3",
-        "text": "Store facade: open, put, get, query"
+        "text": "THE store SHALL expose only `open`, `put`, `get`, and `query` through one Store facade."
       }
     ],
     "open": [
@@ -197,6 +197,17 @@
       "id": "R-4",
       "prompt": "How does round four get new evidence?",
       "meta": "routes the next step · nothing settles",
+      "basis": [
+        {
+          "ref": "r2–r4",
+          "text": "three rounds added no new evidence"
+        },
+        {
+          "ref": "F-5",
+          "text": "lock behavior on network mounts is unverified",
+          "confidence": "don't know"
+        }
+      ],
       "selection_mode": "single",
       "recommended_option_id": "validate",
       "options": [
