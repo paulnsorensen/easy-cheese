@@ -1,0 +1,10 @@
+id: py-range-len-loop
+valid:
+  - |
+    for index, item in enumerate(items):
+        use(index, item)
+  - size = range(len(items))
+invalid:
+  - |
+    for index in range(len(items)):
+        use(index, items[index])

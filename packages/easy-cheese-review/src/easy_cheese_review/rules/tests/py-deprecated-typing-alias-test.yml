@@ -1,0 +1,8 @@
+id: py-deprecated-typing-alias
+valid:
+  - from typing import Any, Protocol
+  - from collections.abc import Sequence
+invalid:
+  - from typing import List
+  - from typing import Any, Optional
+  - from typing import Dict as Mapping

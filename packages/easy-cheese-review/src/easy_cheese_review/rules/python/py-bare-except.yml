@@ -1,0 +1,11 @@
+id: py-bare-except
+language: python
+severity: warning
+message: A bare `except:` also catches KeyboardInterrupt and SystemExit.
+note: Catch `Exception` or a narrower type.
+metadata:
+  dimension: correctness
+  base: medium
+rule:
+  kind: except_clause
+  regex: '^except\s*:'

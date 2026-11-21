@@ -1,0 +1,35 @@
+id: py-swallowed-exception
+valid:
+  - |
+    try:
+        run()
+    except Exception:
+        logger.exception("run failed")
+  - |
+    try:
+        run()
+    except KeyError:
+        pass
+  - |
+    try:
+        run()
+    except Exception:
+        cleanup()
+        pass
+invalid:
+  - |
+    try:
+        run()
+    except Exception:
+        pass
+  - |
+    try:
+        run()
+    except:
+        pass
+  - |
+    try:
+        run()
+    except BaseException as exc:
+        # ignore
+        pass

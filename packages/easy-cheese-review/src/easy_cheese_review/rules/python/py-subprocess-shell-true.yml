@@ -1,0 +1,19 @@
+id: py-subprocess-shell-true
+language: python
+severity: warning
+message: A subprocess call with `shell=True` runs its command through a shell.
+note: Pass an argument list without a shell, or confirm that no input that a user controls reaches the command.
+metadata:
+  dimension: security
+  base: high
+rule:
+  kind: call
+  all:
+    - has:
+        field: function
+        regex: '^subprocess\.(run|call|check_call|check_output|Popen)$'
+    - has:
+        field: arguments
+        has:
+          kind: keyword_argument
+          regex: '^shell\s*=\s*True$'

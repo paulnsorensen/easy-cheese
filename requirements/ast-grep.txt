@@ -1,0 +1,11 @@
+# The ast-grep binary for the easy-cheese-review suites (`tests/review/python`).
+# The package needs ast-grep only at run time and treats it as optional; the
+# tests need it. Wheel hashes only, so pip never builds from source.
+ast-grep-cli==0.51.2 \
+    --hash=sha256:4301bfa472b7fa77dadb639173e3908bd0b97ffe3e164ab62e03c14e94669616 \
+    --hash=sha256:6a2f528fc10d668b220b512e7e34466a13b4ba7b5ee95d1596a2b1e194a0a6cf \
+    --hash=sha256:571f8c7cb2c7de16c52cf7862f2a528c67eb87d084e335a3f7366c7fa745158c \
+    --hash=sha256:461f5ea36dbc0d8e3b965128deb0ac81b17f41b74b28da909cf836ce95953027 \
+    --hash=sha256:a20d49bf6f3305c026f93e964c602819712af9caec8df44d278c7940707685f9 \
+    --hash=sha256:b8aad3396a78e1129c2e00f664f8c6965d9c1c1329140722d607517f69ad279a \
+    --hash=sha256:ba0f2d5d672bdd2d6926ce7fc7c062b15d468af73c2d35a1244fc853f4cf93f4

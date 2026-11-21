@@ -1,0 +1,13 @@
+id: ts-async-foreach
+valid:
+  - items.forEach((item) => process(item));
+  - await Promise.all(items.map(async (item) => process(item)));
+invalid:
+  - |
+    items.forEach(async (item) => {
+      await process(item);
+    });
+  - |
+    items.forEach(async function (item) {
+      await process(item);
+    });

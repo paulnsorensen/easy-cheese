@@ -1,0 +1,7 @@
+id: py-eval-exec
+valid:
+  - ast.literal_eval(text)
+  - model.eval()
+invalid:
+  - eval(text)
+  - exec(code, namespace)

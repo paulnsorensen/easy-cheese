@@ -1,0 +1,64 @@
+id: ts-async-foreach
+snapshots:
+  "items.forEach(async (item) => {\n  await process(item);\n});\n":
+    labels:
+    - source: |-
+        items.forEach(async (item) => {
+          await process(item);
+        })
+      style: primary
+      start: 0
+      end: 57
+    - source: forEach
+      style: secondary
+      start: 6
+      end: 13
+    - source: items.forEach
+      style: secondary
+      start: 0
+      end: 13
+    - source: |-
+        async (item) => {
+          await process(item);
+        }
+      style: secondary
+      start: 14
+      end: 56
+    - source: |-
+        async (item) => {
+          await process(item);
+        }
+      style: secondary
+      start: 14
+      end: 56
+  "items.forEach(async function (item) {\n  await process(item);\n});\n":
+    labels:
+    - source: |-
+        items.forEach(async function (item) {
+          await process(item);
+        })
+      style: primary
+      start: 0
+      end: 63
+    - source: forEach
+      style: secondary
+      start: 6
+      end: 13
+    - source: items.forEach
+      style: secondary
+      start: 0
+      end: 13
+    - source: |-
+        async function (item) {
+          await process(item);
+        }
+      style: secondary
+      start: 14
+      end: 62
+    - source: |-
+        async function (item) {
+          await process(item);
+        }
+      style: secondary
+      start: 14
+      end: 62

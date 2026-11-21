@@ -1,9 +1,9 @@
 # Tiers — scale the ceremony to the job
 
-Mold picks a tier at the end of the Bounds pass (`../SKILL.md` Flow step 1), once the goals, non-goals, and shape-check verdict are on the ledger. Announce the tier in one line with its reason before the first fork question:
+Mold picks a tier at the end of the Bounds pass (`../SKILL.md` Flow step 1), once the goals, non-goals, and shape-check verdict are on the ledger. `python3 skills/mold/scripts/mold.pyz tier` applies the rows below. Announce its `line` before the first fork question:
 
 ```text
-tier: quick — clarity check passed, verdict low, no open fork
+tier: quick (no fired trigger, verdict low, no open fork)
 ```
 
 The user overrides with the `quick`, `light`, or `full` knob at any time. Mold upgrades on its own when the evidence changes. It never downgrades silently.

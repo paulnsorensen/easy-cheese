@@ -25,12 +25,35 @@ semantic evidence.
 
 ## Dimensions and subjects
 
-The report has twelve finding dimensions. The established ten remain:
-`correctness`, `security`, `encapsulation`, `spec`, `complexity`, `deslop`,
-`assertions`, `nih`, `efficiency`, and `telemetry`. `conventions` and
-`altitude` are now first-class dimensions with their own rubrics and boundary
-rules. A subject may emit several dimensions, and different subjects may
-surface one underlying defect; the coordinator reconciles those overlaps.
+The `/age` report has seventeen finding dimensions, the values of
+`ReviewDimension` in `easy-cheese-schemas` 4.0.0
+(`src/easy_cheese_schemas/contracts.py:217-234`): `correctness`, `security`,
+`encapsulation`, `spec`, `complexity`, `deslop`, `assertions`, `nih`,
+`efficiency`, `telemetry`, `conventions`, `altitude`, `reframe`, `tests`,
+`compat`, `scope`, and `dependencies`. Each has its own rubric and boundary
+rules in `skills/age/references/dimensions.md`; the four 4.0.0 rubrics sit at
+`skills/age/references/dimensions.md:492-561`. A subject may emit several
+dimensions, and different subjects may surface one underlying defect; the
+coordinator reconciles those overlaps.
+
+The four 4.0.0 dimensions add no subject and do not change
+`age-review-plan.v2`. The packet's primary rubric map
+(`skills/age/references/packet.md:25-37`) gives them to existing subjects:
+`tests` goes to `spec-tests`, `scope` goes to `altitude`, `compat` goes to
+`caller-impact`, and `dependencies` goes to `reuse`. The `altitude` worker
+receives the whole-change view (`skills/age/references/packet.md:45`), which
+the `scope` rubric needs. None of the
+four takes the location bump, so `LOCATION_SENSITIVE`
+(`packages/easy-cheese-review/src/easy_cheese_review/severity.py`) stays unchanged.
+A deterministic fact or an ast-grep hit can back a finding as evidence of kind
+`static` (`EvidenceKind.STATIC`, `src/easy_cheese_schemas/contracts.py:173-179`);
+it is never a finding by itself, and a review without static evidence still
+covers every dimension (`skills/age/references/dimensions.md:563-565`).
+
+The severity ladder is `blocker > high > medium > low`. Since 4.0.0 the
+published `ReviewSeverity` enum
+(`src/easy_cheese_schemas/contracts.py:237-241`) uses the same word
+(`BLOCKER = "blocker"`); 3.0.0 said `critical`.
 
 The planner assigns independent procedures called subjects:
 
@@ -191,5 +214,7 @@ _Source: `src/easy_cheese/shared/fanout/age_route.py`,
 `src/easy_cheese/shared/fanout/review_surface.py`,
 `skills/age/references/fan-out.md`, and approved spec
 `age-contextual-review-parity`; updated for the contextual policy._
+
+_Source: easy-cheese-schemas 4.0.0 review vocabulary (curd `ec-schema-v4` of spec `affineur-ast-grep-evidence`, ingest hash 4ff8c4581c96fd93) · Updated: 2026-11-15 · Supersedes: the twelve-dimension list and the `critical` severity word_
 
 _Source: deployment reference correction for [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729) · Updated: 2026-09-28 · Supersedes: extensionless launcher references from the initial Wedge proposal._

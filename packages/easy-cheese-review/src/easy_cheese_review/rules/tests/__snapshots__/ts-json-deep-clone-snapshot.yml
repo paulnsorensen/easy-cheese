@@ -1,0 +1,8 @@
+id: ts-json-deep-clone
+snapshots:
+  const copy = JSON.parse(JSON.stringify(user));:
+    labels:
+    - source: JSON.parse(JSON.stringify(user))
+      style: primary
+      start: 13
+      end: 45

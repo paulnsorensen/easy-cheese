@@ -1,0 +1,8 @@
+id: py-constant-assert
+valid:
+  - assert result == 3
+  - assert value is not None, "value is missing"
+invalid:
+  - assert True
+  - assert 1
+  - assert "done"

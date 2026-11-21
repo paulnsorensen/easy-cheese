@@ -1,0 +1,32 @@
+id: py-mutable-default-argument
+snapshots:
+  "def add(item, items=[]):\n    return items\n":
+    labels:
+    - source: items=[]
+      style: primary
+      start: 14
+      end: 22
+    - source: "[]"
+      style: secondary
+      start: 20
+      end: 22
+  "def add(item, seen: dict[str, int] = {}):\n    return seen\n":
+    labels:
+    - source: "seen: dict[str, int] = {}"
+      style: primary
+      start: 14
+      end: 39
+    - source: "{}"
+      style: secondary
+      start: 37
+      end: 39
+  "def add(item, seen=set()):\n    return seen\n":
+    labels:
+    - source: seen=set()
+      style: primary
+      start: 14
+      end: 24
+    - source: set()
+      style: secondary
+      start: 19
+      end: 24

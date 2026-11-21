@@ -1,0 +1,10 @@
+id: py-yaml-unsafe-load
+language: python
+severity: warning
+message: '`yaml.load` without a Loader can build arbitrary objects.'
+note: Use `yaml.safe_load`.
+metadata:
+  dimension: security
+  base: high
+rule:
+  pattern: yaml.load($STREAM)
