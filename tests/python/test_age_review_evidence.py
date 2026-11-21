@@ -249,7 +249,8 @@ def test_review_evidence_never_drops_a_file_with_a_raw_name_in_silence(
 
     hits = cast(list[dict[str, object]], evidence["hits"])
     rule_ids = [hit["rule_id"] for hit in hits]
-    assert evidence["scan"] != {"status": "ok"} or rule_ids == ["py-eval-exec", "py-eval-exec"]
+    scan = cast(dict[str, object], evidence["scan"])
+    assert scan["status"] != "ok" or rule_ids == ["py-eval-exec", "py-eval-exec"]
 
 
 def test_review_evidence_ignores_a_textconv_driver(
@@ -342,12 +343,14 @@ def test_review_evidence_skips_and_reports_oversized_files(
     assert [(hit["rule_id"], hit["path"]) for hit in hits] == [("py-eval-exec", "app.py")]
     facts = cast(dict[str, dict[str, object]], evidence["facts"])
     # Only the skipped base file imports `requests`, so `added_imports` cannot be trusted.
-    assert facts["dependencies"] == {
-        "value": "unknown",
-        "detail": {"reason": "file-too-large", "skipped": ["vendor.py"]},
-    }
+    assert facts["dependencies"]["value"] == "unknown"
+    dependencies = cast(dict[str, object], facts["dependencies"]["detail"])
+    assert (dependencies["reason"], dependencies["skipped"]) == ("file-too-large", ["vendor.py"])
+    assert dependencies["added_imports"] == [{"path": "app.py", "module": "requests"}]
     # `gen.py` has no visible imports, so it looks like a second group.
-    assert facts["scope"] == {"value": "unknown", "detail": {"reason": "file-too-large", "skipped": ["gen.py"]}}
+    assert facts["scope"]["value"] == "unknown"
+    scope = cast(dict[str, object], facts["scope"]["detail"])
+    assert (scope["reason"], scope["skipped"]) == ("file-too-large", ["gen.py"])
     assert facts["tests"] == {"value": "yes", "detail": {"untested": ["app.py", "gen.py"], "sources": 2}}
 
 

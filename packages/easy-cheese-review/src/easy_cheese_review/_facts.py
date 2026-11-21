@@ -23,7 +23,7 @@ PYTHON_SUFFIXES = frozenset({".py"})
 SCRIPT_SUFFIXES = frozenset({".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"})
 CODE_SUFFIXES = PYTHON_SUFFIXES | SCRIPT_SUFFIXES
 # A directory scan also parses these suffixes (measured with ast-grep 0.51.3).
-SCAN_SUFFIXES = CODE_SUFFIXES | frozenset({".mts", ".cts", ".pyi", ".py3", ".bzl"})
+SCAN_SUFFIXES = CODE_SUFFIXES | frozenset({".mts", ".cts", ".pyi", ".py3", ".bzl", ".bazel"})
 
 _TEST_DIRS = frozenset({"tests", "test", "__tests__", "spec", "specs"})
 _TEST_FILE = re.compile(r"^test_.+\.py$|^.+_test\.py$|^conftest\.py$|^.+\.(test|spec)\.[cm]?[jt]sx?$")
@@ -128,7 +128,7 @@ def tests_fact(code_paths: Sequence[str]) -> Fact:
 
 def _export_names(path: str, items: Iterable[JsonObject]) -> set[str]:
     """Return the public names a module exports, as an importer sees them."""
-    python = _is_python(path)
+    python = is_python(path)
     names: set[str] = set()
     for item in items:
         name = item.get("name")
@@ -205,7 +205,7 @@ def _script_imports(text: str) -> list[str]:
 
 def _package_of(path: str, module: str) -> str | None:
     """Return the distribution-level name an import names, or None when local."""
-    if _is_python(path):
+    if is_python(path):
         if module.startswith("."):
             return None
         return module.split(".")[0]
@@ -217,12 +217,12 @@ def _package_of(path: str, module: str) -> str | None:
     return "/".join(parts[:2]) if module.startswith("@") else parts[0]
 
 
-def _is_python(path: str) -> bool:
+def is_python(path: str) -> bool:
     return PurePosixPath(path).suffix in PYTHON_SUFFIXES
 
 
 def _is_third_party(head: Path, path: str, package: str) -> bool:
-    if _is_python(path):
+    if is_python(path):
         if package in sys.stdlib_module_names:
             return False
         # A local package sits beside the importing file, in an ancestor
@@ -237,7 +237,7 @@ def _is_third_party(head: Path, path: str, package: str) -> bool:
 
 
 def _packages(path: str, texts: Iterable[str]) -> set[str]:
-    python = _is_python(path)
+    python = is_python(path)
     modules: list[str] = []
     for text in texts:
         if python:
@@ -282,12 +282,12 @@ def dependencies_fact(
 
     known: set[tuple[bool, str]] = set()
     for path, texts in base_imports.items():
-        python = _is_python(path)
+        python = is_python(path)
         known |= {(python, package) for package in _packages(path, texts)}
     added: list[JsonObject] = []
     for path, texts in sorted(head_imports.items()):
         for package in sorted(_packages(path, texts)):
-            if (_is_python(path), package) not in known and _is_third_party(head, path, package):
+            if (is_python(path), package) not in known and _is_third_party(head, path, package):
                 added.append({"path": path, "module": package})
 
     value = "yes" if manifests or lockfiles or added else "no"
@@ -321,7 +321,7 @@ def _module_index(nodes: Sequence[str]) -> _ModuleIndex:
     exact: dict[str, set[str]] = {}
     suffix: dict[str, set[str]] = {}
     for node in nodes:
-        if not _is_python(node):
+        if not is_python(node):
             continue
         dotted = _dotted(node)
         exact.setdefault(dotted, set()).add(node)
@@ -399,7 +399,7 @@ def scope_fact(nodes: Sequence[str], head_imports: Mapping[str, list[str]]) -> F
     for path, texts in head_imports.items():
         if path not in parent:
             continue
-        if _is_python(path):
+        if is_python(path):
             targets = _python_targets(path, texts, index)
         else:
             targets = _script_targets(path, texts, node_set)

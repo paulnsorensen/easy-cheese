@@ -7,19 +7,22 @@ A whole-base import scan of this repository once wrote 9.8 MB of stdout for 632 
 ## Result contract
 
 `Evidence.to_json()["scan"]` always holds `skipped`: a list of `{tree, path, bytes}`, where `tree` is `head` or `base`.
-An empty list means every file was scanned, so a consumer can tell "no hits" from "not scanned".
+When `scan.status` is `ok`, an empty list means every file was scanned, so a consumer can tell "no hits" from "not scanned".
+A `failed:` status with an empty list does not show a complete scan.
 A skipped file has no hits, also when `scan.status` is `ok`.
-`/age` reads this in `skills/age/references/fan-out.md`: review a skipped file by hand.
+`/age` reads this in `skills/age/references/fan-out.md`: review a `tree: head` skip by hand.
+A `tree: base` skip does not mean that the head path has no hits.
 
 ## Facts never become wrong
 
-A skip makes a fact `unknown` with `{"reason": "file-too-large", "skipped": [...]}` only when the missing file can flip the value.
+A skip makes a fact `unknown` only when the missing file can flip the value.
+The detail keeps its original keys, such as `added_imports`, and adds `"reason": "file-too-large"` and `"skipped": [...]`.
 The rules live in `_compute_facts` and `_dependencies` in `packages/easy-cheese-review/src/easy_cheese_review/_evidence.py`.
 
 - `tests` pairs file names and reads no file, so it stays known in every mode.
 - `scope`: a missing import can only join groups, so `yes` becomes `unknown`.
 - `compat`: a changed file skipped in either tree is not compared, so `no` becomes `unknown`.
-- `dependencies`: a head skip turns `no` into `unknown`. A base skip turns a `yes` that rests only on `added_imports` into `unknown`; a manifest or lockfile change keeps `yes`.
+- `dependencies`: a head skip turns `no` into `unknown`. A base skip turns a `yes` that rests only on `added_imports` into `unknown`, but only when the skipped file has the language class (Python or script) of an added import; a manifest or lockfile change keeps `yes`.
 
 ## Base-tree exclusion
 

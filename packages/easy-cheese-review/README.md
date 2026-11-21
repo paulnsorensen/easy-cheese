@@ -67,10 +67,10 @@ No ast-grep run reads a file larger than `max_file_bytes` (default `MAX_FILE_BYT
 `scan` and `facts` take `max_file_bytes` as a keyword argument.
 The limit covers the changed files in `head` and `base`, and every file of the whole-base import scan.
 `scan.skipped` lists each file left out, with its tree (`head` or `base`), path, and size in bytes.
-The list is always present, so an empty list means every file was scanned.
+The list is always present. When `scan.status` is `ok`, an empty list means every file was scanned.
 A skipped file has no hits, also when its status is `ok`.
 
-A skip makes a fact `unknown`, with `{"reason": "file-too-large", "skipped": [...]}`, only when the missing file can change the value:
+A skip makes a fact `unknown`. Its detail keeps the original keys and adds `"reason": "file-too-large"` and `"skipped": [...]`. It happens only when the missing file can change the value:
 
 | Fact | Effect of a skipped file |
 | --- | --- |

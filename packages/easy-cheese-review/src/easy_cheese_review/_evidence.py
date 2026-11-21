@@ -136,7 +136,7 @@ def _unless_skipped(fact: Fact, doubtful: FactValue, skipped: Iterable[str]) -> 
     """Return `unknown` when `fact` is `doubtful` and a skipped file can change that answer."""
     names = sorted(skipped)
     if fact.value == doubtful and names:
-        return Fact("unknown", {"reason": "file-too-large", "skipped": names})
+        return Fact("unknown", {**fact.detail, "reason": "file-too-large", "skipped": names})
     return fact
 
 
@@ -212,7 +212,12 @@ def _dependencies(
     fact = _unless_skipped(fact, "no", head_over)
     if fact.detail.get("manifests") or fact.detail.get("lockfiles"):
         return fact
-    return _unless_skipped(fact, "yes", base_over)
+    # `dependencies_fact` keys added imports by language, so only a skipped file of that class can hide one.
+    added = fact.detail.get("added_imports")
+    rows = cast(list[object], added) if isinstance(added, list) else []
+    languages = {_facts.is_python(str(_mapping(item).get("path"))) for item in rows}
+    same_language = {path: size for path, size in base_over.items() if _facts.is_python(path) in languages}
+    return _unless_skipped(fact, "yes", same_language)
 
 
 @contextmanager
@@ -244,6 +249,7 @@ def facts(
     """
     with _setup(changed, ast_grep) as (paths, binary, config):
         return _compute_facts(binary, config, head, paths, base, max_file_bytes)[0]
+
 
 def _on_changed_lines(hit: Hit, hunks: Mapping[str, Sequence[LineRange]]) -> bool:
     """Return whether a hit overlaps a changed range; a file with no entry is changed in full."""

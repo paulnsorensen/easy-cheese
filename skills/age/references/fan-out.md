@@ -14,7 +14,8 @@ A score measures workload, not security relevance.
 Collect static evidence with `python3 skills/age/scripts/age.pyz review-evidence --repo . <base>`.
 Its hits and its `compat`, `dependencies`, `tests`, and `scope` facts are evidence to confirm or reject, never findings by themselves.
 A `failed:` scan status or an `unknown` fact means that evidence is absent; continue the review without it.
-A file in `scan.skipped` is too large for the scan, so it has no hits; review it by hand.
+A `scan.skipped` entry with `tree: head` is too large for the scan, so it has no hits; review that file by hand.
+A `tree: base` entry does not mean the head path has no hits.
 When a specification exists, read its `leverage:` frontmatter list.
 Preserve every fired trigger in subject evidence.
 Map applicable triggers to supported risk flags; retain triggers without a direct flag mapping as evidence.

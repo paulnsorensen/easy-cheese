@@ -80,7 +80,8 @@ def test_scope_yes_becomes_unknown(tmp_path: Path, write_tree: WriteTree, ast_gr
 
     assert unlimited["scope"].value == "no"
     assert result["scope"].value == "unknown"
-    assert result["scope"].detail == {"reason": "file-too-large", "skipped": ["big.py"]}
+    assert result["scope"].detail["reason"] == "file-too-large"
+    assert result["scope"].detail["skipped"] == ["big.py"]
 
 
 @pytest.mark.parametrize("tree", ["base", "head"])
@@ -98,7 +99,8 @@ def test_compat_no_becomes_unknown_when_a_compared_file_is_skipped(
     result = facts(head, ["lib.py"], base=base_root, ast_grep=ast_grep_binary, max_file_bytes=LIMIT)
 
     assert result["compat"].value == "unknown"
-    assert result["compat"].detail == {"reason": "file-too-large", "skipped": ["lib.py"]}
+    assert result["compat"].detail["reason"] == "file-too-large"
+    assert result["compat"].detail["skipped"] == ["lib.py"]
 
 
 def test_compat_yes_stays_for_the_files_it_compared(
@@ -125,7 +127,8 @@ def test_dependencies_no_becomes_unknown_when_a_head_file_is_skipped(
     result = facts(head, ["big.py"], base=base_root, ast_grep=ast_grep_binary, max_file_bytes=LIMIT)
 
     assert result["dependencies"].value == "unknown"
-    assert result["dependencies"].detail == {"reason": "file-too-large", "skipped": ["big.py"]}
+    assert result["dependencies"].detail["reason"] == "file-too-large"
+    assert result["dependencies"].detail["skipped"] == ["big.py"]
 
 
 def test_a_manifest_change_keeps_dependencies_yes_despite_a_base_skip(
@@ -165,6 +168,20 @@ def test_a_skipped_base_file_is_excluded_whatever_its_name(
     assert evidence.facts["dependencies"].value == "no"
 
 
+@pytest.mark.parametrize("name", ["w[x]/b*g.py", "a b {c}.py", "!e.py", "#f.py", "g\\h.py"])
+def test_the_exclusion_glob_matches_a_special_named_file(
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str, name: str
+) -> None:
+    """Only the oversized file imports `requests`; if its glob matched nothing, the scan would read it."""
+    base_root, head = _trees(tmp_path, write_tree, {name: "import requests" + PAD}, {"app.py": "import requests\n"})
+
+    evidence = scan(head, ["app.py"], base=base_root, ast_grep=ast_grep_binary, max_file_bytes=LIMIT)
+
+    # A read file would make `requests` known, so `dependencies` would be `no`.
+    assert evidence.facts["dependencies"].value == "unknown"
+    assert evidence.facts["dependencies"].detail["skipped"] == [name]
+
+
 def test_an_oversized_base_file_alone_makes_added_imports_unknown(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
@@ -177,4 +194,46 @@ def test_an_oversized_base_file_alone_makes_added_imports_unknown(
 
     assert unlimited.facts["dependencies"].value == "no"
     assert limited.facts["dependencies"].value == "unknown"
-    assert limited.facts["dependencies"].detail == {"reason": "file-too-large", "skipped": ["vendor.py"]}
+    detail = limited.facts["dependencies"].detail
+    assert (detail["reason"], detail["skipped"]) == ("file-too-large", ["vendor.py"])
+    # The unknown fact keeps what the reader needs to judge it.
+    assert detail["added_imports"] == [{"path": "app.py", "module": "requests"}]
+
+
+def test_an_oversized_script_file_in_base_does_not_hide_an_added_python_import(
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
+) -> None:
+    base_root, head = _trees(
+        tmp_path, write_tree, {"vendor.js": "import x from 'requests';" + PAD}, {"app.py": "import requests\n"}
+    )
+
+    evidence = scan(head, ["app.py"], base=base_root, ast_grep=ast_grep_binary, max_file_bytes=LIMIT)
+
+    assert evidence.facts["dependencies"].value == "yes"
+    assert [item.path for item in evidence.skipped] == ["vendor.js"]
+
+
+def test_an_oversized_python_file_in_base_still_hides_an_added_python_import(
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
+) -> None:
+    base_root, head = _trees(
+        tmp_path, write_tree, {"vendor.py": "import requests" + PAD}, {"app.py": "import requests\n"}
+    )
+
+    evidence = scan(head, ["app.py"], base=base_root, ast_grep=ast_grep_binary, max_file_bytes=LIMIT)
+
+    assert evidence.facts["dependencies"].value == "unknown"
+    assert evidence.facts["dependencies"].detail["reason"] == "file-too-large"
+
+
+def test_an_oversized_bazel_file_in_base_is_excluded_from_the_import_scan(
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
+) -> None:
+    """ast-grep parses `.bazel` as Python in a directory walk, so the size limit must cover it."""
+    base_root, head = _trees(
+        tmp_path, write_tree, {"BUILD.bazel": "import requests" + PAD}, {"app.py": "import requests\n"}
+    )
+
+    evidence = scan(head, ["app.py"], base=base_root, ast_grep=ast_grep_binary, max_file_bytes=LIMIT)
+
+    assert [item.path for item in evidence.skipped] == ["BUILD.bazel"]
