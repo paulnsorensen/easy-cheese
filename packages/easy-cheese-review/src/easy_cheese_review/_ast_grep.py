@@ -14,7 +14,7 @@ import signal
 import subprocess
 import threading
 from collections.abc import Generator, Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from importlib import resources
 from pathlib import Path
 from typing import IO, cast
@@ -47,13 +47,12 @@ def _kill(proc: subprocess.Popen[str]) -> None:
     """Stop the run and any child it started."""
     if proc.poll() is not None:
         return
-    try:
+    # The run can exit between the poll and the kill; that race is not an error.
+    with suppress(OSError):
         if hasattr(os, "killpg"):
             os.killpg(proc.pid, signal.SIGKILL)
         else:
             proc.kill()
-    except OSError:
-        pass
 
 
 def _rows(binary: str, args: Sequence[str], cwd: Path) -> Iterator[JsonObject]:
