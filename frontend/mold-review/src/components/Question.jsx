@@ -1,4 +1,5 @@
-import React, {useState} from 'react';
+import React, {useId, useState} from 'react';
+import {Inline} from './Shapes.jsx';
 
 function OptionCard({option, type, name, checked, recommended, onSelect}) {
   const detail = option.tradeoff || option.description;
@@ -14,6 +15,29 @@ function OptionCard({option, type, name, checked, recommended, onSelect}) {
   );
 }
 
+function BasisItem({item}) {
+  const hedge = item.confidence && item.confidence !== 'certain' ? ` (${item.confidence})` : '';
+  return <>{item.ref && <><code className="ec-chip">{item.ref}</code> </>}<Inline text={item.text} />{hedge}</>;
+}
+
+// Leads into the fork from the ledger evidence that opened it:
+// "Based on X and Y, the next question is:".
+function Basis({id, basis}) {
+  const last = basis.length - 1;
+  return (
+    <p className="mc-fork-basis" id={id}>
+      Based on{' '}
+      {basis.map((item, index) => (
+        <React.Fragment key={index}>
+          {index > 0 && (index === last ? `${last > 1 ? ',' : ''} and ` : ', ')}
+          <BasisItem item={item} />
+        </React.Fragment>
+      ))}
+      , the next question is:
+    </p>
+  );
+}
+
 export function Question({question, answer, state = {kind: 'ready'}, onChange}) {
   const mode = question.selection_mode || question.selectionMode || 'single';
   const selected = answer?.selected || [];
@@ -21,6 +45,8 @@ export function Question({question, answer, state = {kind: 'ready'}, onChange}) 
   const recommended = question.recommended_option_id || question.recommended;
   const [otherOpen, setOtherOpen] = useState(Boolean(other));
   const meta = question.meta || question.context;
+  const basis = question.basis || [];
+  const basisId = useId();
 
   function selectOption(id) {
     if (mode === 'single') {
@@ -34,7 +60,9 @@ export function Question({question, answer, state = {kind: 'ready'}, onChange}) 
   }
 
   return (
-    <fieldset className="ec-panel ec-question question mc-question" disabled={state.kind !== 'ready'}>
+    <div className="mc-fork">
+    {basis.length > 0 && <Basis id={basisId} basis={basis} />}
+    <fieldset className="ec-panel ec-question question mc-question" disabled={state.kind !== 'ready'} aria-describedby={basis.length > 0 ? basisId : undefined}>
       <legend>{question.prompt || question.text}</legend>
       <small className="ec-question-meta">{question.id}{meta ? ` · ${meta}` : ''}{mode === 'single' ? '' : ' · choose all that apply'}{state.kind !== 'ready' ? ` · ${state.label}` : ''}</small>
       <div className="ec-options">
@@ -65,5 +93,6 @@ export function Question({question, answer, state = {kind: 'ready'}, onChange}) 
         <button type="button" className="mc-link" onClick={() => setOtherOpen(true)}>other…</button>
       )}
     </fieldset>
+    </div>
   );
 }

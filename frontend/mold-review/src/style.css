@@ -91,6 +91,8 @@ body {
 .mc-sheet-grip, .mc-sheet-toggle { display: none; }
 .mc-convo-scroll { display: grid; gap: var(--space-4); align-content: start; overflow: auto; padding-inline-end: 2px; }
 .mc-summary { margin: 0; color: var(--text-dim); }
+.mc-fork { display: grid; gap: var(--space-2); min-inline-size: 0; }
+.mc-fork-basis { margin: 0; color: var(--text-dim); }
 .mc-question { padding: var(--space-4); }
 .mc-question .ec-options { margin-block-end: var(--space-3); }
 .mc-trail { display: flex; justify-content: space-between; gap: var(--space-3); padding-block: var(--space-2); color: var(--text-dim); font: 400 0.8rem/1.4 var(--font-mono); }

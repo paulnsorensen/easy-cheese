@@ -523,8 +523,7 @@ def _dependency_warnings(document: JSONObject) -> list[str]:
         if not isinstance(question, dict) or "depends_on" not in question:
             continue
         question_id = question.get("id")
-        named = isinstance(question_id, str) and bool(question_id)
-        label = f"question {question_id}" if named else f"questions[{index}]"
+        label = _question_label(question, index)
         dependencies = question["depends_on"]
         if not isinstance(dependencies, list):
             warnings.append(f"{label}: depends_on is not a list of question IDs")
@@ -550,9 +549,67 @@ def _dependency_warnings(document: JSONObject) -> list[str]:
     return warnings
 
 
+def _question_label(question: JSONObject, index: int) -> str:
+    question_id = question.get("id")
+    return f"question {question_id}" if isinstance(question_id, str) and question_id else f"questions[{index}]"
+
+
+def _basis_warnings(document: JSONObject) -> list[str]:
+    """Name each open question whose fork card has no evidence lead-in."""
+    warnings: list[str] = []
+    for index, question in enumerate(_as_list(document.get("questions"))):
+        if not isinstance(question, dict):
+            continue
+        basis = _as_list(question.get("basis"))
+        if not any(isinstance(item, dict) and _has_text(item.get("text")) for item in basis):
+            warnings.append(
+                f"{_question_label(question, index)}: basis is missing;"
+                + " lead the fork with the ledger evidence that opened it"
+            )
+    return warnings
+
+
+_EARS_RESPONSE = re.compile(r"\bSHALL\b", re.IGNORECASE)
+_PROSE_FALLBACK = "[prose-fallback]"
+_DECISION_ROWS = ("decided", "agent-decided")
+
+
+def _has_text(value: JSONValue | None) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _not_ears(text: JSONValue | None) -> bool:
+    """Return whether a decision text lacks an EARS response and the prose marker."""
+    return _has_text(text) and not _EARS_RESPONSE.search(cast(str, text)) and _PROSE_FALLBACK not in cast(str, text)
+
+
+def _ears_warnings(document: JSONObject) -> list[str]:
+    """Name each requirement and ledger decision that is not an EARS requirement."""
+    labels: list[str] = []
+    for index, requirement in enumerate(_as_list(document.get("requirements"))):
+        if isinstance(requirement, dict) and _not_ears(requirement.get("text")):
+            requirement_id = requirement.get("id")
+            labels.append(f"requirement {requirement_id}" if isinstance(requirement_id, str) else f"requirements[{index}]")
+    for row in _as_list(document.get("ledger")):
+        if not isinstance(row, dict) or row.get("label") not in _DECISION_ROWS:
+            continue
+        row_label = f"ledger {row['label']}"
+        if _not_ears(row.get("text")):
+            labels.append(f"{row_label} text")
+        for index, item in enumerate(_as_list(row.get("items"))):
+            if isinstance(item, dict) and _not_ears(item.get("text")):
+                item_id = item.get("id")
+                labels.append(f"{row_label} {item_id}" if isinstance(item_id, str) else f"{row_label} items[{index}]")
+    return [
+        f"{label}: text is not an EARS requirement;"
+        + " write [WHEN|WHILE|IF|WHERE ...] THE <system> SHALL <response>, or mark it [prose-fallback]"
+        for label in labels
+    ]
+
+
 def _publish_warnings(document: JSONObject, previous: ReviewRevision | None) -> list[str]:
     """Return non-blocking warnings; publish still stores any JSON object."""
-    warnings = _dependency_warnings(document)
+    warnings = [*_dependency_warnings(document), *_basis_warnings(document), *_ears_warnings(document)]
     if previous is not None:
         current = set(_string_ids(document.get("requirements")))
         earlier = _string_ids(previous.document.get("requirements"))
@@ -573,7 +630,8 @@ def _publish(
 ) -> JSONObject:
     """Publish a new revision from an input JSON document.
 
-    The output adds ``warnings`` for fork-dependency problems and dropped
+    The output adds ``warnings`` for fork-dependency problems, forks without a
+    basis, decisions and requirements that are not EARS, and dropped
     requirement IDs. Warnings never block the publish.
 
     Parameters
