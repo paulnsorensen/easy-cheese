@@ -2,13 +2,42 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
+from typing import cast
 
 import fromargs
 
+# The producer owns the contract loader that normalize-planner uses, so the
+# brief reads the request the same way instead of keeping a second loader.
 from easy_cheese.skills.mold.producer import FinalizationError, _load_contract  # pyright: ignore[reportPrivateUsage]
 from easy_cheese_schemas.contracts import AgentWriterView, PlannerRequest
 from easy_cheese_schemas.schema_runtime import schema_bytes
+
+_REF = re.compile(r'"\$ref": "#/\$defs/([^"]+)"')
+
+
+def _obj(node: object) -> dict[str, object]:
+    return cast(dict[str, object], node)
+
+
+def _planner_schema() -> dict[str, object]:
+    """Narrow the writer schema to the planner_result branch and the defs it reaches."""
+    schema = _obj(cast(object, json.loads(schema_bytes(AgentWriterView))))
+    defs = _obj(schema["$defs"])
+    root = _obj(defs["AgentWriterView"])
+    branches = cast(list[dict[str, object]], _obj(cast(list[object], root["allOf"])[0])["oneOf"])
+    branch = next(b for b in branches if _obj(_obj(b["properties"])["kind"])["const"] == "planner_result")
+    root["allOf"] = [branch]
+    root["properties"] = {"kind": {"const": "planner_result", "type": "string"}, "payload": _obj(branch["properties"])["payload"]}
+    keep = {"AgentWriterView"}
+    todo = ["AgentWriterView"]
+    while todo:
+        for name in set(cast(list[str], _REF.findall(json.dumps(defs[todo.pop()])))) - keep:
+            keep.add(name)
+            todo.append(name)
+    schema["$defs"] = {name: node for name, node in defs.items() if name in keep}
+    return schema
 
 
 def planner_brief(request: str) -> dict[str, object]:
@@ -37,7 +66,7 @@ def planner_brief(request: str) -> dict[str, object]:
     }
     return {
         "objective": objective,
-        "schema": json.loads(schema_bytes(AgentWriterView)),
+        "schema": _planner_schema(),
         "rules": {
             "envelope": "Return one AgentWriterView JSON object with kind=planner_result and payload=PlannerResultWriterView. Do not return a bare payload.",
             "objective": "Copy the request objective exactly into payload.plan.objective. Do not paraphrase or repair a returned objective.",

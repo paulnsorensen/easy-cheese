@@ -253,6 +253,8 @@ def test_mold_saves_draft_before_cook_consent_and_persists_typed_plan() -> None:
         "`N curds / M waves`",
         "Persist the draft spec and host-validated `PlannerResult` and `CurdPlan`",
     )
+    assert "from the current draft spec text" in procedure
+    assert "give the planner that text" in procedure
 
 
 def test_early_curd_route_selection_stays_separate_from_scope_approval() -> None:

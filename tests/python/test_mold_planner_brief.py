@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import re
 import json
 import os
 import shlex
@@ -68,6 +69,33 @@ def test_planner_brief_examples_normalize_through_archive(tmp_path: Path) -> Non
             assert result["plan"] is None
         else:
             assert cast(dict[str, object], result["plan"])["objective"] == request.objective
+
+
+def _refs(node: object) -> set[str]:
+    return set(re.findall(r'"\$ref": "(#/\$defs/[^"]+)"', json.dumps(node)))
+
+
+def test_planner_brief_schema_admits_only_the_planner_branch(tmp_path: Path) -> None:
+    version = supported_version_for(PlannerRequest)
+    assert version is not None
+    request = PlannerRequest(contract_version=version, request_id="brief-request", kind=PlannerRequestKind.DECOMPOSE, objective="Scope")
+    request_path = tmp_path / "request.json"
+    _ = request_path.write_bytes(canonical_bytes(request))
+    brief_run = _run(tmp_path, "planner-brief", str(request_path))
+    assert brief_run.returncode == 0, brief_run.stderr
+    schema = cast(dict[str, object], json.loads(brief_run.stdout)["schema"])
+    text = json.dumps(schema)
+    for kind in ("curd_plan", "review_result", "diagnosis_result", "curd_result"):
+        assert f'"{kind}"' not in text
+    for name in ("ReviewResultWriterView", "DiagnosisResultWriterView", "CurdResultWriterView"):
+        assert name not in text
+    assert "planner_result" in text
+    defs = cast(dict[str, object], schema["$defs"])
+    refs = _refs(schema)
+    assert refs
+    for ref in refs:
+        assert ref.startswith("#/$defs/") and ref.removeprefix("#/$defs/") in defs, ref
+    assert set(defs) <= {r.removeprefix("#/$defs/") for r in refs}
 
 
 def test_planner_brief_rejects_invalid_request(tmp_path: Path) -> None:
