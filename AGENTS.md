@@ -42,8 +42,8 @@ them while enforcement is implemented separately.
   `packages/easy-cheese-review/src/`. Tests remain under `tests/`; repository
   build, release, generation, and maintenance programs may live under
   `scripts/`.
-- Published schemas live in `src/easy_cheese_schemas/`. All non-published
-  runtime code lives under `src/easy_cheese/`, split between
+- Published schemas live in `src/easy_cheese_schemas/`. All other runtime
+  code, except `easy-cheese-review`, lives under `src/easy_cheese/`, split between
   `skills/<python_skill_name>/`, `shared/`, and `cli/`. Skill slugs remain
   kebab-case; Python package segments use underscores.
 - `easy-cheese-review` is a second distribution. It lives in

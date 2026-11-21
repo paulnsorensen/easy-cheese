@@ -12,7 +12,7 @@ import ast
 import posixpath
 import re
 import sys
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence, Set
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
@@ -369,9 +369,8 @@ def _python_targets(path: str, texts: Iterable[str], index: _ModuleIndex) -> set
     return targets
 
 
-def _script_targets(path: str, texts: Iterable[str], nodes: Sequence[str]) -> set[str]:
+def _script_targets(path: str, texts: Iterable[str], node_set: Set[str]) -> set[str]:
     folder = PurePosixPath(path).parent.as_posix()
-    node_set = set(nodes)
     targets: set[str] = set()
     for text in texts:
         for module in _script_imports(text):
@@ -389,6 +388,7 @@ def scope_fact(nodes: Sequence[str], head_imports: Mapping[str, list[str]]) -> F
     """Group the changed code files into connected components of the import graph."""
     parent = {node: node for node in nodes}
     index = _module_index(nodes)
+    node_set = set(nodes)
 
     def find(node: str) -> str:
         while parent[node] != node:
@@ -402,7 +402,7 @@ def scope_fact(nodes: Sequence[str], head_imports: Mapping[str, list[str]]) -> F
         if _is_python(path):
             targets = _python_targets(path, texts, index)
         else:
-            targets = _script_targets(path, texts, nodes)
+            targets = _script_targets(path, texts, node_set)
         for target in targets:
             parent[find(path)] = find(target)
 

@@ -127,13 +127,21 @@ def _batches(paths: Sequence[str]) -> Iterator[list[str]]:
         yield batch
 
 
+def _batch_rows(
+    binary: str, args: Sequence[str], cwd: Path, paths: Sequence[str]
+) -> Iterator[JsonObject]:
+    """Run `args` once per batch of `paths` and yield each row.
+
+    Each batch goes after `--`, so a path is never read as an option.
+    """
+    for batch in _batches(paths):
+        yield from _rows(binary, [*args, "--", *batch], cwd)
+
+
 def scan(binary: str, config: Path, cwd: Path, paths: Sequence[str]) -> list[JsonObject]:
     """Run the packaged rules over `paths` and return one JSON object per hit."""
-    rows: list[JsonObject] = []
-    for batch in _batches(paths):
-        args = ["scan", "-c", str(config), "--json=stream", "--include-metadata", "--", *batch]
-        rows.extend(_rows(binary, args, cwd))
-    return rows
+    args = ["scan", "-c", str(config), "--json=stream", "--include-metadata"]
+    return list(_batch_rows(binary, args, cwd, paths))
 
 
 def _exclude_glob(path: str) -> str:
@@ -159,19 +167,18 @@ def imports(
         return found
     query = (resources.files(__package__) / "queries" / "imports.yml").read_text(encoding="utf-8")
     globs = [arg for path in exclude for arg in ("--globs", _exclude_glob(path))]
-    for batch in _batches(paths):
-        args = ["scan", "-c", str(config), "--inline-rules", query, *globs, "--json=stream", "--", *batch]
-        for row in _rows(binary, args, cwd):
-            rule_id = row.get("ruleId")
-            path = row.get("file")
-            text = row.get("text")
-            if (
-                isinstance(rule_id, str)
-                and rule_id.startswith("import-")
-                and isinstance(path, str)
-                and isinstance(text, str)
-            ):
-                found.setdefault(path.removeprefix("./"), []).append(text)
+    args = ["scan", "-c", str(config), "--inline-rules", query, *globs, "--json=stream"]
+    for row in _batch_rows(binary, args, cwd, paths):
+        rule_id = row.get("ruleId")
+        path = row.get("file")
+        text = row.get("text")
+        if (
+            isinstance(rule_id, str)
+            and rule_id.startswith("import-")
+            and isinstance(path, str)
+            and isinstance(text, str)
+        ):
+            found.setdefault(path.removeprefix("./"), []).append(text)
     return found
 
 
@@ -180,15 +187,14 @@ def outline(
 ) -> dict[str, list[JsonObject]]:
     """Return the outline items (`exports` or `imports`) for each path."""
     found: dict[str, list[JsonObject]] = {path: [] for path in paths}
-    for batch in _batches(paths):
-        args = ["-c", str(config), "outline", "--items", items, "--json=stream", "--", *batch]
-        for row in _rows(binary, args, cwd):
-            path = row.get("path")
-            entries = row.get("items")
-            if isinstance(path, str) and isinstance(entries, list):
-                found[path] = [
-                    cast(JsonObject, item)
-                    for item in cast(list[object], entries)
-                    if isinstance(item, dict)
-                ]
+    args = ["-c", str(config), "outline", "--items", items, "--json=stream"]
+    for row in _batch_rows(binary, args, cwd, paths):
+        path = row.get("path")
+        entries = row.get("items")
+        if isinstance(path, str) and isinstance(entries, list):
+            found[path] = [
+                cast(JsonObject, item)
+                for item in cast(list[object], entries)
+                if isinstance(item, dict)
+            ]
     return found

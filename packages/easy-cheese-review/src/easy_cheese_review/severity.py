@@ -10,14 +10,14 @@ directly.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from types import MappingProxyType
-
 from enum import IntEnum
+from types import MappingProxyType
 from typing import Self
 
 from typing_extensions import override
 
 from easy_cheese_schemas import FixCostNow, ReviewDimension
+
 
 class RubricError(ValueError):
     """Raised when a rubric input is outside the allowed vocabulary."""

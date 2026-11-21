@@ -166,6 +166,21 @@ def test_a_deletion_that_creates_a_hit_keeps_it(
     assert [(hit.rule_id, hit.line) for hit in evidence.hits] == [("py-swallowed-exception", 4)]
 
 
+def test_a_form_feed_in_a_changed_line_keeps_the_later_hit(
+    tmp_path: Path, ast_grep_binary: str, write_tree: WriteTree
+) -> None:
+    """Text inside a changed line never reads as a file header that drops the later ranges."""
+    root = write_tree(tmp_path / "feed", {"run.py": "x = 0\na = 1\nb = 2\nc = 3\nprint(x)\n"})
+    _ = _git(root, "init", "-q")
+    _ = _git(root, "add", ".")
+    _ = _git(root, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "base")
+    _ = write_tree(root, {"run.py": "x = 1\x0c+++ /dev/null\na = 1\nb = 2\nc = 3\neval(x)\n"})
+    hunks = hunks_from_diff(_git(root, "diff", "--unified=0"))
+    assert hunks == {"run.py": [(1, 1), (5, 5)]}
+    evidence = scan(root, ["run.py"], hunks=hunks, ast_grep=ast_grep_binary)
+    assert [(hit.rule_id, hit.line) for hit in evidence.hits] == [("py-eval-exec", 5)]
+
+
 def test_symlink_out_of_tree_is_not_scanned(
     repo: Path, tmp_path: Path, ast_grep_binary: str, write_tree: WriteTree
 ) -> None:

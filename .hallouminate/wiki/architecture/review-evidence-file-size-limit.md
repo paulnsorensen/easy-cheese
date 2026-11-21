@@ -33,4 +33,4 @@ The package finds those files with its own `os.walk`, which skips hidden entries
 - The walk reads no ignore file, so a library caller can see an ignored file in `skipped` and a conservative `unknown`.
   `age.pyz review-evidence` extracts only code blobs into a temporary base tree, so it has no ignore files.
 - Each oversized base file adds two arguments to one ast-grep run. Thousands of them could pass the OS argument limit; the run then fails as `exec-error`, and `dependencies` becomes `unknown`.
-- `_extract_base` still reads every base code blob through `git cat-file --batch` into memory before the size check.
+- `_extract_base` streams `git cat-file --batch` one blob at a time, but it still reads each blob whole into memory and writes it to disk before the size check.

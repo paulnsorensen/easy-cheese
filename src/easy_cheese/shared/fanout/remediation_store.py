@@ -120,6 +120,7 @@ _SHAPE_ERROR_MARKERS = ("unknown fields", "must be one of")
 
 
 def _read_state(target: Path) -> RemediationState:
+    raw = b""
     try:
         raw = read_bounded_file(target, limit=MAX_STATE_BYTES)
         result = validate_contract(
@@ -127,8 +128,10 @@ def _read_state(target: Path) -> RemediationState:
         )
     except (OSError, ContractValidationError) as exc:
         hint = ""
-        if isinstance(exc, ContractValidationError) and any(
-            marker in str(exc) for marker in _SHAPE_ERROR_MARKERS
+        if (
+            isinstance(exc, ContractValidationError)
+            and b"critical" in raw
+            and any(marker in str(exc) for marker in _SHAPE_ERROR_MARKERS)
         ):
             hint = f" {_RENAME_HINT}"
         raise StateStoreError(

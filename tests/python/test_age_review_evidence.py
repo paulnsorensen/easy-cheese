@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
+import tracemalloc
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
@@ -28,6 +30,14 @@ def _git(repo: Path, *args: str) -> None:
 def _commit(repo: Path, message: str) -> None:
     _git(repo, "add", ".")
     _git(repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", message)
+
+
+def _write_raw_name(root: Path, name: bytes, body: str) -> None:
+    """Write a file whose name is not UTF-8; skip the test when the file system refuses the name."""
+    try:
+        _ = (root / os.fsdecode(name)).write_text(body, encoding="utf-8")
+    except (OSError, UnicodeError):
+        pytest.skip("the file system refuses a file name that is not UTF-8")
 
 
 @pytest.fixture
@@ -172,6 +182,101 @@ def test_review_evidence_keeps_hits_in_files_git_calls_binary(
     assert [(hit["rule_id"], hit["path"]) for hit in hits] == [(rule_id, name)]
 
 
+@pytest.mark.parametrize(
+    "separator", [pytest.param(b"\x0c", id="form-feed"), pytest.param(b"\r", id="lone-cr")]
+)
+def test_review_evidence_keeps_the_hit_after_a_line_break_character(
+    skill_archive: Callable[[str], Path], tmp_path: Path, separator: bytes
+) -> None:
+    """A form feed or a lone carriage return in a changed line does not end its diff line."""
+    root = tmp_path / "feed"
+    root.mkdir()
+    _ = (root / "run.py").write_bytes(b"x = 0\na = 1\nb = 2\nc = 3\nprint(x)\n")
+    _git(root, "init", "-q")
+    _commit(root, "base")
+    _ = (root / "run.py").write_bytes(b"x = 1" + separator + b"+++ /dev/null\na = 1\nb = 2\nc = 3\neval(x)\n")
+
+    evidence = _evidence(skill_archive("age"), root, _tool_path(), tmp_path)
+
+    assert evidence["scan"] == {"status": "ok", "skipped": []}
+    hits = cast(list[dict[str, object]], evidence["hits"])
+    assert [(hit["rule_id"], hit["path"], hit["line"]) for hit in hits] == [("py-eval-exec", "run.py", 5)]
+
+
+@pytest.fixture
+def raw_name_repo(tmp_path: Path) -> Path:
+    """A repository with a changed file and an untracked file whose names are not UTF-8."""
+    root = tmp_path / "raw"
+    root.mkdir()
+    _write_raw_name(root, b"t\xff.py", "# base\n")
+    _git(root, "init", "-q")
+    _commit(root, "base")
+    _write_raw_name(root, b"t\xff.py", "eval(x)\n")
+    _write_raw_name(root, b"u\xfe.py", "exec(y)\n")
+    return root
+
+
+def test_review_evidence_passes_names_that_are_not_utf8_to_the_scan(
+    skill_archive: Callable[[str], Path], raw_name_repo: Path, tmp_path: Path
+) -> None:
+    """Each name reaches the scan as the name on disk, and the JSON spells its raw byte as a lone surrogate."""
+    evidence = _evidence(skill_archive("age"), raw_name_repo, _tool_path(), tmp_path)
+
+    facts = cast(dict[str, dict[str, object]], evidence["facts"])
+    assert facts["tests"]["detail"] == {"untested": ["t\udcff.py", "u\udcfe.py"], "sources": 2}
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="ast-grep 0.51.3 panics (exit 101) on an argument that is not UTF-8, so the whole scan fails",
+)
+def test_review_evidence_keeps_the_hits_of_files_whose_names_are_not_utf8(
+    skill_archive: Callable[[str], Path], raw_name_repo: Path, tmp_path: Path
+) -> None:
+    """A changed file and an untracked file keep their hits when their names are not UTF-8."""
+    evidence = _evidence(skill_archive("age"), raw_name_repo, _tool_path(), tmp_path)
+
+    assert evidence["scan"] == {"status": "ok", "skipped": []}
+    hits = cast(list[dict[str, object]], evidence["hits"])
+    assert [(hit["rule_id"], hit["line"]) for hit in hits] == [("py-eval-exec", 1), ("py-eval-exec", 1)]
+
+
+def test_review_evidence_never_drops_a_file_with_a_raw_name_in_silence(
+    skill_archive: Callable[[str], Path], raw_name_repo: Path, tmp_path: Path
+) -> None:
+    """A scan that reports `ok` keeps the hits of both files whose names are not UTF-8."""
+    evidence = _evidence(skill_archive("age"), raw_name_repo, _tool_path(), tmp_path)
+
+    hits = cast(list[dict[str, object]], evidence["hits"])
+    rule_ids = [hit["rule_id"] for hit in hits]
+    assert evidence["scan"] != {"status": "ok"} or rule_ids == ["py-eval-exec", "py-eval-exec"]
+
+
+def test_review_evidence_ignores_a_textconv_driver(
+    skill_archive: Callable[[str], Path], tmp_path: Path
+) -> None:
+    """A textconv driver that `.gitattributes` selects does not move a hunk off the real line."""
+    root = tmp_path / "conv"
+    root.mkdir()
+    driver = tmp_path / "pad.py"
+    _ = driver.write_text(
+        'import sys\n\n_ = sys.stdout.write("pad\\n" * 50 + open(sys.argv[1], encoding="utf-8").read())\n',
+        encoding="utf-8",
+    )
+    _ = (root / ".gitattributes").write_text("*.py diff=pad\n", encoding="utf-8")
+    _ = (root / "run.py").write_text("a = 1\nb = 2\nc = 3\nprint(a)\n", encoding="utf-8")
+    _git(root, "init", "-q")
+    _commit(root, "base")
+    _git(root, "config", "diff.pad.textconv", f"{shlex.quote(sys.executable)} {shlex.quote(str(driver))}")
+    _ = (root / "run.py").write_text("a = 1\nb = 2\nc = 3\neval(a)\n", encoding="utf-8")
+
+    evidence = _evidence(skill_archive("age"), root, _tool_path(), tmp_path)
+
+    assert evidence["scan"] == {"status": "ok", "skipped": []}
+    hits = cast(list[dict[str, object]], evidence["hits"])
+    assert [(hit["rule_id"], hit["path"], hit["line"]) for hit in hits] == [("py-eval-exec", "run.py", 4)]
+
+
 def test_review_evidence_reads_export_ignore_base_files(
     skill_archive: Callable[[str], Path], tmp_path: Path
 ) -> None:
@@ -276,6 +381,91 @@ def test_extract_base_reports_a_bad_revision(tmp_path: Path) -> None:
 
     with pytest.raises(fromargs.CliError, match="no-such-rev"):
         review_evidence._extract_base(root, "no-such-rev", tmp_path)  # pyright: ignore[reportPrivateUsage]
+
+
+def test_extract_base_keeps_names_that_are_not_utf8_apart(tmp_path: Path) -> None:
+    """Two base files whose names differ only in a byte that is not UTF-8 go to two files."""
+    root = tmp_path / "raw-base"
+    root.mkdir()
+    _write_raw_name(root, b"bad\xfe.py", "a = 1\n")
+    _write_raw_name(root, b"bad\xff.py", "b = 2\n")
+    _git(root, "init", "-q")
+    _commit(root, "base")
+    target = tmp_path / "base"
+    target.mkdir()
+
+    review_evidence._extract_base(root, "HEAD", target)  # pyright: ignore[reportPrivateUsage]
+
+    written = {os.fsencode(path.name): path.read_text(encoding="utf-8") for path in target.iterdir()}
+    assert written == {b"bad\xfe.py": "a = 1\n", b"bad\xff.py": "b = 2\n"}
+
+
+def test_extract_base_holds_one_blob_at_a_time(tmp_path: Path) -> None:
+    """The peak memory of the extraction stays below the size of all base blobs together."""
+    root = tmp_path / "big"
+    root.mkdir()
+    size, count = 2 * 1024 * 1024, 8
+    bodies = {f"m{index}.py": bytes([ord("a") + index]) * (size - 1) + b"\n" for index in range(count)}
+    for name, body in bodies.items():
+        _ = (root / name).write_bytes(body)
+    _git(root, "init", "-q")
+    _commit(root, "base")
+    target = tmp_path / "base"
+    target.mkdir()
+
+    tracemalloc.start()
+    try:
+        review_evidence._extract_base(root, "HEAD", target)  # pyright: ignore[reportPrivateUsage]
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+
+    assert {path.name: path.read_bytes() for path in target.iterdir()} == bodies
+    assert peak < size * count // 2
+
+
+def test_extract_base_reports_a_missing_blob(tmp_path: Path) -> None:
+    """A base blob that the object store lost stops the run with the path of the blob."""
+    root = tmp_path / "lost"
+    root.mkdir()
+    _ = (root / "a.py").write_text("x = 1\n", encoding="utf-8")
+    _ = (root / "b.py").write_text("y = 2\n", encoding="utf-8")
+    _git(root, "init", "-q")
+    _commit(root, "base")
+    object_id = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD:a.py"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    (root / ".git" / "objects" / object_id[:2] / object_id[2:]).unlink()
+    target = tmp_path / "base"
+    target.mkdir()
+
+    with pytest.raises(fromargs.CliError, match=r"no blob for a\.py"):
+        review_evidence._extract_base(root, "HEAD", target)  # pyright: ignore[reportPrivateUsage]
+
+
+def test_extract_base_stops_a_cat_file_run_at_the_time_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A `cat-file` process that prints nothing ends at the time limit."""
+    root = tmp_path / "slow"
+    root.mkdir()
+    _ = (root / "a.py").write_text("x = 1\n", encoding="utf-8")
+    _git(root, "init", "-q")
+    _commit(root, "base")
+    git = shutil.which("git")
+    assert git is not None
+    slow = tmp_path / "bin"
+    slow.mkdir()
+    _ = (slow / "git").write_text(
+        f'#!/bin/sh\ncase " $* " in *" cat-file "*) exec sleep 60 ;; esac\nexec {shlex.quote(git)} "$@"\n',
+        encoding="utf-8",
+    )
+    (slow / "git").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{slow}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setattr(review_evidence, "_GIT_TIMEOUT_SECONDS", 0.5)
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        review_evidence._extract_base(root, "HEAD", tmp_path)  # pyright: ignore[reportPrivateUsage]
 
 
 @pytest.mark.parametrize("path", ["", "../x.py", "a/../../x.py", "/etc/x.py", "out/x.py"])
