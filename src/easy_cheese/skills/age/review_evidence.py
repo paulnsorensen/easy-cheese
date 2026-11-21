@@ -6,7 +6,8 @@ easy-cheese-review rule pack on the changed files and computes the `compat`,
 reject, never findings by themselves. Without ast-grep, the result has
 `scan.status: failed:ast-grep-missing`, no hits, and `unknown` `compat`,
 `dependencies`, and `scope` facts with a reason. The `tests` fact needs no
-ast-grep, so it is still computed. The review continues.
+ast-grep, so it is still computed. The review continues. A file above the
+package size limit is not scanned; `scan.skipped` names it.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from pathlib import Path, PurePosixPath
 import fromargs
 
 from easy_cheese.shared import git_utils
-from easy_cheese_review import CODE_SUFFIXES, hunks_from_diff, scan
+from easy_cheese_review import SCAN_SUFFIXES, hunks_from_diff, scan
 
 _GIT_TIMEOUT_SECONDS = 120
 # Pin the diff path spelling: no C-style quotes and fixed a/ and b/ prefixes,
@@ -36,9 +37,6 @@ _DIFF_OPTIONS = [
 ]
 # Regular files only: links (120000) and submodules (160000) are skipped.
 _REGULAR_FILE_MODES = frozenset({"100644", "100755"})
-# The base import scan reads the whole base tree, so ast-grep also parses these
-# suffixes (measured with ast-grep 0.51.3); `dependencies` needs their imports.
-_BASE_SCAN_SUFFIXES = CODE_SUFFIXES | frozenset({".mts", ".cts", ".pyi", ".py3", ".bzl"})
 
 
 def _git_text(repo: Path, args: list[str]) -> str:
@@ -59,7 +57,9 @@ def _base_code_blobs(repo: Path, base: str) -> list[tuple[str, str]]:
         fields = meta.split()
         if len(fields) != 3 or fields[0] not in _REGULAR_FILE_MODES or fields[1] != "blob":
             continue
-        if PurePosixPath(path).suffix in _BASE_SCAN_SUFFIXES:
+        # The base import scan reads the whole base tree; `dependencies` needs
+        # the imports of every file that ast-grep parses there.
+        if PurePosixPath(path).suffix in SCAN_SUFFIXES:
             blobs.append((path, fields[2]))
     return blobs
 

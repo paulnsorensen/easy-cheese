@@ -123,7 +123,7 @@ def test_missing_ast_grep_returns_no_hits_and_keeps_tests_known(
         "scope": "unknown",
     }
     assert evidence.facts["compat"].detail == {"reason": "ast-grep ast-grep-missing"}
-    assert evidence.to_json()["scan"] == {"status": "failed:ast-grep-missing"}
+    assert evidence.to_json()["scan"] == {"status": "failed:ast-grep-missing", "skipped": []}
 
 
 def test_failed_run_reports_reason(repo: Path, tmp_path: Path, write_tree: WriteTree) -> None:

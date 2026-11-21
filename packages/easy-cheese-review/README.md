@@ -40,6 +40,42 @@ print(evidence.to_json())
 It never reads an `sgconfig.yml` or a rule file from the scanned tree.
 Hits are evidence for a reviewer to confirm or reject. They are not findings by themselves.
 
+## Result
+
+`Evidence.to_json()` returns this shape:
+
+```json
+{
+  "scan": {"status": "ok", "skipped": [{"tree": "head", "path": "gen/big.py", "bytes": 4194304}]},
+  "hits": [{"rule_id": "py-eval-exec", "dimension": "security", "base": "high", "path": "app.py", "line": 3, "end_line": 3, "message": "..."}],
+  "facts": {"compat": {"value": "no", "detail": {"removed": []}}}
+}
+```
+
+`scan.status` is `ok` or `failed:<reason>`.
+`facts` holds one entry for each of `compat`, `dependencies`, `tests`, and `scope`; the example shows one.
+
+## File size limit
+
+No ast-grep run reads a file larger than `max_file_bytes` (default `MAX_FILE_BYTES`, 1 MiB).
+`scan` and `facts` take `max_file_bytes` as a keyword argument.
+The limit covers the changed files in `head` and `base`, and every file of the whole-base import scan.
+`scan.skipped` lists each file left out, with its tree (`head` or `base`), path, and size in bytes.
+The list is always present, so an empty list means every file was scanned.
+A skipped file has no hits, also when its status is `ok`.
+
+A skip makes a fact `unknown`, with `{"reason": "file-too-large", "skipped": [...]}`, only when the missing file can change the value:
+
+| Fact | Effect of a skipped file |
+| --- | --- |
+| `tests` | None. It pairs file names and reads no file. |
+| `scope` | A missing import can only join groups, so `yes` becomes `unknown`; `no` stays. |
+| `compat` | A changed file skipped in either tree is not compared, so `no` becomes `unknown`; `yes` stays. |
+| `dependencies` | A skipped head file can hide a new import, so `no` becomes `unknown`. A skipped base file can hide a known import, so a `yes` that rests only on `added_imports` becomes `unknown`. A manifest or lockfile change keeps `yes`. |
+
+The whole-base import scan excludes each oversized file by its exact path.
+To find those files, the package walks `base`, skipping hidden entries and links like ast-grep does, and checks the suffixes in `SCAN_SUFFIXES`.
+The walk does not read ignore files, so it can report an ignored file that ast-grep would not read anyway.
 ## Known gaps
 
 - The TypeScript rules run on `.ts`, `.js`, `.mjs`, and `.cjs` files. `.tsx` and `.jsx` files get no rule hits yet.

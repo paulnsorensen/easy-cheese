@@ -22,6 +22,8 @@ from easy_cheese_review._model import Fact
 PYTHON_SUFFIXES = frozenset({".py"})
 SCRIPT_SUFFIXES = frozenset({".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"})
 CODE_SUFFIXES = PYTHON_SUFFIXES | SCRIPT_SUFFIXES
+# A directory scan also parses these suffixes (measured with ast-grep 0.51.3).
+SCAN_SUFFIXES = CODE_SUFFIXES | frozenset({".mts", ".cts", ".pyi", ".py3", ".bzl"})
 
 _TEST_DIRS = frozenset({"tests", "test", "__tests__", "spec", "specs"})
 _TEST_FILE = re.compile(r"^test_.+\.py$|^.+_test\.py$|^conftest\.py$|^.+\.(test|spec)\.[cm]?[jt]sx?$")
