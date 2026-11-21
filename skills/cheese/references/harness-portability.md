@@ -12,6 +12,11 @@ They work on every host:
 - `src/easy_cheese/shared/*.py` for repo-wide helpers such as corpus path resolution, handoff artifact writing, and slug readers.
 - `skills/<skill>/scripts/<skill>.pyz` for the self-contained skill archive, which runs the helpers bundled with the repo.
 
+`skills/<skill>/` in a command names the directory that holds that skill's `SKILL.md`.
+It matches the working directory only inside the easy-cheese checkout.
+In an installed copy, run the archive from the installed skill directory, such as `.agents/skills/<skill>/scripts/<skill>.pyz`.
+The host shows that directory when it loads the skill.
+
 Do not use the `${CLAUDE_SKILL_DIR}` environment variable in invocation paths.
 Claude Code substitutes it, but Codex CLI does not.
 Codex receives the literal variable and fails.
@@ -92,6 +97,6 @@ When writing or editing a skill doc:
 2. Use the richest callable structured question primitive that fits every action; otherwise use a lossless numbered or hybrid rendering.
 3. Preserve every explicit action, recommendations, option tradeoffs, free-form `Other`, and immediate selected action.
 4. Show the bundled or repo-local helper path before the host fallback.
-5. Use repo-relative paths (`skills/<skill>/scripts/...`), not `${CLAUDE_SKILL_DIR}` — the latter is Claude Code-specific.
+5. Write archive paths as `skills/<skill>/scripts/...`, not `${CLAUDE_SKILL_DIR}`, which is Claude Code-specific; agents resolve `skills/<skill>/` to the installed skill directory.
 6. Keep `status`, `next`, and `artifact` as the durable handoff fields.
 7. Use the host GitHub primitive when present; use `gh` as the documented fallback.
