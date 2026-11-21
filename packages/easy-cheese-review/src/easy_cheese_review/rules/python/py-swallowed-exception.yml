@@ -1,0 +1,27 @@
+id: py-swallowed-exception
+language: python
+severity: warning
+message: A broad exception handler discards the exception with only `pass`.
+note: Handle the error, log it, or catch a narrower exception.
+metadata:
+  dimension: correctness
+  base: high
+rule:
+  kind: except_clause
+  regex: '^except(\s*:|\s+\(?\s*(Exception|BaseException)\b)'
+  has:
+    kind: block
+    has:
+      kind: pass_statement
+      nthChild:
+        position: 1
+        ofRule:
+          not:
+            kind: comment
+    not:
+      has:
+        nthChild:
+          position: 2
+          ofRule:
+            not:
+              kind: comment

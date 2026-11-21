@@ -1,0 +1,14 @@
+id: py-eval-exec
+snapshots:
+  eval(text):
+    labels:
+    - source: eval(text)
+      style: primary
+      start: 0
+      end: 10
+  "exec(code, namespace)":
+    labels:
+    - source: exec(code, namespace)
+      style: primary
+      start: 0
+      end: 21

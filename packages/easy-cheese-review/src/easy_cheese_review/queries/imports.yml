@@ -1,0 +1,41 @@
+# Import extraction for the dependencies and scope facts. These rules are not
+# review rules: they sit outside `ruleDirs`, carry no review metadata, and run
+# only through `ast-grep scan -c <packaged sgconfig.yml> --inline-rules`.
+# `ast-grep outline --items imports` 0.51.2 omits a parenthesized multi-line
+# `from x import (...)`, so the facts read full import statements instead.
+id: import-python
+language: python
+rule:
+  any:
+    - kind: import_statement
+    - kind: import_from_statement
+---
+id: import-typescript
+language: typescript
+rule:
+  any:
+    - kind: import_statement
+    - kind: export_statement
+      has:
+        field: source
+        kind: string
+---
+id: import-tsx
+language: tsx
+rule:
+  any:
+    - kind: import_statement
+    - kind: export_statement
+      has:
+        field: source
+        kind: string
+---
+id: import-javascript
+language: javascript
+rule:
+  any:
+    - kind: import_statement
+    - kind: export_statement
+      has:
+        field: source
+        kind: string

@@ -1,0 +1,18 @@
+id: py-bare-except
+valid:
+  - |
+    try:
+        run()
+    except Exception:
+        raise
+  - |
+    try:
+        run()
+    except (KeyError, ValueError) as exc:
+        handle(exc)
+invalid:
+  - |
+    try:
+        run()
+    except:
+        handle()

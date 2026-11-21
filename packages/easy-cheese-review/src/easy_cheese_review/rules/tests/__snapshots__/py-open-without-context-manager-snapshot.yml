@@ -1,0 +1,8 @@
+id: py-open-without-context-manager
+snapshots:
+  "handle = open(path)\ndata = handle.read()\n":
+    labels:
+    - source: handle = open(path)
+      style: primary
+      start: 0
+      end: 19

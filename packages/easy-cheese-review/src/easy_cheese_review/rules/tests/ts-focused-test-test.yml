@@ -1,0 +1,7 @@
+id: ts-focused-test
+valid:
+  - 'it("saves", () => {});'
+  - 'describe.skip("later", () => {});'
+invalid:
+  - 'it.only("saves", () => {});'
+  - 'describe.only("store", () => {});'

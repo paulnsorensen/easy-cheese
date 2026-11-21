@@ -1,0 +1,8 @@
+id: ts-non-null-assertion
+snapshots:
+  const user = users.find((u) => u.id === id)!;:
+    labels:
+    - source: users.find((u) => u.id === id)!
+      style: primary
+      start: 13
+      end: 44

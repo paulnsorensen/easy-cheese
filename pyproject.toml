@@ -57,7 +57,7 @@ only-include = [
 # The venv carries the runtime deps (attrs, cattrs) plus the test/tooling
 # surface (pytest, pyyaml, vulture); `just typecheck` creates it on demand.
 [tool.basedpyright]
-include = ["src", "scripts", ".github/scripts", "tests"]
+include = ["src", "packages/easy-cheese-review/src", "scripts", ".github/scripts", "tests"]
 pythonVersion = "3.12"
 venvPath = "."
 venv = ".venv-typing"
@@ -67,6 +67,17 @@ venv = ".venv-typing"
 [[tool.basedpyright.executionEnvironments]]
 root = "src/easy_cheese_schemas"
 pythonVersion = "3.11"
+
+# The published easy-cheese-review wheel also declares requires-python >=3.11.
+[[tool.basedpyright.executionEnvironments]]
+root = "packages/easy-cheese-review/src"
+pythonVersion = "3.11"
+extraPaths = ["src"]
+
+# /age imports the easy-cheese-review package, which lives outside src/.
+[[tool.basedpyright.executionEnvironments]]
+root = "src/easy_cheese"
+extraPaths = ["src", "packages/easy-cheese-review/src"]
 
 # Tests import scripts/ and .github/scripts/ modules after inserting those
 # directories onto sys.path at runtime; mirror that for static resolution.
@@ -86,7 +97,7 @@ extraPaths = ["tests/wheypoint/python", ".", "src", "scripts", ".github/scripts"
 
 [[tool.basedpyright.executionEnvironments]]
 root = "tests"
-extraPaths = [".", "src", "scripts", ".github/scripts", "src/easy_cheese_schemas"]
+extraPaths = [".", "src", "packages/easy-cheese-review/src", "scripts", ".github/scripts", "src/easy_cheese_schemas"]
 
 # Each archive test extracts a skill archive (15-25 MB) into its tmp_path as
 # SHIV_ROOT, so one run of tests/python/test_archive_contents.py writes about
@@ -100,6 +111,7 @@ tmp_path_retention_policy = "failed"
 min_confidence = 60
 paths = [
   "src",
+  "packages/easy-cheese-review/src",
   "scripts",
   ".github/scripts",
   "tests",

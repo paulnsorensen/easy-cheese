@@ -1,0 +1,14 @@
+id: ts-explicit-any
+snapshots:
+  "const items: any[] = [];":
+    labels:
+    - source: any
+      style: primary
+      start: 13
+      end: 16
+  "function read(data: any): string { return data.value; }":
+    labels:
+    - source: any
+      style: primary
+      start: 20
+      end: 23
