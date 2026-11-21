@@ -11,7 +11,7 @@ It covers the `single` shape and the `orthogonal_flat` shape (independent PRs of
 3. Draft a title and body per `## Body contract` below.
 4. Write the body to a temporary or transient file. Pass that file through `--body-file`.
    Do not embed a markdown heredoc in `--body`.
-   Then run `python3 skills/plate/scripts/plate.pyz check-pr-body --body-file <body-path> --diagram-base <base>`.
+   Run `git fetch origin <base>`, then `python3 skills/plate/scripts/plate.pyz check-pr-body --body-file <body-path> --diagram-base origin/<base>`.
    Add `--template-file .github/PULL_REQUEST_TEMPLATE.md` when the repository tracks that template.
    Add `--stack-layer` for a stack layer. Fix every reported error and run the check again.
    Do not create or edit the PR until the check exits 0.
@@ -68,7 +68,7 @@ Publication-relevant GitHub operations remain here:
   publication metadata.
 - Use `gh pr edit <number> --title <title> --body-file <path>` when verified
   commits make existing metadata inaccurate. Run `check-pr-body` on that file first,
-  with the same flags as `## New PR` step 4, `--diagram-base <base>` included.
+  with the same flags as `## New PR` step 4, `--diagram-base origin/<base>` included.
 - Use `gh pr ready <number>` only when asked to publish a draft.
 - Use `gh pr checks` to verify publication context. CI triage, review, comments,
   and merge stay outside `/plate`. Use the `gh` CLI directly for that work.

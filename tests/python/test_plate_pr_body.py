@@ -186,16 +186,67 @@ def test_cli_diagram_base_prints_one_skip_line_when_no_diagram_is_required(
 @pytest.mark.parametrize(
     ("base", "message"),
     [
-        ("nope", "git diff nope...HEAD failed"),
         ("-x", "must name a ref"),
         ("", "must name a ref"),
-        ("feature", "git diff feature...HEAD lists no change"),
     ],
 )
 def test_cli_diagram_base_rejects_an_unusable_ref(
     body_path: Path, capsys: pytest.CaptureFixture[str], base: str, message: str
 ) -> None:
-    _ = body_path.write_text(_body(_DIAGRAM))
+    for body in (_body(_DIAGRAM), _body("Diagram: none, rename only"), _body()):
+        _ = body_path.write_text(body)
+
+        assert pr_body.main(["--body-file", str(body_path), f"--diagram-base={base}"]) == 2
+        assert message in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        _body(_DIAGRAM),
+        _body("Diagram: none, rename keeps every boundary"),
+        _body().replace("Plated as single", "Plated as orthogonal_flat"),
+    ],
+    ids=["flowchart", "skip-line", "orthogonal_flat"],
+)
+def test_cli_diagram_base_skips_git_when_the_body_already_satisfies_the_rule(
+    body_path: Path, body: str
+) -> None:
+    _ = body_path.write_text(body)
+
+    assert pr_body.main(["--body-file", str(body_path), "--diagram-base", "nope"]) == 0
+
+
+@pytest.mark.parametrize(
+    ("base", "message"),
+    [
+        ("nope", "git diff nope...HEAD failed"),
+        ("feature", "git diff feature...HEAD lists no change"),
+    ],
+)
+def test_cli_diagram_base_git_failure_exits_2_when_the_body_has_no_diagram(
+    body_path: Path, capsys: pytest.CaptureFixture[str], base: str, message: str
+) -> None:
+    _ = body_path.write_text(_body("Diagram: none,"))
 
     assert pr_body.main(["--body-file", str(body_path), f"--diagram-base={base}"]) == 2
     assert message in capsys.readouterr().err
+
+
+def test_a_later_flowchart_block_satisfies_the_diagram_rule() -> None:
+    sequence = "```mermaid\nsequenceDiagram\n  A->>B: hi\n```\n"
+    need = DiagramNeed("flowchart", "x")
+
+    assert pr_body.check_body(_body(sequence, _DIAGRAM), need=need) == []
+    assert pr_body.check_body(_body(sequence), need=need) != []
+
+
+def test_a_frontmatter_block_does_not_hide_the_diagram_header() -> None:
+    titled = "```mermaid\n---\ntitle: x\n---\nflowchart LR\n  A --> B\n```\n"
+    unclosed = "```mermaid\n---\ntitle: x\nflowchart LR\n```\n"
+    empty = "```mermaid\n```\n"
+    need = DiagramNeed("flowchart", "x")
+
+    assert pr_body.check_body(_body(titled), need=need) == []
+    assert pr_body.check_body(_body(unclosed), need=need) != []
+    assert pr_body.check_body(_body(empty), need=need) != []
