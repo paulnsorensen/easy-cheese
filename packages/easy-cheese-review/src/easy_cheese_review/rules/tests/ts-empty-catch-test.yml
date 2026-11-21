@@ -1,0 +1,18 @@
+id: ts-empty-catch
+valid:
+  - |
+    try {
+      run();
+    } catch (error) {
+      logger.error({ error });
+    }
+invalid:
+  - |
+    try {
+      run();
+    } catch (error) {}
+  - |
+    try {
+      run();
+    } catch {
+    }

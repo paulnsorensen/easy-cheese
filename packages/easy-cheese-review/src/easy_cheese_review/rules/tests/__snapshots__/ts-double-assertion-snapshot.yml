@@ -1,0 +1,8 @@
+id: ts-double-assertion
+snapshots:
+  const config = JSON.parse(raw) as unknown as Config;:
+    labels:
+    - source: JSON.parse(raw) as unknown as Config
+      style: primary
+      start: 15
+      end: 51

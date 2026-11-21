@@ -1,0 +1,8 @@
+id: py-subprocess-shell-true
+valid:
+  - subprocess.run(["git", "status"], check=True)
+  - subprocess.run(command, shell=False)
+  - run(command, shell=True)
+invalid:
+  - subprocess.run(command, shell=True)
+  - subprocess.check_output(f"ls {path}", shell=True)

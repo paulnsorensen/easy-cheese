@@ -1,0 +1,12 @@
+# The easy-cheese-review rule pack. Callers pass this file with `-c`; a scan
+# never reads an sgconfig.yml or a rule from the scanned tree.
+# Every rule carries `metadata: {dimension, base}`: the /age review dimension
+# and the base severity (low, medium, high, or blocker) for the rubric.
+ruleDirs:
+  - python
+  - typescript
+testConfigs:
+  - testDir: tests
+# JavaScript parses with the TypeScript grammar, so one rule covers both.
+languageGlobs:
+  typescript: ["*.js", "*.mjs", "*.cjs"]

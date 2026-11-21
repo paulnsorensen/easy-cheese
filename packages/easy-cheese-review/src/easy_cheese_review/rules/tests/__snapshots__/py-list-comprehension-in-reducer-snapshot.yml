@@ -1,0 +1,38 @@
+id: py-list-comprehension-in-reducer
+snapshots:
+  "found = any([check(x) for x in values])":
+    labels:
+    - source: any([check(x) for x in values])
+      style: primary
+      start: 8
+      end: 39
+    - source: any
+      style: secondary
+      start: 8
+      end: 11
+    - source: "[check(x) for x in values]"
+      style: secondary
+      start: 12
+      end: 38
+    - source: "[check(x) for x in values]"
+      style: secondary
+      start: 12
+      end: 38
+  "total = sum([x * x for x in values])":
+    labels:
+    - source: sum([x * x for x in values])
+      style: primary
+      start: 8
+      end: 36
+    - source: sum
+      style: secondary
+      start: 8
+      end: 11
+    - source: "[x * x for x in values]"
+      style: secondary
+      start: 12
+      end: 35
+    - source: "[x * x for x in values]"
+      style: secondary
+      start: 12
+      end: 35
