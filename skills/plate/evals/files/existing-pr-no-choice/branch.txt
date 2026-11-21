@@ -1,0 +1,19 @@
+Repository: easy-cheese. Trunk: main. Branch: fix/cheese-route-typo.
+Quality gate: `just check` exits 0 when run. Required artifacts: none.
+
+$ gh pr view --json number,baseRefName,headRefName,url
+{"number":412,"baseRefName":"main","headRefName":"fix/cheese-route-typo","url":"https://github.com/example/easy-cheese/pull/412"}
+
+Stack metadata: none. No $GIT_DIR/.graphite_repo_config, no git-town parent for this branch, and gh stack is not installed.
+The PR is an ordinary PR.
+
+$ git status --short
+ M src/easy_cheese/skills/cheese/route.py
+ M tests/python/test_cheese_route.py
+?? .cheese/plate/notes.md
+
+$ git log --oneline main..HEAD
+7ad03bc fix(cheese): route "/plate" requests before the culture fallback
+
+$ git ls-remote --heads origin fix/cheese-route-typo
+7ad03bc1e5d2a4b6c8e0f1a2b3c4d5e6f7a8b9c0	refs/heads/fix/cheese-route-typo

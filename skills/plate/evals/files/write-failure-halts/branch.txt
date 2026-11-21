@@ -1,0 +1,17 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/queue-backoff. No PR exists. The user promised an ADR for the backoff decision.
+Required artifact: docs/adr/queue-backoff-001.md (tracked, backend tilth). Quality gate: not yet run.
+
+$ tilth_write edits=[{"path":"docs/adr/queue-backoff-001.md","ops":[{"op":"create_file","content":"# ADR 001: Queue backoff\n\n## Decision\nCapped exponential backoff.\n\n## Consequences\n..."}]}]
+ok: created docs/adr/queue-backoff-001.md, tag 9C21
+
+$ tilth_read paths=["docs/adr/queue-backoff-001.md"]   (read-back)
+[docs/adr/queue-backoff-001.md#9C21]
+1:# ADR 001: Queue backoff
+2:
+
+The read-back ends at line 2. The Decision and Consequences sections the write carried are absent.
+
+$ git status --short
+ M src/easy_cheese/shared/queue.py
+ M tests/python/test_queue.py
+?? docs/adr/queue-backoff-001.md

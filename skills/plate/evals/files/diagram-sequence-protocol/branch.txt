@@ -10,6 +10,11 @@ $ git diff --stat main...HEAD
  src/easy_cheese/skills/cook/dispatch.py           | 71 +++++++++++------
  tests/python/test_cook_dispatch_order.py          | 95 ++++++++++++++++++++
 
+$ git diff --name-status --find-renames main...HEAD
+M	skills/cook/references/fan-path.md
+M	src/easy_cheese/skills/cook/dispatch.py
+A	tests/python/test_cook_dispatch_order.py
+
 Protocol before: Cook dispatches coder; coder writes handback; Cook dispatches reviewer immediately.
 Protocol after:  Cook dispatches coder; coder writes handback; Cook validates handback and sends ack(handback_id);
                  coder replies ready; only then Cook dispatches reviewer. A missing ready within 120 s marks the curd blocked.
