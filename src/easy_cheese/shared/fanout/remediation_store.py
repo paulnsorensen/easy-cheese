@@ -111,6 +111,14 @@ def load_state(root: str | Path, path: str | Path) -> RemediationState:
     return _read_state(_contained(Path(root).resolve(), Path(path)))
 
 
+_RENAME_HINT = (
+    "If the artifact predates schemas 4.0.0, it can carry the removed "
+    "`critical` value or key (now `blocker`). Move the artifact aside and run "
+    "the review again; see the 4.0.0 note in docs/easy-cheese-schemas.md."
+)
+_SHAPE_ERROR_MARKERS = ("unknown fields", "must be one of")
+
+
 def _read_state(target: Path) -> RemediationState:
     try:
         raw = read_bounded_file(target, limit=MAX_STATE_BYTES)
@@ -118,8 +126,13 @@ def _read_state(target: Path) -> RemediationState:
             raw, RemediationState, supported_version_for(RemediationState)
         )
     except (OSError, ContractValidationError) as exc:
+        hint = ""
+        if isinstance(exc, ContractValidationError) and any(
+            marker in str(exc) for marker in _SHAPE_ERROR_MARKERS
+        ):
+            hint = f" {_RENAME_HINT}"
         raise StateStoreError(
-            f"cannot load remediation state {target}; no next phase dispatched: {exc}"
+            f"cannot load remediation state {target}; no next phase dispatched: {exc}{hint}"
         ) from exc
     return cast(RemediationState, result.value)
 

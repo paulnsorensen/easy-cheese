@@ -29,7 +29,7 @@ Both bumps can apply to one finding. Cap the result at `blocker`.
 2. **Location bump** — Add one tier when `location = contract` and the dimension is location-sensitive (see § Location sensitivity).
 3. **Compounding bump** — Add one tier when `fix-cost-later = structural`.
 
-Do not compute the formula mentally. Invoke `src/easy_cheese/shared/severity.py compute`:
+Do not compute the formula mentally. Run the `severity compute` command, which applies the `easy_cheese_review.severity` rubric:
 
 ```bash
 python3 skills/age/scripts/age.pyz severity compute \
@@ -95,7 +95,7 @@ Apply the `contract` bump only to dimensions where boundary position changes fin
 
 > "How hard would it be to fix this *right now*?"
 
-Count files in the proposed fix's blast radius. Do not bucket the count mentally. Pipe raw file/module counts through `src/easy_cheese/shared/severity.py bucket`:
+Count files in the proposed fix's blast radius. Do not bucket the count mentally. Pipe raw file/module counts through the `severity bucket` command:
 
 ```bash
 python3 skills/age/scripts/age.pyz severity bucket --files <N> [--modules <M>]

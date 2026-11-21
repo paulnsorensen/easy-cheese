@@ -38,13 +38,21 @@ them while enforcement is implemented separately.
   `skills/<skill>/scripts/<skill>.pyz`, built by Wedge from
   `skills/<skill>/wedge.toml` over the shared `skills/wedge.toml`; a skill
   with no Python ships no archive. Skill prose invokes only its own archive.
-- Runtime Python lives under `src/`. Tests remain under `tests/`; repository
+- Runtime Python lives under `src/` and under
+  `packages/easy-cheese-review/src/`. Tests remain under `tests/`; repository
   build, release, generation, and maintenance programs may live under
   `scripts/`.
 - Published schemas live in `src/easy_cheese_schemas/`. All non-published
   runtime code lives under `src/easy_cheese/`, split between
   `skills/<python_skill_name>/`, `shared/`, and `cli/`. Skill slugs remain
   kebab-case; Python package segments use underscores.
+- `easy-cheese-review` is a second distribution. It lives in
+  `packages/easy-cheese-review/` with its own `pyproject.toml` and
+  `src/easy_cheese_review/`, so it builds its own wheel. No publish workflow
+  exists for it yet. It holds the `/age`
+  severity rubric, the ast-grep rule pack as package data, and the review
+  facts. It may import only `easy_cheese_schemas`. The `/age` archive includes
+  it through `skills/age/wedge.toml`.
 - `cli/` holds command surfaces only; it may import `shared/` and schemas.
   `shared/` code must not import `cli/`.
 - Archives may contain Python modules, bytecode, and immutable package
@@ -52,7 +60,8 @@ them while enforcement is implemented separately.
   extensions, platform-specific libraries, required external executables,
   runtime package installation, and caller-managed extraction are prohibited.
 - Each archive contains its own skill package and immutable resources, the
-  shared and CLI support it uses, published schemas, and the pure-Python
+  shared and CLI support it uses, published schemas, the `easy-cheese-review`
+  package when its `wedge.toml` includes it, and the pure-Python
   dependency closure pinned by `uv.lock`. It dispatches only its own skill's
   `COMMANDS`. Runtime use performs no archive download, loader lookup, or
   sidecar-lock verification. Shiv's transparent cache extraction remains

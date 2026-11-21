@@ -1,0 +1,8 @@
+id: py-yaml-unsafe-load
+snapshots:
+  yaml.load(stream):
+    labels:
+    - source: yaml.load(stream)
+      style: primary
+      start: 0
+      end: 17

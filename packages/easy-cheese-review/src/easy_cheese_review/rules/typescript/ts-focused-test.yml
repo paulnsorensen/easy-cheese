@@ -1,0 +1,13 @@
+id: ts-focused-test
+language: typescript
+severity: warning
+message: A focused test (`.only`) makes the runner skip every other test.
+note: Remove `.only` before merge.
+metadata:
+  dimension: assertions
+  base: high
+rule:
+  kind: call_expression
+  has:
+    field: function
+    regex: '^(describe|it|test)\.only$'

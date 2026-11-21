@@ -84,6 +84,10 @@ def test_load_refuses_state_with_removed_critical_debt_key(tmp_path: Path) -> No
     with pytest.raises(StateStoreError, match="cannot load remediation state") as excinfo:
         _ = load_state(tmp_path, path)
     assert "critical" in str(excinfo.value.__cause__)
+    message = str(excinfo.value)
+    assert "schemas 4.0.0" in message
+    assert "Move the artifact aside and run the review again" in message
+    assert "docs/easy-cheese-schemas.md" in message
 
 
 def test_run_lock_rejects_second_holder_and_keeps_inode(tmp_path: Path) -> None:

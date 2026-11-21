@@ -17,3 +17,4 @@ ignore: |-
   node_modules/
   dist/
   .astro/
+  packages/easy-cheese-review/src/easy_cheese_review/rules/tests/

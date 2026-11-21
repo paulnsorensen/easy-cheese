@@ -44,7 +44,7 @@ The four 4.0.0 dimensions add no subject and do not change
 receives the whole-change view (`skills/age/references/packet.md:45`), which
 the `scope` rubric needs. None of the
 four takes the location bump, so `LOCATION_SENSITIVE`
-(`src/easy_cheese/shared/severity.py:66-76`) stays unchanged.
+(`packages/easy-cheese-review/src/easy_cheese_review/severity.py`) stays unchanged.
 A deterministic fact or an ast-grep hit can back a finding as evidence of kind
 `static` (`EvidenceKind.STATIC`, `src/easy_cheese_schemas/contracts.py:173-179`);
 it is never a finding by itself, and a review without static evidence still
