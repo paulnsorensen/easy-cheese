@@ -44,11 +44,16 @@ Write each requirement to these rules:
 - State a response that a user, a caller, or a test can observe.
 - Keep the fork id, the basis ids, and the veto alternative on the line. EARS replaces the free-text outcome, not the trace.
 - When a decision binds no system response, such as a date, an owner, or a process, write prose and add `[prose-fallback]`. Acceptance uses the same marker (`curdle.md` § Spec template).
+- The Bounds-pass line that maps every input's goals and non-goals binds no system response. It is prose and carries `[prose-fallback]`.
 
-Three lines stay out of EARS.
-The `Goal:` line and the `G-n` clauses stay in the user's words, because `goal-drift` and goal coverage compare text.
 The Acceptance lines that cover a clause are EARS.
-A non-goal names an exclusion, not a behavior, and feeds the non-goals audit (`handshake.md` § Non-goals audit).
+
+Six lines stay out of EARS:
+
+- The `Goal:` line and the `G-n` clauses stay in the user's words, because `goal-drift` and goal coverage compare text.
+- A non-goal names an exclusion, not a behavior, and feeds the non-goals audit (`handshake.md` § Non-goals audit).
+- The Bounds-pass mapping line follows the `[prose-fallback]` rule above.
+- The `Evidence:` and `Asking:` lines record evidence and open forks, not outcomes.
 
 At curdle, each `Decided` entry seeds the Acceptance line that carries its fork id.
 Each `[AGENT-DECIDED]` entry becomes one `_Minor decisions:_` item with its veto alternative.

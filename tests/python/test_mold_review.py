@@ -452,6 +452,50 @@ def test_canvas_examples_publish_without_warnings(
     assert output["warnings"] == []
 
 
+def test_publish_accepts_a_prose_fallback_bounds_mapping_line(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    document: dict[str, object] = {
+        "ledger": [
+            {
+                "label": "agent-decided",
+                "items": [
+                    {"id": "AD-1", "text": "Goals: one file. Non-goals: remote sync. [prose-fallback]"}
+                ],
+            }
+        ]
+    }
+
+    [output] = _publish_outputs(tmp_path, capsys, document)
+
+    assert output["warnings"] == []
+
+
+def test_publish_warns_when_a_basis_cites_an_open_fork(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    document: dict[str, object] = {
+        "settled_fork_ids": ["F-1"],
+        "questions": [
+            {
+                "id": "F-2",
+                "basis": [
+                    {"ref": "ev-1", "text": "evidence"},
+                    {"ref": "F-1", "text": "settled fork"},
+                    {"ref": "F-3", "text": "open fork"},
+                ],
+            },
+            {"id": "F-3", "basis": BASIS},
+        ],
+    }
+
+    [output] = _publish_outputs(tmp_path, capsys, document)
+
+    assert output["warnings"] == [
+        "question F-2: basis cites F-3, which is still an open fork; cite only settled forks"
+    ]
+
+
 def test_publish_warns_about_forks_without_a_basis(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -491,6 +535,9 @@ def test_publish_warns_about_decisions_and_requirements_that_are_not_ears(
                 "label": "decided",
                 "items": [
                     {"id": "F-1", "text": "when two agents write, the store shall serialize the writes."},
+                    {"id": "F-4", "text": "Shall we revisit WAL later?"},
+                    {"id": "F-6", "text": "we shall see"},
+                    {"id": "F-5", "text": "THE store SHALL keep one file."},
                     {"id": "F-2", "text": "WAL mode plus a single writer lock file"},
                     {"text": "Store facade"},
                 ],
@@ -509,7 +556,15 @@ def test_publish_warns_about_decisions_and_requirements_that_are_not_ears(
     )
     assert output["warnings"] == [
         f"{label}{suffix}"
-        for label in ("requirement R-2", "ledger decided F-2", "ledger decided items[2]", "ledger agent-decided text")
+        for label in (
+            "requirement R-2",
+            "ledger decided F-1",
+            "ledger decided F-4",
+            "ledger decided F-6",
+            "ledger decided F-2",
+            "ledger decided items[5]",
+            "ledger agent-decided text",
+        )
     ]
 
 

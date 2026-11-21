@@ -42,6 +42,19 @@
       ]
     },
     {
+      "label": "evidence",
+      "items": [
+        {
+          "id": "ev-1",
+          "text": "certain, round log: rounds two to four added no new evidence"
+        },
+        {
+          "id": "ev-2",
+          "text": "don't know: lock behavior on network mounts is unverified"
+        }
+      ]
+    },
+    {
       "label": "open",
       "items": [
         {
@@ -199,11 +212,11 @@
       "meta": "routes the next step · nothing settles",
       "basis": [
         {
-          "ref": "r2–r4",
+          "ref": "ev-1",
           "text": "three rounds added no new evidence"
         },
         {
-          "ref": "F-5",
+          "ref": "ev-2",
           "text": "lock behavior on network mounts is unverified",
           "confidence": "don't know"
         }

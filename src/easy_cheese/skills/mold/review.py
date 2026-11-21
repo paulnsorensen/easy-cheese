@@ -555,21 +555,28 @@ def _question_label(question: JSONObject, index: int) -> str:
 
 
 def _basis_warnings(document: JSONObject) -> list[str]:
-    """Name each open question whose fork card has no evidence lead-in."""
+    """Name each open question whose basis is missing or cites a fork that is still open."""
     warnings: list[str] = []
-    for index, question in enumerate(_as_list(document.get("questions"))):
+    questions = _as_list(document.get("questions"))
+    open_ids = set(_string_ids(questions))
+    decision_map = document.get("decision_map")
+    if isinstance(decision_map, dict):
+        open_ids.update(_string_ids(decision_map.get("open")))
+    for index, question in enumerate(questions):
         if not isinstance(question, dict):
             continue
-        basis = _as_list(question.get("basis"))
-        if not any(isinstance(item, dict) and _has_text(item.get("text")) for item in basis):
-            warnings.append(
-                f"{_question_label(question, index)}: basis is missing;"
-                + " lead the fork with the ledger evidence that opened it"
-            )
+        label = _question_label(question, index)
+        basis = [item for item in _as_list(question.get("basis")) if isinstance(item, dict) and _has_text(item.get("text"))]
+        if not basis:
+            warnings.append(f"{label}: basis is missing; lead the fork with the ledger evidence that opened it")
+        for item in basis:
+            ref = item.get("ref")
+            if isinstance(ref, str) and ref in open_ids:
+                warnings.append(f"{label}: basis cites {ref}, which is still an open fork; cite only settled forks")
     return warnings
 
 
-_EARS_RESPONSE = re.compile(r"\bSHALL\b", re.IGNORECASE)
+_EARS_RESPONSE = re.compile(r"\bSHALL\b")
 _PROSE_FALLBACK = "[prose-fallback]"
 _DECISION_ROWS = ("decided", "agent-decided")
 
