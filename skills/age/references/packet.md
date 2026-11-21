@@ -26,14 +26,14 @@ Use this map to prepare the initial rubric material without copying the whole re
 | --- | --- |
 | changed-behavior | correctness, telemetry, security |
 | removed-behavior | correctness, spec, assertions |
-| caller-impact | correctness, encapsulation |
+| caller-impact | correctness, encapsulation, compat |
 | security | security |
-| spec-tests | spec, assertions |
-| reuse | nih, deslop |
+| spec-tests | spec, assertions, tests |
+| reuse | nih, deslop, dependencies |
 | simplification | complexity, deslop |
 | efficiency | efficiency |
 | conventions | conventions |
-| altitude | altitude, encapsulation, complexity |
+| altitude | altitude, encapsulation, complexity, scope |
 | reframe | reframe, complexity, altitude |
 
 Extract rubric sections by their dimension headings from `dimensions.md`.

@@ -153,11 +153,11 @@ enum PlannerDisposition = "complete" | "partial" | "no_work" | "blocked" | "inva
 
 enum ReproductionDisposition = "reproduced" | "not_reproduced" | "blocked"
 
-enum ReviewDimension = "correctness" | "security" | "encapsulation" | "spec" | "complexity" | "deslop" | "assertions" | "nih" | "efficiency" | "telemetry" | "conventions" | "altitude" | "reframe"
+enum ReviewDimension = "correctness" | "security" | "encapsulation" | "spec" | "complexity" | "deslop" | "assertions" | "nih" | "efficiency" | "telemetry" | "conventions" | "altitude" | "reframe" | "tests" | "compat" | "scope" | "dependencies"
 
 enum ReviewDisposition = "clean" | "findings" | "blocked" | "invalid" | "executor_failure"
 
-enum ReviewSeverity = "critical" | "high" | "medium" | "low"
+enum ReviewSeverity = "blocker" | "high" | "medium" | "low"
 
 enum UncertaintyScope = "omitted_work" | "emitted_work" | "dependency" | "shared_constraint"
 
