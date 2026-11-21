@@ -1,0 +1,10 @@
+id: ts-json-deep-clone
+language: typescript
+severity: warning
+message: A JSON round trip clones the value and drops Date, Map, Set, and cycles.
+note: Use `structuredClone` when the value holds only cloneable data.
+metadata:
+  dimension: efficiency
+  base: low
+rule:
+  pattern: JSON.parse(JSON.stringify($VALUE))

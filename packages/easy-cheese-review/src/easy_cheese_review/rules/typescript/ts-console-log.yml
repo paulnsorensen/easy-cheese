@@ -1,0 +1,12 @@
+id: ts-console-log
+language: typescript
+severity: warning
+message: A `console.log` or `console.debug` call can be debug output left in the code.
+note: Use the project logger, or delete the call.
+metadata:
+  dimension: deslop
+  base: low
+rule:
+  any:
+    - pattern: console.log($$$ARGS)
+    - pattern: console.debug($$$ARGS)

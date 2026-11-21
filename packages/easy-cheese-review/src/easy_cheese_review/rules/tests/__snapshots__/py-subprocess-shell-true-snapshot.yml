@@ -1,0 +1,38 @@
+id: py-subprocess-shell-true
+snapshots:
+  "subprocess.check_output(f\"ls {path}\", shell=True)":
+    labels:
+    - source: subprocess.check_output(f"ls {path}", shell=True)
+      style: primary
+      start: 0
+      end: 49
+    - source: subprocess.check_output
+      style: secondary
+      start: 0
+      end: 23
+    - source: shell=True
+      style: secondary
+      start: 38
+      end: 48
+    - source: shell=True
+      style: secondary
+      start: 38
+      end: 48
+  "subprocess.run(command, shell=True)":
+    labels:
+    - source: subprocess.run(command, shell=True)
+      style: primary
+      start: 0
+      end: 35
+    - source: subprocess.run
+      style: secondary
+      start: 0
+      end: 14
+    - source: shell=True
+      style: secondary
+      start: 24
+      end: 34
+    - source: shell=True
+      style: secondary
+      start: 24
+      end: 34

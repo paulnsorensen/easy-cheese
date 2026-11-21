@@ -1,0 +1,23 @@
+id: py-request-without-timeout
+language: python
+severity: warning
+message: A `requests` call without `timeout=` can wait forever.
+note: Pass an explicit timeout (Ruff S113).
+metadata:
+  dimension: correctness
+  base: medium
+rule:
+  kind: call
+  has:
+    field: function
+    regex: '^requests\.(get|post|put|patch|delete|head|options|request)$'
+  not:
+    has:
+      field: arguments
+      has:
+        any:
+          - kind: keyword_argument
+            has:
+              field: name
+              regex: '^timeout$'
+          - kind: dictionary_splat

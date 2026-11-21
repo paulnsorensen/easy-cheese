@@ -176,6 +176,7 @@ class EvidenceKind(str, Enum):
     DIAGNOSIS = "diagnosis"
     VERIFICATION = "verification"
     RUNTIME = "runtime"
+    STATIC = "static"
 
 
 class PlannerRequestKind(str, Enum):
@@ -227,10 +228,14 @@ class ReviewDimension(str, Enum):
     CONVENTIONS = "conventions"
     ALTITUDE = "altitude"
     REFRAME = "reframe"
+    TESTS = "tests"
+    COMPAT = "compat"
+    SCOPE = "scope"
+    DEPENDENCIES = "dependencies"
 
 
 class ReviewSeverity(str, Enum):
-    CRITICAL = "critical"
+    BLOCKER = "blocker"
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
@@ -1432,7 +1437,7 @@ class RemediationEventIdentity:
 
 @define(frozen=True)
 class ReviewDebt:
-    critical: int = field(validator=_non_negative_integer)
+    blocker: int = field(validator=_non_negative_integer)
     high: int = field(validator=_non_negative_integer)
     medium: int = field(validator=_non_negative_integer)
     contained_low: int = field(validator=_non_negative_integer)
@@ -1441,23 +1446,23 @@ class ReviewDebt:
     @score.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
     def _validate_score(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         expected = (
-            16 * self.critical + 8 * self.high + 4 * self.medium + self.contained_low
+            16 * self.blocker + 8 * self.high + 4 * self.medium + self.contained_low
         )
         if self.score != expected:
             raise ValueError(
-                f"score must equal 16*critical + 8*high + 4*medium + contained_low ({expected}), got {self.score}"
+                f"score must equal 16*blocker + 8*high + 4*medium + contained_low ({expected}), got {self.score}"
             )
 
     @classmethod
     def compute(
-        cls, *, critical: int, high: int, medium: int, contained_low: int
+        cls, *, blocker: int, high: int, medium: int, contained_low: int
     ) -> "ReviewDebt":
         return cls(
-            critical=critical,
+            blocker=blocker,
             high=high,
             medium=medium,
             contained_low=contained_low,
-            score=16 * critical + 8 * high + 4 * medium + contained_low,
+            score=16 * blocker + 8 * high + 4 * medium + contained_low,
         )
 
 

@@ -1,0 +1,32 @@
+id: py-constant-assert
+snapshots:
+  assert "done":
+    labels:
+    - source: assert "done"
+      style: primary
+      start: 0
+      end: 13
+    - source: "\"done\""
+      style: secondary
+      start: 7
+      end: 13
+  assert 1:
+    labels:
+    - source: assert 1
+      style: primary
+      start: 0
+      end: 8
+    - source: "1"
+      style: secondary
+      start: 7
+      end: 8
+  assert True:
+    labels:
+    - source: assert True
+      style: primary
+      start: 0
+      end: 11
+    - source: "True"
+      style: secondary
+      start: 7
+      end: 11

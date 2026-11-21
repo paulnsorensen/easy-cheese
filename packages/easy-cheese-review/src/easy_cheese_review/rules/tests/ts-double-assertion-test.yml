@@ -1,0 +1,6 @@
+id: ts-double-assertion
+valid:
+  - const config = schema.parse(raw);
+  - const name = value as string;
+invalid:
+  - const config = JSON.parse(raw) as unknown as Config;

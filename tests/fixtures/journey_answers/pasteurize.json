@@ -1,0 +1,18 @@
+{
+  "pasteurize-env-1": {
+    "loop": "mkdir -p .cache/tmp && TMPDIR=$PWD/.cache/tmp python3 -m unittest",
+    "loop_ok": "OK",
+    "fix": {
+      "src/discover.py": "\"\"\"Find report folders under a root, skipping hidden folders.\"\"\"\nfrom pathlib import Path\n\n\ndef find_reports(root):\n    root = Path(root).resolve()\n    found = []\n    for path in sorted(root.rglob(\"report.json\")):\n        if any(part.startswith(\".\") for part in path.relative_to(root).parts):\n            continue\n        found.append(path.parent.name)\n    return found\n"
+    },
+    "decoy": null
+  },
+  "pasteurize-env-2": {
+    "loop": "TZ=EST5 python3 check_due.py",
+    "loop_ok": "due: [1, 2, 3]",
+    "fix": {
+      "src/due.py": "\"\"\"Orders due on a given UTC day.\"\"\"\nfrom datetime import datetime, timezone\n\n\ndef due_on(orders, day):\n    \"\"\"Return the ids of the orders whose UTC due time falls on day.\"\"\"\n    return [order[\"id\"] for order in orders if datetime.fromtimestamp(order[\"due_ts\"], timezone.utc).date() == day]\n"
+    },
+    "decoy": null
+  }
+}

@@ -1,0 +1,6 @@
+id: py-yaml-unsafe-load
+valid:
+  - yaml.safe_load(stream)
+  - yaml.load(stream, Loader=yaml.SafeLoader)
+invalid:
+  - yaml.load(stream)

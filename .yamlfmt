@@ -1,5 +1,8 @@
 exclude:
   - pnpm-lock.yaml
+  # ast-grep owns these files: a test case's text keys its snapshot, and
+  # `ast-grep test -U` writes the snapshot layout.
+  - packages/easy-cheese-review/src/easy_cheese_review/rules/tests
 formatter:
   type: basic
   retain_line_breaks_single: true

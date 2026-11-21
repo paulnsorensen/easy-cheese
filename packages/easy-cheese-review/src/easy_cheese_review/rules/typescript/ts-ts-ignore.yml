@@ -1,0 +1,11 @@
+id: ts-ts-ignore
+language: typescript
+severity: warning
+message: '`@ts-ignore` stays after the error it hides is gone.'
+note: Use `@ts-expect-error` with a reason (@typescript-eslint/ban-ts-comment).
+metadata:
+  dimension: deslop
+  base: low
+rule:
+  kind: comment
+  regex: '@ts-ignore\b'

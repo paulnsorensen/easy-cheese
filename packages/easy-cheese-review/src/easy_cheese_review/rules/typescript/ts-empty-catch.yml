@@ -1,0 +1,13 @@
+id: ts-empty-catch
+language: typescript
+severity: warning
+message: An empty `catch` block discards the error.
+note: Handle the error, log it, or let it propagate.
+metadata:
+  dimension: correctness
+  base: high
+rule:
+  kind: catch_clause
+  has:
+    field: body
+    regex: '^\{\s*\}$'
