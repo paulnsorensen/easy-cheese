@@ -660,6 +660,12 @@ def _class_hints_and_fields(
     return hints, fields
 
 
+class _UnionMatchError(ContractValidationError):
+    def __init__(self, path: str, message: str) -> None:
+        super().__init__(message)
+        self.path: str = path
+
+
 def _structure(value: object, annotation: object, path: str = "$") -> object:
     origin = get_origin(annotation)
     if origin is types.UnionType:
@@ -669,8 +675,9 @@ def _structure(value: object, annotation: object, path: str = "$") -> object:
                 return _structure(value, member, path)
             except ContractValidationError as error:
                 failures.append(str(error))
-        raise ContractValidationError(
-            f"{path} does not match any allowed shape: {'; '.join(failures)}"
+        raise _UnionMatchError(
+            path,
+            f"{path} does not match any allowed shape: {'; '.join(failures)}",
         )
     if origin in {list, tuple}:
         if not isinstance(value, list):
@@ -819,15 +826,10 @@ def _structure_writer_view(data: Mapping[str, object]) -> AgentWriterView:
     try:
         value = _structure(data, AgentWriterView)
     except ContractValidationError as error:
-        kind = data.get("kind")
-        if (
-            str(error).startswith("$.payload does not match any allowed shape:")
-            and isinstance(kind, str)
-            and kind in {item.value for item in WriterViewKind}
-        ):
+        if isinstance(error, _UnionMatchError) and error.path == "$.payload":
             _ = _structure(
                 data["payload"],
-                writer_payload_types()[WriterViewKind(kind)],
+                writer_payload_types()[WriterViewKind(cast(str, data["kind"]))],
                 "$.payload",
             )
         raise

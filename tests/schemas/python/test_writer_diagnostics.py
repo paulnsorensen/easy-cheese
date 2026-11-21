@@ -16,6 +16,7 @@ from easy_cheese_schemas.contracts import (
     PlannerRequest,
     WriterViewKind,
 )
+from easy_cheese_schemas import schema_runtime
 from easy_cheese_schemas.schema_runtime import (
     ContractValidationError,
     load_agent_writer_view,
@@ -197,10 +198,6 @@ def test_writer_envelope_errors_and_budgets_still_reject() -> None:
         ),
         ("{", "invalid JSON"),
         ("x" * (MAX_CONTRACT_BYTES + 1), "MAX_CONTRACT_BYTES"),
-        (
-            {"kind": "review_result", "payload": {"x": [None] * 1}, "deep": [None] * 1},
-            "$ contains unknown fields",
-        ),
     ]
     for raw, fragment in cases:
         with pytest.raises(ContractValidationError) as caught:
@@ -212,6 +209,25 @@ def test_writer_envelope_errors_and_budgets_still_reject() -> None:
         deep = [deep]
     with pytest.raises(ContractValidationError, match="MAX_CONTRACT_DEPTH"):
         _ = load_agent_writer_view({"kind": "review_result", "payload": deep})
+
+
+def test_selection_does_not_depend_on_union_message_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def reworded(_self: object) -> str:
+        return "reworded union failure"
+
+    monkeypatch.setattr(
+        schema_runtime._UnionMatchError,  # pyright: ignore[reportPrivateUsage]
+        "__str__",
+        reworded,
+    )
+    payload = dict(writer_cases()[2][1], unexpected_field=True)
+    with pytest.raises(
+        ContractValidationError,
+        match=r"^\$\.payload contains unknown fields: unexpected_field$",
+    ):
+        _ = load_agent_writer_view({"kind": "review_result", "payload": payload})
 
 
 def test_normalizer_uses_selected_payload_error() -> None:
