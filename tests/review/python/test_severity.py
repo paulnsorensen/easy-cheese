@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import re
+from collections.abc import Mapping
+from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 import pytest
+from easy_cheese_schemas import ReviewDimension
 
 if TYPE_CHECKING:
     from easy_cheese_review.severity import RubricError, Severity
@@ -15,6 +19,7 @@ class _SeverityModule(Protocol):
     RubricError: type[RubricError]
     Severity: type[Severity]
     FixCostNow: type[FixCostNow]
+    LOCATION_SENSITIVITY: Mapping[ReviewDimension, bool]
 
     def bump(self, sev: Severity) -> Severity: ...
 
@@ -200,6 +205,39 @@ class TestComputeSeverity:
                 location="class",
                 fix_cost_later="explosive",
             )
+
+
+DIMENSIONS_PROSE = Path(__file__).resolve().parents[3] / "skills/age/references/dimensions.md"
+_TABLE_ROW = re.compile(r"^\|\s*(?P<dimension>[a-z]+)\s*\|\s*(?P<bump>yes|no)\s*\|", re.MULTILINE)
+
+
+def _prose_location_sensitivity() -> dict[str, bool]:
+    """Parse the "Location sensitivity" table of dimensions.md into dimension -> bump?."""
+    text = DIMENSIONS_PROSE.read_text(encoding="utf-8")
+    section = text.split("## Location sensitivity", 1)[1].split("\n## ", 1)[0]
+    return {m["dimension"]: m["bump"] == "yes" for m in _TABLE_ROW.finditer(section)}
+
+
+class TestLocationSensitivity:
+    def test_every_dimension_is_classified(self, severity: _SeverityModule) -> None:
+        classified = set(severity.LOCATION_SENSITIVITY)
+        assert classified == set(ReviewDimension)
+        assert all(isinstance(flag, bool) for flag in severity.LOCATION_SENSITIVITY.values())
+
+    def test_code_map_matches_the_prose_table(self, severity: _SeverityModule) -> None:
+        prose = _prose_location_sensitivity()
+        code = {dim.value: flag for dim, flag in severity.LOCATION_SENSITIVITY.items()}
+        assert prose, "no rows parsed from the Location sensitivity table"
+        assert code == prose
+
+    def test_contract_bump_matches_the_map_for_every_dimension(
+        self, severity: _SeverityModule
+    ) -> None:
+        for dim, sensitive in severity.LOCATION_SENSITIVITY.items():
+            got = severity.compute_severity(
+                dimension=dim.value, base="low", location="contract", fix_cost_later="contained"
+            )
+            assert got is (severity.Severity.MEDIUM if sensitive else severity.Severity.LOW), dim
 
 
 class TestBucketFixCostNow:

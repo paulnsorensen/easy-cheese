@@ -4,28 +4,41 @@ The command compares the working tree with a base revision. It runs the
 easy-cheese-review rule pack on the changed files and computes the `compat`,
 `dependencies`, `tests`, and `scope` facts. Hits are evidence to confirm or
 reject, never findings by themselves. Without ast-grep, the result has
-`scan.status: failed:ast-grep-missing`, no hits, and every fact `unknown`,
-and the review continues.
+`scan.status: failed:ast-grep-missing`, no hits, and `unknown` `compat`,
+`dependencies`, and `scope` facts with a reason. The `tests` fact needs no
+ast-grep, so it is still computed. The review continues.
 """
 
 from __future__ import annotations
 
 import subprocess
 import sys
-import tarfile
 import tempfile
-from pathlib import Path
-from typing import cast
+from pathlib import Path, PurePosixPath
 
 import fromargs
 
 from easy_cheese.shared import git_utils
-from easy_cheese_review import hunks_from_diff, scan
+from easy_cheese_review import CODE_SUFFIXES, hunks_from_diff, scan
 
 _GIT_TIMEOUT_SECONDS = 120
 # Pin the diff path spelling: no C-style quotes and fixed a/ and b/ prefixes,
 # whatever core.quotePath, diff.mnemonicPrefix, or diff.noprefix say.
-_DIFF_OPTIONS = ["--no-renames", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/"]
+# `--text` prints a hunk for every file, so no `-diff` attribute or NUL byte
+# in the reviewed tree hides a changed line.
+_DIFF_OPTIONS = [
+    "--text",
+    "--no-renames",
+    "--no-color",
+    "--no-ext-diff",
+    "--src-prefix=a/",
+    "--dst-prefix=b/",
+]
+# Regular files only: links (120000) and submodules (160000) are skipped.
+_REGULAR_FILE_MODES = frozenset({"100644", "100755"})
+# The base import scan reads the whole base tree, so ast-grep also parses these
+# suffixes (measured with ast-grep 0.51.3); `dependencies` needs their imports.
+_BASE_SCAN_SUFFIXES = CODE_SUFFIXES | frozenset({".mts", ".cts", ".pyi", ".py3", ".bzl"})
 
 
 def _git_text(repo: Path, args: list[str]) -> str:
@@ -37,33 +50,68 @@ def _git_text(repo: Path, args: list[str]) -> str:
     return result.stdout
 
 
-def _extract_base(repo: Path, base: str, target: Path) -> None:
-    """Stream `git archive <base>` into `target`, keeping regular files and folders.
+def _base_code_blobs(repo: Path, base: str) -> list[tuple[str, str]]:
+    """Return `(path, object id)` for each regular code file in the `base` tree."""
+    listing = _git_text(repo, ["ls-tree", "-r", "-z", "--full-tree", base])
+    blobs: list[tuple[str, str]] = []
+    for entry in listing.split("\0"):
+        meta, _, path = entry.partition("\t")
+        fields = meta.split()
+        if len(fields) != 3 or fields[0] not in _REGULAR_FILE_MODES or fields[1] != "blob":
+            continue
+        if PurePosixPath(path).suffix in _BASE_SCAN_SUFFIXES:
+            blobs.append((path, fields[2]))
+    return blobs
 
-    Links are skipped: the facts never follow a link, and an absolute or
-    out-of-tree link would stop the extraction.
+
+def _inside(target: Path, path: str) -> Path | None:
+    """Return where `path` goes under `target`, or None when it would leave `target`."""
+    pure = PurePosixPath(path)
+    if not pure.parts or pure.is_absolute() or ".." in pure.parts:
+        return None
+    destination = target.joinpath(*pure.parts)
+    if not destination.resolve().is_relative_to(target.resolve()):
+        return None
+    return destination
+
+
+def _extract_base(repo: Path, base: str, target: Path) -> None:
+    """Write the regular code files of `base` into `target` from raw git blobs.
+
+    `git cat-file --batch` applies no attribute, so `export-ignore`,
+    `export-subst`, filters, and line-ending conversion change nothing.
+    The facts read only code files and never follow a link, so links,
+    submodules, and other files are skipped.
     """
-    with subprocess.Popen(
-        ["git", "-C", str(repo), "archive", "--format=tar", base],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=False,
-    ) as process:
-        assert process.stdout is not None and process.stderr is not None
-        read_error: tarfile.ReadError | None = None
-        try:
-            with tarfile.open(fileobj=process.stdout, mode="r|") as archive:
-                for member in archive:
-                    if member.isfile() or member.isdir():
-                        archive.extract(member, target, filter="data")
-        except tarfile.ReadError as exc:
-            # A failed `git archive` writes no tar; report git's own error first.
-            read_error = exc
-        stderr = cast(bytes, process.stderr.read()).decode("utf-8", errors="replace").strip()
-        if process.wait(timeout=_GIT_TIMEOUT_SECONDS) != 0:
-            raise fromargs.CliError(f"git archive {base} failed: {stderr}")
-        if read_error is not None:
-            raise fromargs.CliError(f"git archive {base} output is not a tar: {read_error}")
+    blobs = _base_code_blobs(repo, base)
+    if not blobs:
+        return
+    request = "".join(f"{object_id}\n" for _, object_id in blobs).encode("ascii")
+    result = subprocess.run(
+        ["git", "-C", str(repo), "cat-file", "--batch"],
+        input=request,
+        capture_output=True,
+        timeout=_GIT_TIMEOUT_SECONDS,
+        check=False,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.decode("utf-8", errors="replace").strip()
+        raise fromargs.CliError(f"git cat-file {base} failed: {stderr}")
+    output = result.stdout
+    position = 0
+    for path, object_id in blobs:
+        header_end = output.find(b"\n", position)
+        header = output[position:header_end].split()
+        if header_end < 0 or len(header) != 3 or header[0] != object_id.encode("ascii") or header[1] != b"blob":
+            raise fromargs.CliError(f"git cat-file {base}: no blob for {path}")
+        start = header_end + 1
+        end = start + int(header[2])
+        position = end + 1
+        destination = _inside(target, path)
+        if destination is None:
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        _ = destination.write_bytes(output[start:end])
 
 
 def evidence_cmd(base: str, *, repo: str = ".") -> dict[str, object]:

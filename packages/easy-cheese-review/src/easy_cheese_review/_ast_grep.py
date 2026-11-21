@@ -8,17 +8,23 @@ path that starts with `-` is never read as an option.
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import signal
 import subprocess
-from collections.abc import Generator, Sequence
+import threading
+from collections.abc import Generator, Iterator, Sequence
 from contextlib import contextmanager
 from importlib import resources
 from pathlib import Path
-from typing import cast
+from typing import IO, cast
 
 JsonObject = dict[str, object]
 
 _TIMEOUT_SECONDS = 120
+# Path bytes per run. Each run stays far below the OS argument limit (ARG_MAX
+# is 256 KiB on macOS and 2 MiB on Linux, and includes the environment).
+_ARG_BYTE_BUDGET = 128 * 1024
 
 
 class AstGrepError(RuntimeError):
@@ -37,60 +43,123 @@ def packaged_config() -> Generator[Path, None, None]:
         yield rules / "sgconfig.yml"
 
 
-def _run(binary: str, args: Sequence[str], cwd: Path) -> list[JsonObject]:
+def _kill(proc: subprocess.Popen[str]) -> None:
+    """Stop the run and any child it started."""
+    if proc.poll() is not None:
+        return
     try:
-        completed = subprocess.run(
+        if hasattr(os, "killpg"):
+            os.killpg(proc.pid, signal.SIGKILL)
+        else:
+            proc.kill()
+    except OSError:
+        pass
+
+
+def _rows(binary: str, args: Sequence[str], cwd: Path) -> Iterator[JsonObject]:
+    """Yield one JSON object per stdout line while ast-grep runs.
+
+    The timeout bounds the whole run, also while the stream stays open. A failure
+    raises after the stream ends, so a non-zero exit wins over bad JSON.
+    """
+    try:
+        proc = subprocess.Popen(
             [binary, *args],
             cwd=cwd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
             text=True,
-            timeout=_TIMEOUT_SECONDS,
-            check=False,
+            start_new_session=True,
         )
-    except subprocess.TimeoutExpired:
-        raise AstGrepError("timeout") from None
     except OSError:
         raise AstGrepError("exec-error") from None
-    if completed.returncode != 0:
-        raise AstGrepError(f"exit-{completed.returncode}")
-    rows: list[JsonObject] = []
-    for line in completed.stdout.splitlines():
-        if not line.strip():
-            continue
-        try:
-            row = cast(object, json.loads(line))
-        except json.JSONDecodeError:
-            raise AstGrepError("bad-json") from None
-        if not isinstance(row, dict):
-            raise AstGrepError("bad-json")
-        rows.append(cast(JsonObject, row))
-    return rows
+    timed_out = threading.Event()
+
+    def expire() -> None:
+        timed_out.set()
+        _kill(proc)
+
+    timer = threading.Timer(_TIMEOUT_SECONDS, expire)
+    timer.start()
+    bad_json = False
+    returncode = 0
+    try:
+        for line in cast(IO[str], proc.stdout):
+            if bad_json or not line.strip():
+                continue
+            try:
+                row = cast(object, json.loads(line))
+            except json.JSONDecodeError:
+                bad_json = True
+                continue
+            if isinstance(row, dict):
+                yield cast(JsonObject, row)
+            else:
+                bad_json = True
+        returncode = proc.wait()
+    finally:
+        _kill(proc)
+        _ = proc.wait()
+        timer.cancel()
+        cast(IO[str], proc.stdout).close()
+    if timed_out.is_set():
+        raise AstGrepError("timeout")
+    if returncode != 0:
+        raise AstGrepError(f"exit-{returncode}")
+    if bad_json:
+        raise AstGrepError("bad-json")
+
+
+def _batches(paths: Sequence[str]) -> Iterator[list[str]]:
+    """Split `paths` into batches whose path bytes stay within the budget.
+
+    A path larger than the budget goes alone. Input order is kept.
+    """
+    batch: list[str] = []
+    size = 0
+    for path in paths:
+        cost = len(os.fsencode(path)) + 1
+        if batch and size + cost > _ARG_BYTE_BUDGET:
+            yield batch
+            batch, size = [], 0
+        batch.append(path)
+        size += cost
+    if batch:
+        yield batch
 
 
 def scan(binary: str, config: Path, cwd: Path, paths: Sequence[str]) -> list[JsonObject]:
     """Run the packaged rules over `paths` and return one JSON object per hit."""
-    if not paths:
-        return []
-    args = ["scan", "-c", str(config), "--json=stream", "--include-metadata", "--", *paths]
-    return _run(binary, args, cwd)
+    rows: list[JsonObject] = []
+    for batch in _batches(paths):
+        args = ["scan", "-c", str(config), "--json=stream", "--include-metadata", "--", *batch]
+        rows.extend(_rows(binary, args, cwd))
+    return rows
 
 
 def imports(binary: str, config: Path, cwd: Path, paths: Sequence[str]) -> dict[str, list[str]]:
     """Return the full text of every import statement, grouped by path.
 
     A path may be a directory; the result keys are file paths relative to `cwd`.
+    The run keeps only the file and text of each row, never the whole row.
     """
-    if not paths:
-        return {}
-    query = (resources.files(__package__) / "queries" / "imports.yml").read_text(encoding="utf-8")
-    args = ["scan", "-c", str(config), "--inline-rules", query, "--json=stream", "--", *paths]
     found: dict[str, list[str]] = {}
-    for row in _run(binary, args, cwd):
-        rule_id = row.get("ruleId")
-        path = row.get("file")
-        text = row.get("text")
-        if isinstance(rule_id, str) and rule_id.startswith("import-") and isinstance(path, str) and isinstance(text, str):
-            found.setdefault(path.removeprefix("./"), []).append(text)
+    if not paths:
+        return found
+    query = (resources.files(__package__) / "queries" / "imports.yml").read_text(encoding="utf-8")
+    for batch in _batches(paths):
+        args = ["scan", "-c", str(config), "--inline-rules", query, "--json=stream", "--", *batch]
+        for row in _rows(binary, args, cwd):
+            rule_id = row.get("ruleId")
+            path = row.get("file")
+            text = row.get("text")
+            if (
+                isinstance(rule_id, str)
+                and rule_id.startswith("import-")
+                and isinstance(path, str)
+                and isinstance(text, str)
+            ):
+                found.setdefault(path.removeprefix("./"), []).append(text)
     return found
 
 
@@ -98,17 +167,16 @@ def outline(
     binary: str, config: Path, cwd: Path, paths: Sequence[str], items: str
 ) -> dict[str, list[JsonObject]]:
     """Return the outline items (`exports` or `imports`) for each path."""
-    if not paths:
-        return {}
-    args = ["-c", str(config), "outline", "--items", items, "--json=stream", "--", *paths]
     found: dict[str, list[JsonObject]] = {path: [] for path in paths}
-    for row in _run(binary, args, cwd):
-        path = row.get("path")
-        entries = row.get("items")
-        if isinstance(path, str) and isinstance(entries, list):
-            found[path] = [
-                cast(JsonObject, item)
-                for item in cast(list[object], entries)
-                if isinstance(item, dict)
-            ]
+    for batch in _batches(paths):
+        args = ["-c", str(config), "outline", "--items", items, "--json=stream", "--", *batch]
+        for row in _rows(binary, args, cwd):
+            path = row.get("path")
+            entries = row.get("items")
+            if isinstance(path, str) and isinstance(entries, list):
+                found[path] = [
+                    cast(JsonObject, item)
+                    for item in cast(list[object], entries)
+                    if isinstance(item, dict)
+                ]
     return found

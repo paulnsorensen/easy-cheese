@@ -7,13 +7,17 @@ The package holds three parts:
 - `easy_cheese_review.rules`: an ast-grep rule pack for Python and TypeScript/JavaScript. Every rule carries `metadata: {dimension, base}`.
 - `easy_cheese_review.scan` and `easy_cheese_review.facts`: a scan of changed files and four deterministic facts (`compat`, `dependencies`, `tests`, `scope`).
 
+The package is not on PyPI yet, because no workflow publishes it.
+Install it from a checkout of the repository:
+
 ```sh
-pip install easy-cheese-review
+pip install ./packages/easy-cheese-review
 ```
 
-Requires Python 3.11 or newer and `easy-cheese-schemas>=4`.
+Requires Python 3.11 or newer and `easy-cheese-schemas>=4,<5`.
 The [ast-grep](https://ast-grep.github.io) binary is optional.
-When `ast-grep` is not on `PATH`, `scan` returns `status: failed:ast-grep-missing`, no hits, and every fact as `unknown`.
+When `ast-grep` is not on `PATH`, `scan` returns `status: failed:ast-grep-missing` and no hits.
+The `tests` fact needs no ast-grep and stays known; `compat`, `dependencies`, and `scope` are `unknown` with the reason.
 
 ## Usage
 
@@ -49,7 +53,7 @@ Each fact is `yes`, `no`, or `unknown`, with a `detail` object.
 | Fact | `yes` means |
 | --- | --- |
 | `compat` | An exported name at base is gone at head (`ast-grep outline --items exports`). |
-| `dependencies` | A manifest or lockfile changed, or a changed file imports a new third-party module (`ast-grep outline --items imports`). |
+| `dependencies` | A manifest or lockfile changed, or a changed file imports a new third-party module (the packaged `queries/imports.yml` query, run through `ast-grep scan --inline-rules`). |
 | `tests` | A changed source file has no matching changed test file. |
 | `scope` | The changed code files form two or more groups with no import between them. |
 

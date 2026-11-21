@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import importlib
 import shutil
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from pathlib import Path
 from types import ModuleType
 
 import pytest
 
-WriteTree = Callable[[Path, Mapping[str, str]], Path]
+from tests.review.python.support import WriteTree
 
 
 @pytest.fixture(scope="session")

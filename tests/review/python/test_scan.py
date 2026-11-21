@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import json
 import subprocess
-from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import pytest
 
 from easy_cheese_review import FACT_NAMES, hunks_from_diff, scan
-
-WriteTree = Callable[[Path, Mapping[str, str]], Path]
+from tests.review.python.support import WriteTree, fake_ast_grep
 
 BEFORE = """\
 def load(path):
@@ -108,27 +106,64 @@ def test_planted_sgconfig_and_rules_change_nothing(
     assert {hit.rule_id for hit in planted.hits} == {"py-swallowed-exception"}
 
 
-def test_missing_ast_grep_returns_unknown_and_no_hits(
+def test_missing_ast_grep_returns_no_hits_and_keeps_tests_known(
     repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """AC-3: without ast-grep on PATH every fact is unknown and no hit exists."""
+    """AC-3: without ast-grep on PATH no hit exists and only `tests` stays known."""
     monkeypatch.setenv("PATH", str(repo / "empty-bin"))
     evidence = scan(repo, ["src/store.py"], base=repo)
 
     assert evidence.status == "failed:ast-grep-missing"
     assert evidence.hits == ()
-    assert set(evidence.facts) == set(FACT_NAMES)
-    assert {fact.value for fact in evidence.facts.values()} == {"unknown"}
+    assert list(evidence.facts) == list(FACT_NAMES)
+    assert {name: fact.value for name, fact in evidence.facts.items()} == {
+        "compat": "unknown",
+        "dependencies": "unknown",
+        "tests": "yes",
+        "scope": "unknown",
+    }
+    assert evidence.facts["compat"].detail == {"reason": "ast-grep ast-grep-missing"}
     assert evidence.to_json()["scan"] == {"status": "failed:ast-grep-missing"}
 
 
 def test_failed_run_reports_reason(repo: Path, tmp_path: Path, write_tree: WriteTree) -> None:
-    fake = write_tree(tmp_path / "bin", {"ast-grep": "#!/bin/sh\nexit 3\n"}) / "ast-grep"
-    fake.chmod(0o755)
-    evidence = scan(repo, ["src/store.py"], ast_grep=str(fake))
+    fake = fake_ast_grep(tmp_path, write_tree, "#!/bin/sh\nexit 3\n")
+    evidence = scan(repo, ["src/store.py"], base=repo, ast_grep=fake)
     assert evidence.status == "failed:exit-3"
     assert evidence.hits == ()
-    assert {fact.value for fact in evidence.facts.values()} == {"unknown"}
+    assert {name: fact.value for name, fact in evidence.facts.items()} == {
+        "compat": "unknown",
+        "dependencies": "unknown",
+        "tests": "yes",
+        "scope": "unknown",
+    }
+    assert evidence.facts["scope"].detail == {"reason": "ast-grep exit-3"}
+
+
+def test_a_changed_file_without_a_hunk_entry_keeps_every_hit(
+    repo: Path, ast_grep_binary: str, write_tree: WriteTree
+) -> None:
+    """A reviewed tree's `.gitattributes` cannot hide hits by making git print no hunk."""
+    _ = write_tree(repo, {".gitattributes": "*.py -diff\n"})
+    diff = _git(repo, "diff", "--unified=0")
+    assert "Binary files" in diff
+    evidence = scan(repo, ["src/store.py"], hunks=hunks_from_diff(diff), ast_grep=ast_grep_binary)
+    assert evidence.status == "ok"
+    assert [hit.line for hit in evidence.hits] == [4, 11]
+
+
+def test_a_deletion_that_creates_a_hit_keeps_it(
+    tmp_path: Path, ast_grep_binary: str, write_tree: WriteTree
+) -> None:
+    before = "def save(path, data):\n    try:\n        write(path, data)\n    except Exception:\n        log(path)\n        pass\n"
+    root = write_tree(tmp_path / "del", {"src/store.py": before})
+    _ = _git(root, "init", "-q")
+    _ = _git(root, "add", ".")
+    _ = _git(root, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "base")
+    _ = write_tree(root, {"src/store.py": before.replace("        log(path)\n", "")})
+    hunks = hunks_from_diff(_git(root, "diff", "--unified=0"))
+    evidence = scan(root, ["src/store.py"], hunks=hunks, ast_grep=ast_grep_binary)
+    assert [(hit.rule_id, hit.line) for hit in evidence.hits] == [("py-swallowed-exception", 4)]
 
 
 def test_symlink_out_of_tree_is_not_scanned(
@@ -153,4 +188,4 @@ def test_hunks_from_diff_reads_head_side_ranges() -> None:
         "@@ -3,0 +4,2 @@\n+x\n+y\n@@ -9 +11 @@\n-z\n+w\n@@ -20,2 +22,0 @@\n-q\n-r\n"
         "diff --git a/gone.py b/gone.py\n--- a/gone.py\n+++ /dev/null\n@@ -1 +0,0 @@\n-x\n"
     )
-    assert hunks_from_diff(diff) == {"a.py": [(4, 5), (11, 11)]}
+    assert hunks_from_diff(diff) == {"a.py": [(4, 5), (11, 11), (22, 23)]}

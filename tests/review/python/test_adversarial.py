@@ -5,32 +5,16 @@ A test marked `xfail(strict=True)` pins a production defect. The reason names it
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
 
 from easy_cheese_review import Fact, facts, hunks_from_diff, scan
-
-WriteTree = Callable[[Path, Mapping[str, str]], Path]
+from tests.review.python.support import WriteTree, compute_facts, fake_ast_grep
 
 # The swallowed exception below is one hit that spans lines 4 to 5.
 SWALLOW = "def a():\n    try:\n        x()\n    except Exception:\n        pass\n"
-
-
-def _compute(
-    tmp_path: Path,
-    write_tree: WriteTree,
-    binary: str,
-    *,
-    base: Mapping[str, str],
-    head: Mapping[str, str],
-    changed: Sequence[str],
-) -> dict[str, Fact]:
-    (tmp_path / "base").mkdir()
-    base_root = write_tree(tmp_path / "base", base)
-    head_root = write_tree(tmp_path / "head", head)
-    return facts(head_root, changed, base=base_root, ast_grep=binary)
 
 
 def _removed(result: Mapping[str, Fact]) -> list[tuple[str, str]]:
@@ -47,12 +31,12 @@ def test_hunks_default_count_is_one_line() -> None:
     assert hunks_from_diff(diff) == {"x.py": [(5, 5)]}
 
 
-def test_hunks_skip_deletion_only_hunks_and_deleted_files() -> None:
+def test_hunks_map_a_deletion_to_its_neighbors_and_skip_deleted_files() -> None:
     diff = (
         "--- a/x.py\n+++ b/x.py\n@@ -4,2 +3,0 @@\n-a\n-b\n"
         "--- a/gone.py\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-a\n-b\n"
     )
-    assert hunks_from_diff(diff) == {}
+    assert hunks_from_diff(diff) == {"x.py": [(3, 4)]}
 
 
 def test_hunks_follow_a_renamed_file_to_its_new_path() -> None:
@@ -110,19 +94,19 @@ def test_hit_survives_only_when_a_hunk_overlaps_its_lines(
     assert [(hit.line, hit.end_line) for hit in evidence.hits] == ([(4, 5)] if kept else [])
 
 
-def test_hunks_for_another_path_drop_the_hit(
+def test_a_changed_file_missing_from_hunks_keeps_the_hit(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     head = write_tree(tmp_path / "head", {"src/s.py": SWALLOW})
     evidence = scan(head, ["src/s.py"], hunks={"src/other.py": [(1, 9)]}, ast_grep=ast_grep_binary)
-    assert evidence.hits == ()
+    assert [(hit.line, hit.end_line) for hit in evidence.hits] == [(4, 5)]
 
 
-def test_empty_hunks_mapping_drops_every_hit(
+def test_empty_hunks_mapping_keeps_every_hit(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     head = write_tree(tmp_path / "head", {"src/s.py": SWALLOW})
-    assert scan(head, ["src/s.py"], hunks={}, ast_grep=ast_grep_binary).hits == ()
+    assert len(scan(head, ["src/s.py"], hunks={}, ast_grep=ast_grep_binary).hits) == 1
     assert len(scan(head, ["src/s.py"], ast_grep=ast_grep_binary).hits) == 1
 
 
@@ -188,30 +172,30 @@ def test_scan_reads_a_changed_file_in_a_hidden_or_ignored_folder(
 # --- scan: fake binary failures -------------------------------------------
 
 
-def _fake(tmp_path: Path, write_tree: WriteTree, script: str) -> str:
-    fake = write_tree(tmp_path / "bin", {"ast-grep": script}) / "ast-grep"
-    fake.chmod(0o755)
-    return str(fake)
-
-
 def test_scan_reports_bad_json_from_ast_grep(tmp_path: Path, write_tree: WriteTree) -> None:
     head = write_tree(tmp_path / "head", {"src/s.py": SWALLOW})
-    fake = _fake(tmp_path, write_tree, "#!/bin/sh\necho 'not json'\n")
+    fake = fake_ast_grep(tmp_path, write_tree, "#!/bin/sh\necho 'not json'\n")
     evidence = scan(head, ["src/s.py"], ast_grep=fake)
     assert evidence.status == "failed:bad-json"
     assert evidence.hits == ()
-    assert {fact.value for fact in evidence.facts.values()} == {"unknown"}
+    assert {name: fact.value for name, fact in evidence.facts.items()} == {
+        "compat": "unknown",
+        "dependencies": "unknown",
+        "tests": "yes",
+        "scope": "unknown",
+    }
+    assert evidence.facts["scope"].detail == {"reason": "ast-grep bad-json"}
 
 
 def test_scan_reports_a_non_object_json_row(tmp_path: Path, write_tree: WriteTree) -> None:
     head = write_tree(tmp_path / "head", {"src/s.py": SWALLOW})
-    fake = _fake(tmp_path, write_tree, "#!/bin/sh\necho '[1]'\n")
+    fake = fake_ast_grep(tmp_path, write_tree, "#!/bin/sh\necho '[1]'\n")
     assert scan(head, ["src/s.py"], ast_grep=fake).status == "failed:bad-json"
 
 
 def test_scan_drops_a_row_with_missing_fields(tmp_path: Path, write_tree: WriteTree) -> None:
     head = write_tree(tmp_path / "head", {"src/s.py": SWALLOW})
-    fake = _fake(tmp_path, write_tree, "#!/bin/sh\necho '{\"ruleId\": \"r\", \"file\": \"src/s.py\"}'\n")
+    fake = fake_ast_grep(tmp_path, write_tree, "#!/bin/sh\necho '{\"ruleId\": \"r\", \"file\": \"src/s.py\"}'\n")
     evidence = scan(head, ["src/s.py"], ast_grep=fake)
     assert evidence.status == "ok"
     assert evidence.hits == ()
@@ -221,7 +205,7 @@ def test_facts_are_unknown_when_every_ast_grep_run_fails(
     tmp_path: Path, write_tree: WriteTree
 ) -> None:
     head = write_tree(tmp_path / "head", {"src/s.py": SWALLOW})
-    fake = _fake(tmp_path, write_tree, "#!/bin/sh\nexit 2\n")
+    fake = fake_ast_grep(tmp_path, write_tree, "#!/bin/sh\nexit 2\n")
     result = facts(head, ["src/s.py"], base=head, ast_grep=fake)
     # `tests` needs no ast-grep run, so it stays known.
     assert {name: fact.value for name, fact in result.items()} == {
@@ -245,7 +229,7 @@ def test_compat_sees_async_and_decorated_python_exports(
             "class K:\n    pass\n\n\nCONST = 1\n\n\ndef _p():\n    pass\n"
         )
     }
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base=base, head={"a.py": ""}, changed=["a.py"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base=base, head={"a.py": ""}, changed=["a.py"])
     assert _removed(result) == [("a.py", "CONST"), ("a.py", "K"), ("a.py", "fetch"), ("a.py", "wrapped")]
 
 
@@ -254,7 +238,7 @@ def test_compat_counts_a_rename_to_private_as_a_removal(
 ) -> None:
     base = {"a.py": "def keep():\n    pass\n"}
     head = {"a.py": "def _keep():\n    pass\n"}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=["a.py"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=["a.py"])
     assert _removed(result) == [("a.py", "keep")]
 
 
@@ -263,7 +247,7 @@ def test_compat_counts_an_export_that_loses_its_keyword_as_removed(
 ) -> None:
     base = {"a.ts": "export const x = 1;\nexport function f() {}\n"}
     head = {"a.ts": "const x = 1;\nexport function f() {}\n"}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=["a.ts"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=["a.ts"])
     assert _removed(result) == [("a.ts", "x")]
 
 
@@ -276,7 +260,7 @@ def test_compat_sees_removed_typescript_type_exports_and_reexports(
             "export interface I {}\nexport enum E { A }\nexport { default as dflt } from './z';\n"
         )
     }
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base=base, head={"b.ts": ""}, changed=["b.ts"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base=base, head={"b.ts": ""}, changed=["b.ts"])
     assert [name for _, name in _removed(result)] == ["E", "I", "T", "a", "default", "dflt"]
 
 
@@ -297,7 +281,7 @@ def test_compat_sees_removed_typescript_type_exports_and_reexports(
 def test_compat_sees_removed_default_value_and_namespace_reexport(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str, text: str
 ) -> None:
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base={"c.ts": text}, head={"c.ts": ""}, changed=["c.ts"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={"c.ts": text}, head={"c.ts": ""}, changed=["c.ts"])
     assert result["compat"].value == "yes"
 
 
@@ -306,7 +290,7 @@ def test_compat_ignores_the_inline_type_modifier_in_an_export_clause(
 ) -> None:
     base = {"a.ts": "type Foo = 1;\nconst bar = 2;\nexport { type Foo, bar };\n"}
     head = {"a.ts": "type Foo = 1;\nconst bar = 2;\nexport { Foo, bar };\n"}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=["a.ts"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=["a.ts"])
     assert result["compat"] == Fact("no", {"removed": []})
 
 
@@ -319,7 +303,7 @@ def test_compat_accepts_a_type_only_export_clause(
 ) -> None:
     base = {"a.ts": "type Foo = 1;\nexport { type Foo };\n"}
     head = {"a.ts": "type Foo = 1;\nexport type { Foo };\n"}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=["a.ts"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=["a.ts"])
     assert result["compat"] == Fact("no", {"removed": []})
 
 
@@ -328,7 +312,7 @@ def test_compat_does_not_report_a_renamed_default_export(
 ) -> None:
     base = {"a.ts": "export default function main() {}\n"}
     head = {"a.ts": "export default function start() {}\n"}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=["a.ts"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=["a.ts"])
     assert result["compat"] == Fact("no", {"removed": []})
 
 
@@ -336,7 +320,7 @@ def test_compat_reports_every_export_of_a_deleted_python_file(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     base = {"src/a.py": "def one():\n    pass\n", "src/b.py": "def two():\n    pass\n"}
-    result = _compute(
+    result = compute_facts(
         tmp_path, write_tree, ast_grep_binary, base=base, head={"src/b.py": "def two():\n    pass\n"},
         changed=["src/a.py", "src/b.py"],
     )
@@ -356,7 +340,7 @@ def test_dependencies_ignore_future_and_stdlib_submodules(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     head = {"a.py": "from __future__ import annotations\nimport os.path\nimport xml.etree.ElementTree\nimport zoneinfo\n"}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base={"a.py": ""}, head=head, changed=["a.py"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={"a.py": ""}, head=head, changed=["a.py"])
     assert result["dependencies"].value == "no"
 
 
@@ -370,7 +354,7 @@ def test_dependencies_find_an_import_inside_a_function_or_a_guard(
             "if True:\n    from httpx import (\n        Client,\n    )\n"
         )
     }
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base={"a.py": ""}, head=head, changed=["a.py"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={"a.py": ""}, head=head, changed=["a.py"])
     assert _added(result) == [("a.py", "httpx"), ("a.py", "requests"), ("a.py", "yaml")]
 
 
@@ -378,7 +362,7 @@ def test_dependencies_treat_a_src_layout_package_as_local(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     head = {"src/mypkg/__init__.py": "", "tests/test_m.py": "import mypkg\nfrom mypkg.sub import thing\n"}
-    result = _compute(
+    result = compute_facts(
         tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=["tests/test_m.py"]
     )
     assert result["dependencies"].value == "no"
@@ -388,7 +372,7 @@ def test_dependencies_treat_a_sibling_module_as_local(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     head = {"scripts/run.py": "import helper\n", "scripts/helper.py": "X = 1\n"}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=["scripts/run.py"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=["scripts/run.py"])
     assert result["dependencies"].value == "no"
 
 
@@ -399,7 +383,7 @@ def test_dependencies_treat_a_monorepo_package_as_local(
         "packages/lib/src/lib/__init__.py": "",
         "packages/lib/tests/test_lib.py": "import lib\n",
     }
-    result = _compute(
+    result = compute_facts(
         tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=["packages/lib/tests/test_lib.py"]
     )
     assert result["dependencies"].value == "no"
@@ -410,7 +394,7 @@ def test_dependencies_do_not_mix_python_and_npm_packages(
 ) -> None:
     base = {"tool.py": "import yaml\n", "web/a.ts": "export const a = 1;\n"}
     head = {**base, "web/a.ts": "import yaml from 'yaml';\n"}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=["web/a.ts"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=["web/a.ts"])
     assert _added(result) == [("web/a.ts", "yaml")]
 
 
@@ -427,7 +411,7 @@ def test_dependencies_normalize_npm_subpaths_and_builtins(
             "import 'side-effect-pkg';\n"
         )
     }
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=["web/a.ts"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=["web/a.ts"])
     assert _added(result) == [
         ("web/a.ts", "@scope/pkg"),
         ("web/a.ts", "rxjs"),
@@ -439,7 +423,7 @@ def test_dependencies_pair_a_nested_manifest_with_the_root_lockfile(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     files = {"web/package.json": "{}", "package-lock.json": "{}"}
-    result = _compute(
+    result = compute_facts(
         tmp_path, write_tree, ast_grep_binary, base=files, head=files, changed=["web/package.json"]
     )
     detail = result["dependencies"].detail
@@ -450,7 +434,7 @@ def test_dependencies_accept_a_changed_root_lockfile_for_a_nested_manifest(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     files = {"web/package.json": "{}", "package-lock.json": "{}"}
-    result = _compute(
+    result = compute_facts(
         tmp_path, write_tree, ast_grep_binary, base=files, head=files,
         changed=["web/package.json", "package-lock.json"],
     )
@@ -461,7 +445,7 @@ def test_dependencies_prefer_the_nested_lockfile_over_the_root_one(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     files = {"web/package.json": "{}", "web/yarn.lock": "", "pnpm-lock.yaml": ""}
-    result = _compute(
+    result = compute_facts(
         tmp_path, write_tree, ast_grep_binary, base=files, head=files,
         changed=["web/package.json", "pnpm-lock.yaml"],
     )
@@ -474,7 +458,7 @@ def test_dependencies_ignore_a_manifest_without_any_lockfile(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     files = {"pyproject.toml": "[project]\n"}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base=files, head=files, changed=["pyproject.toml"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base=files, head=files, changed=["pyproject.toml"])
     assert result["dependencies"].value == "yes"
     assert result["dependencies"].detail["unpaired"] == []
 
@@ -486,7 +470,7 @@ def test_tests_fact_treats_a_helper_in_a_test_folder_as_a_test_file(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     head = {"tests/helpers.py": "X = 1\n", "conftest.py": "", "app/mod_test.py": "", "app/mod.py": "Y = 1\n"}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
     assert result["tests"] == Fact("no", {"untested": [], "sources": 1})
 
 
@@ -494,7 +478,7 @@ def test_tests_fact_pairs_a_package_init_with_its_package_test(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     head = {"src/billing/__init__.py": "X = 1\n", "tests/test_billing.py": ""}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
     assert result["tests"].value == "no"
 
 
@@ -516,7 +500,7 @@ def test_scope_joins_a_two_level_relative_python_import(
         "pkg/side/mod.py": "y = 1\n",
         "pkg/unrelated.py": "Z = 1\n",
     }
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
     assert _groups(result) == [["pkg/b.py", "pkg/side/mod.py", "pkg/sub/a.py"], ["pkg/unrelated.py"]]
     assert result["scope"].value == "yes"
 
@@ -525,7 +509,7 @@ def test_scope_keeps_every_file_when_a_relative_import_climbs_above_the_root(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     head = {"a.py": "from ... import x\nfrom .... import y\n", "x.py": ""}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
     assert sorted(path for group in _groups(result) for path in group) == ["a.py", "x.py"]
 
 
@@ -533,7 +517,7 @@ def test_scope_joins_a_python_package_init_import(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     head = {"pkg/__init__.py": "from .a import A\n", "pkg/a.py": "A = 1\n", "other/__init__.py": ""}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
     assert _groups(result) == [["other/__init__.py"], ["pkg/__init__.py", "pkg/a.py"]]
 
 
@@ -541,7 +525,7 @@ def test_scope_resolves_a_relative_import_to_one_file(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     head = {"a.py": "from . import b\n", "b.py": "", "docs/b.py": ""}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
     assert _groups(result) == [["a.py", "b.py"], ["docs/b.py"]]
 
 
@@ -560,7 +544,7 @@ def test_scope_resolves_typescript_extension_and_index_imports(
         "web/re.ts": "",
         "web/lonely.ts": "",
     }
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
     assert _groups(result) == [
         ["shared/s.ts", "web/app.ts", "web/lib/index.ts", "web/re.ts", "web/side.ts", "web/x.ts"],
         ["web/lonely.ts"],
@@ -571,7 +555,7 @@ def test_scope_resolves_a_tsx_component_imported_as_jsx(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     head = {"web/page.tsx": "import { B } from './box.jsx';\n", "web/box.tsx": "export const B = 1;\n"}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
     assert result["scope"] == Fact("no", {"groups": [["web/box.tsx", "web/page.tsx"]]})
 
 
@@ -579,7 +563,7 @@ def test_scope_joins_a_multi_line_typescript_import(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     head = {"web/a.ts": "import {\n  one,\n  two,\n} from './b';\n", "web/b.ts": "export const one = 1;\n"}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
     assert result["scope"].value == "no"
 
 
@@ -587,7 +571,7 @@ def test_scope_does_not_join_python_and_script_files_by_name(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     head = {"a.py": "import b\n", "b.ts": "export const b = 1;\n"}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
     assert result["scope"].value == "yes"
 
 
@@ -595,7 +579,7 @@ def test_scope_ignores_a_python_file_with_a_syntax_error(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     head = {"a.py": "from . import (\n", "b.py": ""}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
     assert _groups(result) == [["a.py"], ["b.py"]]
 
 
@@ -639,7 +623,7 @@ def test_tests_fact_does_not_count_a_deleted_test(
     base = {"src/base.py": "A = 1\n", "tests/test_base.py": "import base\n"}
     head = {"src/base.py": "A = 2\n"}
     changed = ["src/base.py", "tests/test_base.py"]
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=changed)
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=changed)
     assert result["tests"] == Fact("yes", {"untested": ["src/base.py"], "sources": 1})
 
 
@@ -653,7 +637,7 @@ def test_tests_fact_pairs_private_modules_and_prefixed_test_names(
         "tests/test_age_review_evidence.py": "",
         "pkg/other.py": "C = 1\n",
     }
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
     assert result["tests"].detail["untested"] == ["pkg/other.py"]
 
 
@@ -661,7 +645,7 @@ def test_compat_ignores_names_removed_from_test_modules(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     base = {"tests/test_x.py": "def test_a():\n    pass\n", "tests/conftest.py": "def fixture():\n    pass\n"}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base=base, head={}, changed=sorted(base))
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base=base, head={}, changed=sorted(base))
     assert result["compat"] == Fact("no", {"removed": []})
 
 
@@ -669,7 +653,7 @@ def test_scope_ignores_an_ambiguous_suffix_match(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     head = {"app/main.py": "import utils\n", "billing/utils.py": "", "accounts/utils.py": ""}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
     assert _groups(result) == [["accounts/utils.py"], ["app/main.py"], ["billing/utils.py"]]
 
 
@@ -677,22 +661,26 @@ def test_scope_keeps_a_unique_suffix_match(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     head = {"tests/test_m.py": "from pkg import m\n", "src/pkg/m.py": ""}
-    result = _compute(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=head, changed=sorted(head))
     assert _groups(result) == [["src/pkg/m.py", "tests/test_m.py"]]
 
 
 def test_a_failed_outline_run_spoils_only_compat(
     tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
-    fake = write_tree(
-        tmp_path / "bin",
-        {"ast-grep": f'#!/bin/sh\nif [ "$3" = outline ]; then exit 2; fi\nexec "{ast_grep_binary}" "$@"\n'},
-    ) / "ast-grep"
-    fake.chmod(0o755)
-    (tmp_path / "base").mkdir()
-    base = write_tree(tmp_path / "base", {"src/x.py": "A = 1\n"})
-    head = write_tree(tmp_path / "head", {"src/x.py": "import requests\n"})
-    result = facts(head, ["src/x.py"], base=base, ast_grep=str(fake))
+    fake = fake_ast_grep(
+        tmp_path,
+        write_tree,
+        f'#!/bin/sh\nif [ "$3" = outline ]; then exit 2; fi\nexec "{ast_grep_binary}" "$@"\n',
+    )
+    result = compute_facts(
+        tmp_path,
+        write_tree,
+        fake,
+        base={"src/x.py": "A = 1\n"},
+        head={"src/x.py": "import requests\n"},
+        changed=["src/x.py"],
+    )
     assert result["compat"] == Fact("unknown", {"reason": "ast-grep exit-2"})
     assert result["dependencies"].value == "yes"
     assert result["tests"].value == "yes"

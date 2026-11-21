@@ -1,11 +1,16 @@
 """Compute per-finding severity and fix-cost-now buckets for /age.
 
-Encodes the rubric in skills/age/references/dimensions.md so a reviewer does
-not re-derive the formula for each finding. /age wraps these functions in its
-`severity` bundle command; affineur imports them directly.
+This code owns the rubric. skills/age/references/dimensions.md mirrors it in
+prose for reviewers, and a test compares the "Location sensitivity" table with
+`LOCATION_SENSITIVITY`. The package never reads that prose at run time. /age
+wraps these functions in its `severity` bundle command; affineur imports them
+directly.
 """
 
 from __future__ import annotations
+
+from collections.abc import Mapping
+from types import MappingProxyType
 
 from enum import IntEnum
 from typing import Self
@@ -53,16 +58,33 @@ class Severity(_OrderedRubricTier):
 
 DIMENSIONS: frozenset[str] = frozenset(dimension.value for dimension in ReviewDimension)
 
-LOCATION_SENSITIVE: frozenset[str] = frozenset(
+# Whether the `contract` location bumps a dimension. Keyed by `ReviewDimension`
+# with an explicit value for every member; a test fails on a missing dimension.
+LOCATION_SENSITIVITY: Mapping[ReviewDimension, bool] = MappingProxyType(
     {
-        "correctness",
-        "security",
-        "encapsulation",
-        "spec",
-        "nih",
-        "efficiency",
-        "telemetry",
+        ReviewDimension.CORRECTNESS: True,
+        ReviewDimension.SECURITY: True,
+        ReviewDimension.ENCAPSULATION: True,
+        ReviewDimension.SPEC: True,
+        ReviewDimension.COMPLEXITY: False,
+        ReviewDimension.DESLOP: False,
+        ReviewDimension.ASSERTIONS: False,
+        ReviewDimension.NIH: True,
+        ReviewDimension.EFFICIENCY: True,
+        ReviewDimension.TELEMETRY: True,
+        ReviewDimension.CONVENTIONS: False,
+        ReviewDimension.ALTITUDE: False,
+        ReviewDimension.REFRAME: False,
+        ReviewDimension.TESTS: False,
+        ReviewDimension.COMPAT: False,
+        ReviewDimension.SCOPE: False,
+        ReviewDimension.DEPENDENCIES: False,
     }
+)
+
+# Kept for existing importers: the wire spellings of the sensitive dimensions.
+LOCATION_SENSITIVE: frozenset[str] = frozenset(
+    dimension.value for dimension, sensitive in LOCATION_SENSITIVITY.items() if sensitive
 )
 
 LOCATIONS: frozenset[str] = frozenset({"class", "module", "cross-module", "contract"})

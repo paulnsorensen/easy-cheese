@@ -2,37 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import pytest
 
 from easy_cheese_review import FACT_NAMES, Fact, facts
 from easy_cheese_schemas import ReviewDimension
+from tests.review.python.support import WriteTree, compute_facts
 
-WriteTree = Callable[[Path, Mapping[str, str]], Path]
-
-
-@pytest.fixture
-def trees(tmp_path: Path) -> tuple[Path, Path]:
-    return tmp_path / "base", tmp_path / "head"
-
-
-def _facts(
-    trees: tuple[Path, Path],
-    write_tree: WriteTree,
-    binary: str,
-    *,
-    base: Mapping[str, str],
-    head: Mapping[str, str],
-    changed: list[str],
-) -> dict[str, Fact]:
-    base_root, head_root = trees
-    base_root.mkdir(exist_ok=True)
-    head_root.mkdir(exist_ok=True)
-    _ = write_tree(base_root, base)
-    _ = write_tree(head_root, head)
-    return facts(head_root, changed, base=base_root, ast_grep=binary)
 
 
 def test_every_fact_names_a_review_dimension() -> None:
@@ -43,16 +20,16 @@ def test_every_fact_names_a_review_dimension() -> None:
 
 
 def test_compat_records_a_removed_python_function(
-    trees: tuple[Path, Path], write_tree: WriteTree, ast_grep_binary: str
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     base = {"src/api.py": "def keep():\n    pass\n\n\ndef drop():\n    pass\n\n\ndef _private():\n    pass\n"}
     head = {"src/api.py": "def keep():\n    pass\n"}
-    result = _facts(trees, write_tree, ast_grep_binary, base=base, head=head, changed=["src/api.py"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=["src/api.py"])
     assert result["compat"] == Fact("yes", {"removed": [{"path": "src/api.py", "name": "drop"}]})
 
 
 def test_compat_records_typescript_exports_and_a_deleted_file(
-    trees: tuple[Path, Path], write_tree: WriteTree, ast_grep_binary: str
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     base = {
         "lib/index.ts": "export function open() {}\nexport const close = () => 1;\nconst h = 2;\nexport { h as handle };\n",
@@ -60,7 +37,7 @@ def test_compat_records_typescript_exports_and_a_deleted_file(
     }
     head = {"lib/index.ts": "export function open() {}\n"}
     changed = ["lib/index.ts", "lib/old.ts"]
-    result = _facts(trees, write_tree, ast_grep_binary, base=base, head=head, changed=changed)
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=changed)
     removed = result["compat"].detail["removed"]
     assert removed == [
         {"path": "lib/index.ts", "name": "close"},
@@ -70,11 +47,11 @@ def test_compat_records_typescript_exports_and_a_deleted_file(
 
 
 def test_compat_is_no_when_exports_only_grow(
-    trees: tuple[Path, Path], write_tree: WriteTree, ast_grep_binary: str
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     base = {"src/api.py": "def keep():\n    pass\n"}
     head = {"src/api.py": "def keep():\n    pass\n\n\ndef extra():\n    pass\n"}
-    result = _facts(trees, write_tree, ast_grep_binary, base=base, head=head, changed=["src/api.py"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=["src/api.py"])
     assert result["compat"] == Fact("no", {"removed": []})
 
 
@@ -82,24 +59,24 @@ def test_compat_is_no_when_exports_only_grow(
 
 
 def test_tests_is_yes_for_source_without_test_change(
-    trees: tuple[Path, Path], write_tree: WriteTree, ast_grep_binary: str
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     files = {"src/x.py": "VALUE = 1\n"}
-    result = _facts(trees, write_tree, ast_grep_binary, base={}, head=files, changed=["src/x.py"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=files, changed=["src/x.py"])
     assert result["tests"] == Fact("yes", {"untested": ["src/x.py"], "sources": 1})
 
 
 def test_tests_is_no_when_the_matching_test_changes(
-    trees: tuple[Path, Path], write_tree: WriteTree, ast_grep_binary: str
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     files = {"src/x.py": "VALUE = 1\n", "tests/test_x.py": "from x import VALUE\n"}
     changed = ["src/x.py", "tests/test_x.py"]
-    result = _facts(trees, write_tree, ast_grep_binary, base={}, head=files, changed=changed)
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=files, changed=changed)
     assert result["tests"] == Fact("no", {"untested": [], "sources": 1})
 
 
 def test_tests_matches_typescript_spec_and_test_files(
-    trees: tuple[Path, Path], write_tree: WriteTree, ast_grep_binary: str
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     files = {
         "src/cart.ts": "export const a = 1;\n",
@@ -108,7 +85,7 @@ def test_tests_matches_typescript_spec_and_test_files(
         "src/user.spec.ts": "",
         "src/other.ts": "export const c = 1;\n",
     }
-    result = _facts(trees, write_tree, ast_grep_binary, base={}, head=files, changed=sorted(files))
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=files, changed=sorted(files))
     assert result["tests"].detail["untested"] == ["src/other.ts"]
 
 
@@ -116,7 +93,7 @@ def test_tests_matches_typescript_spec_and_test_files(
 
 
 def test_dependencies_lists_a_new_third_party_import(
-    trees: tuple[Path, Path], write_tree: WriteTree, ast_grep_binary: str
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     base = {
         "app/main.py": "import json\n",
@@ -130,7 +107,7 @@ def test_dependencies_lists_a_new_third_party_import(
             "from app import util\nfrom . import helpers\nfrom httpx import (\n    Client,\n)\n"
         ),
     }
-    result = _facts(trees, write_tree, ast_grep_binary, base=base, head=head, changed=["app/main.py"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=["app/main.py"])
     dependencies = result["dependencies"]
     assert dependencies.value == "yes"
     assert dependencies.detail["added_imports"] == [
@@ -140,7 +117,7 @@ def test_dependencies_lists_a_new_third_party_import(
 
 
 def test_dependencies_lists_a_new_npm_package(
-    trees: tuple[Path, Path], write_tree: WriteTree, ast_grep_binary: str
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     base = {"web/a.ts": "import fs from 'fs';\n"}
     head = {
@@ -149,7 +126,7 @@ def test_dependencies_lists_a_new_npm_package(
             "import { q } from '@tanstack/query/core';\nimport { b } from './b';\n"
         )
     }
-    result = _facts(trees, write_tree, ast_grep_binary, base=base, head=head, changed=["web/a.ts"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base=base, head=head, changed=["web/a.ts"])
     assert result["dependencies"].detail["added_imports"] == [
         {"path": "web/a.ts", "module": "@tanstack/query"},
         {"path": "web/a.ts", "module": "zod"},
@@ -157,11 +134,11 @@ def test_dependencies_lists_a_new_npm_package(
 
 
 def test_dependencies_records_manifest_without_its_lockfile(
-    trees: tuple[Path, Path], write_tree: WriteTree, ast_grep_binary: str
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     files = {"pyproject.toml": "[project]\n", "uv.lock": "", "web/package.json": "{}", "web/pnpm-lock.yaml": ""}
     changed = ["pyproject.toml", "web/package.json", "web/pnpm-lock.yaml"]
-    result = _facts(trees, write_tree, ast_grep_binary, base=files, head=files, changed=changed)
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base=files, head=files, changed=changed)
     dependencies = result["dependencies"]
     assert dependencies.value == "yes"
     assert dependencies.detail["unpaired"] == [{"manifest": "pyproject.toml", "lockfile": "uv.lock"}]
@@ -169,10 +146,10 @@ def test_dependencies_records_manifest_without_its_lockfile(
 
 
 def test_dependencies_is_no_without_new_imports_or_manifests(
-    trees: tuple[Path, Path], write_tree: WriteTree, ast_grep_binary: str
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     files = {"app/main.py": "import json\n"}
-    result = _facts(trees, write_tree, ast_grep_binary, base=files, head=files, changed=["app/main.py"])
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base=files, head=files, changed=["app/main.py"])
     assert result["dependencies"].value == "no"
 
 
@@ -180,7 +157,7 @@ def test_dependencies_is_no_without_new_imports_or_manifests(
 
 
 def test_scope_reports_two_unconnected_groups(
-    trees: tuple[Path, Path], write_tree: WriteTree, ast_grep_binary: str
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     files = {
         "billing/invoice.py": "from billing.tax import (\n    rate,\n)\n",
@@ -189,7 +166,7 @@ def test_scope_reports_two_unconnected_groups(
         "web/app.ts": "import { view } from './view';\n",
         "web/view.ts": "export const view = 1;\n",
     }
-    result = _facts(trees, write_tree, ast_grep_binary, base={}, head=files, changed=sorted(files))
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=files, changed=sorted(files))
     assert result["scope"] == Fact(
         "yes",
         {
@@ -202,11 +179,35 @@ def test_scope_reports_two_unconnected_groups(
 
 
 def test_scope_joins_relative_python_imports(
-    trees: tuple[Path, Path], write_tree: WriteTree, ast_grep_binary: str
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
 ) -> None:
     files = {"pkg/a.py": "from . import b\n", "pkg/b.py": "from .c import thing\n", "pkg/c.py": "thing = 1\n"}
-    result = _facts(trees, write_tree, ast_grep_binary, base={}, head=files, changed=sorted(files))
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=files, changed=sorted(files))
     assert result["scope"] == Fact("no", {"groups": [["pkg/a.py", "pkg/b.py", "pkg/c.py"]]})
+
+
+def test_scope_prefers_an_exact_module_over_a_suffix_match(
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
+) -> None:
+    files = {
+        "app/main.py": "import utils\n",
+        "utils.py": "",
+        "billing/utils.py": "",
+        "accounts/utils.py": "",
+    }
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=files, changed=sorted(files))
+    assert result["scope"] == Fact(
+        "yes",
+        {"groups": [["accounts/utils.py"], ["app/main.py", "utils.py"], ["billing/utils.py"]]},
+    )
+
+
+def test_scope_never_suffix_matches_a_relative_import(
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
+) -> None:
+    files = {"app/main.py": "from . import utils\n", "lib/app/utils.py": ""}
+    result = compute_facts(tmp_path, write_tree, ast_grep_binary, base={}, head=files, changed=sorted(files))
+    assert result["scope"] == Fact("yes", {"groups": [["app/main.py"], ["lib/app/utils.py"]]})
 
 
 def test_without_base_compat_and_dependencies_are_unknown(
@@ -220,7 +221,7 @@ def test_without_base_compat_and_dependencies_are_unknown(
     assert result["scope"].value == "no"
 
 
-def test_missing_ast_grep_makes_every_fact_unknown(
+def test_missing_ast_grep_makes_only_the_ast_grep_facts_unknown(
     tmp_path: Path, write_tree: WriteTree, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     head = write_tree(tmp_path / "head", {"src/x.py": "VALUE = 1\n"})
@@ -229,6 +230,6 @@ def test_missing_ast_grep_makes_every_fact_unknown(
     assert {name: fact.value for name, fact in result.items()} == {
         "compat": "unknown",
         "dependencies": "unknown",
-        "tests": "unknown",
+        "tests": "yes",
         "scope": "unknown",
     }

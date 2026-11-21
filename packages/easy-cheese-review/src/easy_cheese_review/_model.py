@@ -61,8 +61,3 @@ class Evidence:
             "hits": [hit.to_json() for hit in self.hits],
             "facts": {name: fact.to_json() for name, fact in self.facts.items()},
         }
-
-
-def unknown_facts(reason: str) -> dict[str, Fact]:
-    """Return every fact as `unknown` with the same reason."""
-    return {name: Fact("unknown", {"reason": reason}) for name in FACT_NAMES}

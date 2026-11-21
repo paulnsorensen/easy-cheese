@@ -14,10 +14,10 @@ import re
 import sys
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path, PurePosixPath
+from typing import NamedTuple
 
+from easy_cheese_review._ast_grep import JsonObject
 from easy_cheese_review._model import Fact
-
-JsonObject = dict[str, object]
 
 PYTHON_SUFFIXES = frozenset({".py"})
 SCRIPT_SUFFIXES = frozenset({".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"})
@@ -108,7 +108,7 @@ def _covers(test_subject: str, source_subject: str) -> bool:
 
 
 def tests_fact(code_paths: Sequence[str]) -> Fact:
-    """Report changed source files that have no matching test file in head.
+    """Report changed source files that have no matching test file among the changed paths.
 
     `code_paths` holds the changed code files that exist in head, so a deleted
     test never counts as coverage.
@@ -203,7 +203,7 @@ def _script_imports(text: str) -> list[str]:
 
 def _package_of(path: str, module: str) -> str | None:
     """Return the distribution-level name an import names, or None when local."""
-    if PurePosixPath(path).suffix in PYTHON_SUFFIXES:
+    if _is_python(path):
         if module.startswith("."):
             return None
         return module.split(".")[0]
@@ -308,8 +308,47 @@ def _dotted(path: str) -> str:
     return ".".join(pure.parts)
 
 
-def _python_targets(path: str, texts: Iterable[str], nodes: Sequence[str]) -> set[str]:
-    dotted = {node: _dotted(node) for node in nodes if PurePosixPath(node).suffix in PYTHON_SUFFIXES}
+class _ModuleIndex(NamedTuple):
+    """Changed Python files, keyed by dotted name and by each proper dotted suffix."""
+
+    exact: Mapping[str, frozenset[str]]
+    suffix: Mapping[str, frozenset[str]]
+
+
+def _module_index(nodes: Sequence[str]) -> _ModuleIndex:
+    exact: dict[str, set[str]] = {}
+    suffix: dict[str, set[str]] = {}
+    for node in nodes:
+        if not _is_python(node):
+            continue
+        dotted = _dotted(node)
+        exact.setdefault(dotted, set()).add(node)
+        parts = dotted.split(".")
+        for start in range(1, len(parts)):
+            suffix.setdefault(".".join(parts[start:]), set()).add(node)
+    return _ModuleIndex(
+        {key: frozenset(value) for key, value in exact.items()},
+        {key: frozenset(value) for key, value in suffix.items()},
+    )
+
+
+def _resolve_module(candidate: str, relative: bool, index: _ModuleIndex) -> frozenset[str]:
+    """Return the changed files a dotted module name refers to.
+
+    An exact match wins. A relative import names exactly one module. An
+    absolute import can omit a source root such as `src`, so a unique suffix
+    match also counts; an ambiguous one joins nothing.
+    """
+    exact = index.exact.get(candidate)
+    if exact:
+        return exact
+    suffix = index.suffix.get(candidate, frozenset())
+    if not relative and len(suffix) == 1:
+        return suffix
+    return frozenset()
+
+
+def _python_targets(path: str, texts: Iterable[str], index: _ModuleIndex) -> set[str]:
     targets: set[str] = set()
     for text in texts:
         for module, names in _python_imports(text):
@@ -324,15 +363,7 @@ def _python_targets(path: str, texts: Iterable[str], nodes: Sequence[str]) -> se
                 prefix = stripped
             candidates = {prefix, *(f"{prefix}.{name}" if prefix else name for name in names)}
             for candidate in filter(None, candidates):
-                exact = {node for node, node_dotted in dotted.items() if node_dotted == candidate}
-                # A relative import names exactly one module. An absolute import
-                # can omit a source root such as `src`, so a unique suffix
-                # match also counts; an ambiguous one joins nothing.
-                suffix = {node for node, node_dotted in dotted.items() if node_dotted.endswith("." + candidate)}
-                if exact:
-                    targets |= exact
-                elif not level and len(suffix) == 1:
-                    targets |= suffix
+                targets |= _resolve_module(candidate, bool(level), index)
     return targets
 
 
@@ -355,6 +386,7 @@ def _script_targets(path: str, texts: Iterable[str], nodes: Sequence[str]) -> se
 def scope_fact(nodes: Sequence[str], head_imports: Mapping[str, list[str]]) -> Fact:
     """Group the changed code files into connected components of the import graph."""
     parent = {node: node for node in nodes}
+    index = _module_index(nodes)
 
     def find(node: str) -> str:
         while parent[node] != node:
@@ -365,8 +397,8 @@ def scope_fact(nodes: Sequence[str], head_imports: Mapping[str, list[str]]) -> F
     for path, texts in head_imports.items():
         if path not in parent:
             continue
-        if PurePosixPath(path).suffix in PYTHON_SUFFIXES:
-            targets = _python_targets(path, texts, nodes)
+        if _is_python(path):
+            targets = _python_targets(path, texts, index)
         else:
             targets = _script_targets(path, texts, nodes)
         for target in targets:
