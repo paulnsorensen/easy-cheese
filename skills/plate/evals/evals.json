@@ -4,6 +4,7 @@
     {
       "id": 0,
       "name": "commit-only",
+      "family": "commit-only",
       "prompt": "Commit these finished changes locally; do not push or open a PR.",
       "expected_output": "Runs final artifact inventory and read-back, then project quality gate, inspects diff, stages named files only, creates a Conventional Commit, verifies status, and stops without asking PR layout or publishing.",
       "files": []
@@ -11,6 +12,7 @@
     {
       "id": 1,
       "name": "cohesive-single-auto-selection",
+      "family": "cohesive-single-auto-selection",
       "prompt": "Open a PR for this finished, cohesive feature and its tests.",
       "expected_output": "Recognizes one cohesive review unit, selects a single PR, and proceeds without asking topology, including under auto.",
       "files": []
@@ -18,6 +20,7 @@
     {
       "id": 2,
       "name": "stack-recommendation-choice",
+      "family": "stack-recommendation-choice",
       "prompt": "Open a PR for a change with a shared protocol layer, dependent implementation, and final wiring.",
       "expected_output": "Names the independently reviewable ordered layers, decides stacked_linear without asking, and states the decision as one 'Plated as' line before any commit or branch-layout mutation.",
       "files": []
@@ -25,6 +28,7 @@
     {
       "id": 3,
       "name": "explicit-single-authoritative",
+      "family": "explicit-single-authoritative",
       "prompt": "Plate this as one PR.",
       "expected_output": "Treats the explicit single-PR choice as authoritative, decides without asking, then runs durable-write and quality gates, commits named files, pushes, creates with explicit base/head and --body-file, and verifies via gh pr view.",
       "files": []
@@ -32,6 +36,7 @@
     {
       "id": 12,
       "name": "ambiguous-review-shape",
+      "family": "ambiguous-review-shape",
       "prompt": "Open a PR for this finished branch; the changes share a goal but may form separable layers.",
       "expected_output": "Weighs the cohesion and layer evidence, decides single unless clean commit or whole-file boundaries exist, and records the reason in one line without asking the user.",
       "files": []
@@ -39,6 +44,7 @@
     {
       "id": 13,
       "name": "pr-plan-cannot-override-explicit-choice",
+      "family": "pr-plan-cannot-override-explicit-choice",
       "prompt": "Use one PR. A supplied pr_plan recommends a stack.",
       "expected_output": "Keeps the explicit single-PR choice, decides without asking, and treats the plan only as non-authoritative review-shape evidence.",
       "files": []
@@ -46,6 +52,7 @@
     {
       "id": 4,
       "name": "existing-pr-no-choice",
+      "family": "existing-pr-no-choice",
       "prompt": "Push these fixes to the PR already open for this branch.",
       "expected_output": "Does not ask layout. Detects ordinary versus stack metadata, commits safely, then uses the matching update path and verifies the PR.",
       "files": []
@@ -53,6 +60,7 @@
     {
       "id": 5,
       "name": "write-failure-halts",
+      "family": "write-failure-halts",
       "prompt": "Open a PR, but the promised ADR write fails read-back.",
       "expected_output": "Halts before just check, staging, commit, push, or PR creation; reports a {target, backend, verified:false} completion row.",
       "files": []
@@ -60,6 +68,7 @@
     {
       "id": 6,
       "name": "hallouminate-fallback",
+      "family": "hallouminate-fallback",
       "prompt": "Publish this repo; hallouminate is unavailable and the implementation made a durable design decision.",
       "expected_output": "Writes and reads back a tracked docs/adr fallback, includes it in the commit, and does not hand-edit a wiki.",
       "files": []
@@ -67,6 +76,7 @@
     {
       "id": 7,
       "name": "graphite-post-merge",
+      "family": "graphite-post-merge",
       "prompt": "The bottom Graphite PR merged. Sync and republish the remaining stack.",
       "expected_output": "Uses gt sync, gt log short, and gt submit --stack; never bare rebase or single-branch push.",
       "files": []
@@ -74,6 +84,7 @@
     {
       "id": 8,
       "name": "git-town-post-merge",
+      "family": "git-town-post-merge",
       "prompt": "The bottom Git Town PR merged. Catch up the rest.",
       "expected_output": "Uses git town sync --stack and git town branch. Conflict recovery uses git town continue/skip, not bare git rebase continuation.",
       "files": []
@@ -81,6 +92,7 @@
     {
       "id": 9,
       "name": "gh-stack-post-merge",
+      "family": "gh-stack-post-merge",
       "prompt": "The bottom gh stack PR merged. What should happen locally?",
       "expected_output": "Uses gh stack sync to pull server-cascaded state and gh stack view; submits only for unpublished local commits.",
       "files": []
@@ -88,6 +100,7 @@
     {
       "id": 10,
       "name": "stack-without-boundaries",
+      "family": "stack-without-boundaries",
       "prompt": "Make this a stack.",
       "expected_output": "Honors the stack choice and derives layer boundaries from existing commits or whole files without asking; when no clean boundary exists, it collapses to single and states why instead of inventing boundaries.",
       "files": []
@@ -95,6 +108,7 @@
     {
       "id": 14,
       "name": "gh-stack-not-enabled",
+      "family": "gh-stack-not-enabled",
       "prompt": "Publish this as a stack. gh-stack is the only installed provider and its repository preflight answers 404.",
       "expected_output": "Reads the stack-tools gh-stack status not-enabled from the read-only repos/{owner}/{repo}/stacks preflight, halts before any stack mutation, and reports the repository-enablement requirement rather than retrying or emulating a stack with plain pushes.",
       "files": []
@@ -102,6 +116,7 @@
     {
       "id": 15,
       "name": "gh-stack-preflight-auth-failure",
+      "family": "gh-stack-preflight-auth-failure",
       "prompt": "Publish this as a gh-stack stack; the enablement preflight answers 401.",
       "expected_output": "Reports an authentication failure, not a repository-enablement requirement, and does not treat the non-200 response as proof that Stacked PRs is disabled.",
       "files": []
@@ -109,6 +124,7 @@
     {
       "id": 11,
       "name": "hard-final-state",
+      "family": "hard-final-state",
       "prompt": "Plate --hard and open a PR.",
       "expected_output": "Runs final writing gate and validation before giving hard-cheese the final artifact inventory and completion rows, then publishes only if the gate passes.",
       "files": []
@@ -116,6 +132,7 @@
     {
       "id": 16,
       "name": "malformed-durable-write",
+      "family": "malformed-durable-write",
       "prompt": "Plate this work. The durable ADR write was rejected: the replace_text op carried start and end line numbers alongside old and new.",
       "expected_output": "Halts at the durable write step, names the failure plate-owned because replace_text carries only old and new and never start/end, then re-runs the canonical sequence for that file \u2014 fresh tagged read, one stale-safe write with the corrected op shape, diff read-back \u2014 instead of reporting a backend outage, retrying the stale tag, or falling back to a shell redirect or host editor.",
       "files": []
@@ -123,6 +140,7 @@
     {
       "id": 17,
       "name": "review-surface-request",
+      "family": "review-surface-request",
       "prompt": "Plate this branch and tell me whether the diff is safe to merge.",
       "expected_output": "Halts at classify and names the failure plate-owned: the review judgment is /age's, not /plate's, so it never computes a review surface for its own sake. Reports the routing and either proceeds with the publication half alone or stops for the user to route the review, never blending a quality verdict into the completion record.",
       "files": []
@@ -130,6 +148,7 @@
     {
       "id": 18,
       "name": "gh-stack-warning-only-failure",
+      "family": "gh-stack-warning-only-failure",
       "prompt": "gh stack submit exited zero but warned that it failed to update the stack on GitHub. Is publication complete?",
       "expected_output": "Treats the warning as publication failure, preserves the command output, and does not report completion until gh-stack-verify confirms every PR base, head, state, SHA, and remote stack mapping.",
       "files": []
@@ -137,6 +156,7 @@
     {
       "id": 19,
       "name": "gh-stack-wrong-trunk-recovery",
+      "family": "gh-stack-wrong-trunk-recovery",
       "prompt": "This published gh stack was initialized with origin/main as its trunk. Repair it without replacing the PRs.",
       "expected_output": "Rejects origin/main as a remote-tracking trunk, snapshots PR identities and stack state, halts for merged, queued, auto-merge-enabled, or non-open PRs, and otherwise un-stacks and re-adopts the same branches on main before verifying the same PR numbers and exact remote mapping.",
       "files": []
