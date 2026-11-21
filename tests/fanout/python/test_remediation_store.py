@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
@@ -70,7 +71,26 @@ def test_load_refuses_oversize_file(tmp_path: Path) -> None:
         _ = load_state(tmp_path, path)
 
 
-def test_load_refuses_state_with_removed_critical_debt_key(tmp_path: Path) -> None:
+def _set_removed_critical_debt_key(raw: dict[str, object]) -> None:
+    debt = cast("dict[str, object]", raw["best_debt"])
+    debt["critical"] = debt.pop("blocker")
+
+
+def _set_removed_critical_value(raw: dict[str, object]) -> None:
+    raw["disposition"] = "critical"
+
+
+def _set_unknown_cursor(raw: dict[str, object]) -> None:
+    raw["cursor"] = "paused"
+
+
+def _set_unknown_field(raw: dict[str, object]) -> None:
+    raw["surprise"] = 1
+
+
+def _publish_then_corrupt(
+    tmp_path: Path, corrupt: Callable[[dict[str, object]], None]
+) -> Path:
     scope = _scope()
     path = scope_state_path(tmp_path, scope)
     debt = ReviewDebt.compute(blocker=1, high=0, medium=0, contained_low=0)
@@ -78,16 +98,49 @@ def test_load_refuses_state_with_removed_critical_debt_key(tmp_path: Path) -> No
     _ = publish_state(tmp_path, path, state)
     assert load_state(tmp_path, path).best_debt == debt
 
-    raw = cast("dict[str, dict[str, object]]", json.loads(path.read_bytes()))
-    raw["best_debt"]["critical"] = raw["best_debt"].pop("blocker")
+    raw = cast("dict[str, object]", json.loads(path.read_bytes()))
+    corrupt(raw)
     _ = path.write_text(json.dumps(raw))
+    return path
+
+
+@pytest.mark.parametrize(
+    ("corrupt", "cause"),
+    [
+        (_set_removed_critical_debt_key, "unknown fields: critical"),
+        (_set_removed_critical_value, "must be one of"),
+    ],
+    ids=["critical-key", "critical-value"],
+)
+def test_load_refuses_state_with_removed_critical_and_names_the_remedy(
+    tmp_path: Path, corrupt: Callable[[dict[str, object]], None], cause: str
+) -> None:
+    path = _publish_then_corrupt(tmp_path, corrupt)
     with pytest.raises(StateStoreError, match="cannot load remediation state") as excinfo:
         _ = load_state(tmp_path, path)
-    assert "critical" in str(excinfo.value.__cause__)
+    assert cause in str(excinfo.value.__cause__)
     message = str(excinfo.value)
     assert "schemas 4.0.0" in message
     assert "Move the artifact aside and run the review again" in message
     assert "docs/easy-cheese-schemas.md" in message
+
+
+@pytest.mark.parametrize(
+    ("corrupt", "cause"),
+    [(_set_unknown_cursor, "must be one of"), (_set_unknown_field, "unknown fields")],
+    ids=["enum-value", "unknown-field"],
+)
+def test_load_gives_no_rename_hint_when_the_state_has_no_critical_text(
+    tmp_path: Path, corrupt: Callable[[dict[str, object]], None], cause: str
+) -> None:
+    path = _publish_then_corrupt(tmp_path, corrupt)
+    assert b"critical" not in path.read_bytes()
+    with pytest.raises(StateStoreError, match="cannot load remediation state") as excinfo:
+        _ = load_state(tmp_path, path)
+    assert cause in str(excinfo.value.__cause__)
+    message = str(excinfo.value)
+    assert "schemas 4.0.0" not in message
+    assert "Move the artifact aside" not in message
 
 
 def test_run_lock_rejects_second_holder_and_keeps_inode(tmp_path: Path) -> None:

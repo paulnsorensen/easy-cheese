@@ -26,7 +26,7 @@ from pathlib import Path
 
 from easy_cheese_review import hunks_from_diff, scan
 
-diff = Path("review_input/diff.patch").read_text()
+diff = Path("review_input/diff.patch").read_bytes().decode("utf-8", "surrogateescape")
 evidence = scan(
     Path("head"),
     ["src/app.py", "tests/test_app.py"],
@@ -40,11 +40,18 @@ print(evidence.to_json())
 It never reads an `sgconfig.yml` or a rule file from the scanned tree.
 Hits are evidence for a reviewer to confirm or reject. They are not findings by themselves.
 
+`hunks` keeps only the hits on changed lines.
+A changed path with no `hunks` entry counts as changed in full, so `scan` keeps each of its hits.
+`hunks_from_diff` maps a deletion-only hunk to the lines on each side of the cut.
+It ends a diff line only at a line feed.
+Read the diff as bytes, as the example does: text mode turns a lone carriage return into a line break.
+
 ## Known gaps
 
 - The TypeScript rules run on `.ts`, `.js`, `.mjs`, and `.cjs` files. `.tsx` and `.jsx` files get no rule hits yet.
 - `ast-grep outline` 0.51.2 omits `export default <expression>` and `export type { ... }`, so `compat` does not see their removal.
 - The `tests` fact pairs files by name, so a test for `accounts/user.py` also covers `billing/user.py`.
+- ast-grep 0.51 stops when a path argument is not valid UTF-8. A changed code file with such a name fails the scan: `status: failed:exit-101` and no hits.
 
 ## Facts
 

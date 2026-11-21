@@ -44,13 +44,15 @@ def hunks_from_diff(diff: str) -> dict[str, list[LineRange]]:
 
     A pure deletion hunk (`+n,0`) adds the lines on each side of the cut,
     `max(n, 1)` through `n + 1`, so a hit that the deletion creates survives.
-    A deleted file adds no entry. Hunk bodies are counted, so a body line
-    never reads as a file header.
+    A deleted file adds no entry. Only a line feed ends a diff line, so a form
+    feed, a lone carriage return, or a Unicode line separator in a changed
+    line stays in that line. Hunk bodies are counted, so a body line never
+    reads as a file header.
     """
     hunks: dict[str, list[LineRange]] = {}
     path: str | None = None
     old_left = new_left = 0
-    for line in diff.splitlines():
+    for line in diff.split("\n"):
         if old_left > 0 or new_left > 0:
             tag = line[:1]
             if tag == "+":

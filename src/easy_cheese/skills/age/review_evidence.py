@@ -14,20 +14,27 @@ from __future__ import annotations
 import subprocess
 import sys
 import tempfile
+import threading
 from pathlib import Path, PurePosixPath
+from typing import IO, cast
 
 import fromargs
 
-from easy_cheese.shared import git_utils
 from easy_cheese_review import CODE_SUFFIXES, hunks_from_diff, scan
 
 _GIT_TIMEOUT_SECONDS = 120
-# Pin the diff path spelling: no C-style quotes and fixed a/ and b/ prefixes,
-# whatever core.quotePath, diff.mnemonicPrefix, or diff.noprefix say.
+_DRAIN_BYTES = 64 * 1024
+# Pin the diff path spelling: fixed a/ and b/ prefixes, whatever
+# diff.mnemonicPrefix or diff.noprefix say. `core.quotePath=false` stops the
+# quoting of non-ASCII bytes only. Git still puts C-style quotes on a name that
+# holds `"`, `\`, or a control character, and `hunks_from_diff` undoes them.
 # `--text` prints a hunk for every file, so no `-diff` attribute or NUL byte
-# in the reviewed tree hides a changed line.
+# in the reviewed tree hides a changed line. `--no-textconv` keeps the hunk
+# line numbers on the lines of the file on disk, whatever textconv driver the
+# `.gitattributes` of the reviewed tree selects.
 _DIFF_OPTIONS = [
     "--text",
+    "--no-textconv",
     "--no-renames",
     "--no-color",
     "--no-ext-diff",
@@ -42,12 +49,22 @@ _BASE_SCAN_SUFFIXES = CODE_SUFFIXES | frozenset({".mts", ".cts", ".pyi", ".py3",
 
 
 def _git_text(repo: Path, args: list[str]) -> str:
-    result = git_utils.run_git(
-        ["-c", "core.quotePath=false", *args], cwd=repo, timeout=_GIT_TIMEOUT_SECONDS
+    """Return the output of a git command as text that keeps every byte.
+
+    The bytes decode as UTF-8 with `surrogateescape` and no newline
+    translation. A file name that is not UTF-8 thus goes back to the file
+    system unchanged, and a lone carriage return stays in its line.
+    """
+    result = subprocess.run(
+        ["git", "-C", str(repo), "-c", "core.quotePath=false", *args],
+        capture_output=True,
+        timeout=_GIT_TIMEOUT_SECONDS,
+        check=False,
     )
     if result.returncode != 0:
-        raise fromargs.CliError(f"git {args[0]} failed: {result.stderr.strip()}")
-    return result.stdout
+        stderr = result.stderr.decode("utf-8", errors="replace").strip()
+        raise fromargs.CliError(f"git {args[0]} failed: {stderr}")
+    return result.stdout.decode("utf-8", errors="surrogateescape")
 
 
 def _base_code_blobs(repo: Path, base: str) -> list[tuple[str, str]]:
@@ -75,6 +92,26 @@ def _inside(target: Path, path: str) -> Path | None:
     return destination
 
 
+def _write_next_blob(stream: IO[bytes], object_id: str, destination: Path | None) -> bool:
+    """Move the next `cat-file --batch` answer to `destination`.
+
+    Return False when the answer is not the whole blob `object_id`. A None
+    `destination` reads the blob and writes nothing.
+    """
+    header = stream.readline().split()
+    if len(header) != 3 or header[0] != object_id.encode("ascii") or header[1] != b"blob":
+        return False
+    size = int(header[2])
+    # Git writes one line feed after each blob.
+    data = stream.read(size + 1)
+    if len(data) != size + 1:
+        return False
+    if destination is not None:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        _ = destination.write_bytes(memoryview(data)[:size])
+    return True
+
+
 def _extract_base(repo: Path, base: str, target: Path) -> None:
     """Write the regular code files of `base` into `target` from raw git blobs.
 
@@ -82,36 +119,50 @@ def _extract_base(repo: Path, base: str, target: Path) -> None:
     `export-subst`, filters, and line-ending conversion change nothing.
     The facts read only code files and never follow a link, so links,
     submodules, and other files are skipped.
+
+    One `cat-file` process serves the whole tree and each blob goes to its
+    file before the next blob is read. The request comes from a temporary
+    file, not a pipe, so git never waits on a full output pipe while this
+    process still writes the request.
     """
     blobs = _base_code_blobs(repo, base)
     if not blobs:
         return
-    request = "".join(f"{object_id}\n" for _, object_id in blobs).encode("ascii")
-    result = subprocess.run(
-        ["git", "-C", str(repo), "cat-file", "--batch"],
-        input=request,
-        capture_output=True,
-        timeout=_GIT_TIMEOUT_SECONDS,
-        check=False,
-    )
-    if result.returncode != 0:
-        stderr = result.stderr.decode("utf-8", errors="replace").strip()
+    command = ["git", "-C", str(repo), "cat-file", "--batch"]
+    timed_out = threading.Event()
+    lost: str | None = None
+    with tempfile.TemporaryFile() as request, tempfile.TemporaryFile() as errors:
+        _ = request.write("".join(f"{object_id}\n" for _, object_id in blobs).encode("ascii"))
+        _ = request.seek(0)
+        with subprocess.Popen(command, stdin=request, stdout=subprocess.PIPE, stderr=errors) as proc:
+
+            def expire() -> None:
+                timed_out.set()
+                proc.kill()
+
+            timer = threading.Timer(_GIT_TIMEOUT_SECONDS, expire)
+            timer.start()
+            stream = cast(IO[bytes], proc.stdout)
+            try:
+                for path, object_id in blobs:
+                    if not _write_next_blob(stream, object_id, _inside(target, path)):
+                        lost = path
+                        break
+                # After a bad answer, read to the end so git exits with its own status.
+                while stream.read(_DRAIN_BYTES):
+                    pass
+                returncode = proc.wait()
+            finally:
+                proc.kill()
+                timer.cancel()
+        _ = errors.seek(0)
+        stderr = errors.read().decode("utf-8", errors="replace").strip()
+    if timed_out.is_set():
+        raise subprocess.TimeoutExpired(command, _GIT_TIMEOUT_SECONDS)
+    if returncode != 0:
         raise fromargs.CliError(f"git cat-file {base} failed: {stderr}")
-    output = result.stdout
-    position = 0
-    for path, object_id in blobs:
-        header_end = output.find(b"\n", position)
-        header = output[position:header_end].split()
-        if header_end < 0 or len(header) != 3 or header[0] != object_id.encode("ascii") or header[1] != b"blob":
-            raise fromargs.CliError(f"git cat-file {base}: no blob for {path}")
-        start = header_end + 1
-        end = start + int(header[2])
-        position = end + 1
-        destination = _inside(target, path)
-        if destination is None:
-            continue
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        _ = destination.write_bytes(output[start:end])
+    if lost is not None:
+        raise fromargs.CliError(f"git cat-file {base}: no blob for {lost}")
 
 
 def evidence_cmd(base: str, *, repo: str = ".") -> dict[str, object]:
