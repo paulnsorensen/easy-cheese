@@ -1,0 +1,12 @@
+id: py-range-len-loop
+language: python
+severity: warning
+message: A `range(len(...))` index loop where `enumerate` or direct iteration reads better.
+metadata:
+  dimension: deslop
+  base: low
+rule:
+  pattern: range(len($SEQ))
+  inside:
+    kind: for_statement
+    field: right

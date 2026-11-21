@@ -1,0 +1,9 @@
+id: py-open-without-context-manager
+valid:
+  - |
+    with open(path) as handle:
+        data = handle.read()
+invalid:
+  - |
+    handle = open(path)
+    data = handle.read()

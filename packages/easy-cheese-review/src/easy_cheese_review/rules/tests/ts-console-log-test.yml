@@ -1,0 +1,7 @@
+id: ts-console-log
+valid:
+  - console.error(error);
+  - logger.info("saved");
+invalid:
+  - console.log("fetching user", id);
+  - console.debug(state);

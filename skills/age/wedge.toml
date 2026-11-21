@@ -3,3 +3,6 @@
 name = "age"
 entry = "easy_cheese.skills.age.commands:main"
 source_paths = ["__init__.py", "skills/__init__.py", "skills/age", "shared", "cli"]
+# /age also ships the easy-cheese-review package (rubric, rule pack, facts).
+# A skill's `include` replaces the shared one, so this list repeats the schemas.
+include = ["../../src/easy_cheese_schemas", "../../packages/easy-cheese-review/src/easy_cheese_review"]

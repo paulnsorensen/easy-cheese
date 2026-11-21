@@ -1,0 +1,7 @@
+id: py-list-comprehension-in-reducer
+valid:
+  - total = sum(x * x for x in values)
+  - total = sum(values)
+invalid:
+  - total = sum([x * x for x in values])
+  - found = any([check(x) for x in values])

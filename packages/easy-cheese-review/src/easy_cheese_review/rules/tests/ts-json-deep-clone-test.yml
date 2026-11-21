@@ -1,0 +1,6 @@
+id: ts-json-deep-clone
+valid:
+  - const copy = structuredClone(user);
+  - const body = JSON.stringify(user);
+invalid:
+  - const copy = JSON.parse(JSON.stringify(user));

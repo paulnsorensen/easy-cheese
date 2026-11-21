@@ -1,0 +1,15 @@
+id: py-constant-assert
+language: python
+severity: warning
+message: An assert on a constant always passes and checks nothing.
+metadata:
+  dimension: assertions
+  base: medium
+rule:
+  kind: assert_statement
+  has:
+    nthChild: 1
+    any:
+      - kind: "true"
+      - kind: integer
+      - kind: string

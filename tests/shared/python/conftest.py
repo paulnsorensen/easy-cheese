@@ -28,11 +28,6 @@ def paths() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
-def severity() -> ModuleType:
-    return importlib.import_module("easy_cheese.shared.severity")
-
-
-@pytest.fixture(scope="session")
 def handoff() -> ModuleType:
     return importlib.import_module("easy_cheese.shared.handoff")
 
