@@ -130,9 +130,9 @@ Today's explicit instruction keeps it.[^hard]
 Older schema counts and public handoff descriptions no longer describe this checkout.
 The current map records removed contracts and still warns that typed routes do not prove end-to-end adoption.[^contracts]
 
-One small example of documentation drift remains: the Age router wiki lists twelve dimensions; current skill prose also lists “reframe.”
-The current skill lists thirteen names.
-This is evidence of a stale seam, not proof that all of cheese is stale.[^age][^age-source]
+One small example of documentation drift existed: the Age router wiki listed twelve dimensions, while skill prose listed thirteen names, including “reframe.”
+Version 4.0.0 aligned both at seventeen.[^age-count]
+The drift was evidence of a stale seam, not proof that all of cheese is stale.[^age][^age-source]
 
 The checked local skillz tree contains the packaging, CLI, analytics, and optimization foundations.
 An older wiki description of it as repository-plumbing skills is no longer sufficient.[^skillz]
@@ -212,6 +212,7 @@ The visual summarizes this proposal and does not replace the evidence or approve
 [^parallel]: [Anthropic multi-agent research report](https://www.anthropic.com/engineering/multi-agent-research-system), retrieved 2026-10-18; vendor-specific research evaluation.
 [^age]: [Age fan-out router](../architecture/age-fanout-router.md), lines 11-32.
 [^age-source]: `skills/age/SKILL.md:86-91`, checkout `1371af898da52e000e9c7c7a5579c35b7aeecb3a`.
+[^age-count]: `skills/age/SKILL.md:4,7` state seventeen dimensions; the wiki count comes from [Age fan-out router](../architecture/age-fanout-router.md).
 [^skillz]: Local checkout of `paulnsorensen/skillz-that-grillz`, clean revision `e7be9f9b43853a3385eb699ada2cf8f06094377c`: `README.md:10-40,64-74`, `pyproject.toml:17-32`, `skills/skillz/references/experiments.md:13-27,50-61`. Remote equality was not checked.
 [^records]: Wheypoints `rebuild-easy-cheese-from-scratch@rev-c1a85e43507b`, `easy-cheese-contracts-simplify@rev-d4db1d5e6d96`, `wheypoint-contract-simplify@rev-90cbbec9791d`; list/show/log inspected 2026-10-18.
 [^hard]: XDG research `rebuild-easy-cheese-from-scratch/session-2026-09-27-skills-schemas-cli.md:52-62`; owner's current instruction: “I want to keep hard-cheese.”

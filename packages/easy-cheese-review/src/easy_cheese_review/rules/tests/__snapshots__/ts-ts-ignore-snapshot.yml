@@ -1,0 +1,8 @@
+id: ts-ts-ignore
+snapshots:
+  "// @ts-ignore\nlegacyCall(data);\n":
+    labels:
+    - source: // @ts-ignore
+      style: primary
+      start: 0
+      end: 13

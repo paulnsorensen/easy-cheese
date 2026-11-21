@@ -1,0 +1,24 @@
+id: ts-async-foreach
+language: typescript
+severity: warning
+message: '`forEach` does not await an async callback, so its promises are not observed.'
+note: Use `for...of` with `await`, or `await Promise.all(items.map(...))`.
+metadata:
+  dimension: correctness
+  base: high
+rule:
+  kind: call_expression
+  all:
+    - has:
+        field: function
+        kind: member_expression
+        has:
+          field: property
+          regex: '^forEach$'
+    - has:
+        field: arguments
+        has:
+          any:
+            - kind: arrow_function
+            - kind: function_expression
+          regex: '^async\b'

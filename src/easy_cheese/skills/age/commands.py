@@ -5,8 +5,13 @@ from __future__ import annotations
 import sys
 
 
-from easy_cheese.shared import findings, gates, handoff, paths, severity, slugify
+from easy_cheese.shared import findings, gates, handoff, paths, slugify
 from easy_cheese.shared.bundle_commands import bundle_command, derive_command, dispatch
+
+# The severity leaves stay literal: severity_cli imports easy_cheese_review,
+# and this manifest must import from src/ alone. The bundle-command drift test
+# compares these leaves with the command's real --help output.
+_SEVERITY_LEAVES = ("compute", "bucket")
 
 
 @bundle_command("wheypoint-resolve")
@@ -58,9 +63,16 @@ def _review_surface(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("review-evidence")
+def _review_evidence(argv: list[str]) -> int:
+    from easy_cheese.skills.age.review_evidence import main
+
+    return main(argv)
+
+
 @bundle_command("severity")
 def _severity(argv: list[str]) -> int:
-    from easy_cheese.shared.severity import main
+    from easy_cheese.skills.age.severity_cli import main
 
     return main(argv)
 
@@ -157,9 +169,13 @@ COMMANDS = (
         "Score the git surface that the age router sizes (JSON out)",
     ),
     derive_command(
+        _review_evidence,
+        "Scan a review range with the easy-cheese-review rule pack and facts (JSON out)",
+    ),
+    derive_command(
         _severity,
         "Compute per-finding severity and fix-cost-now buckets",
-        leaves=severity.LEAVES,
+        leaves=_SEVERITY_LEAVES,
     ),
     derive_command(
         _slugify,

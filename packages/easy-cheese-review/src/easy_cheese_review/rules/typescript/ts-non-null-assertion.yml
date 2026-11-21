@@ -1,0 +1,10 @@
+id: ts-non-null-assertion
+language: typescript
+severity: warning
+message: A non-null assertion `!` replaces a guard the compiler can check.
+note: Narrow with a guard and handle the missing case (@typescript-eslint/no-non-null-assertion).
+metadata:
+  dimension: correctness
+  base: low
+rule:
+  kind: non_null_expression

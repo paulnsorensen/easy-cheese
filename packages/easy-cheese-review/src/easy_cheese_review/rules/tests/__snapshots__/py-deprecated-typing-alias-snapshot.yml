@@ -1,0 +1,44 @@
+id: py-deprecated-typing-alias
+snapshots:
+  "from typing import Any, Optional":
+    labels:
+    - source: from typing import Any, Optional
+      style: primary
+      start: 0
+      end: 32
+    - source: typing
+      style: secondary
+      start: 5
+      end: 11
+    - source: Optional
+      style: secondary
+      start: 24
+      end: 32
+  from typing import Dict as Mapping:
+    labels:
+    - source: from typing import Dict as Mapping
+      style: primary
+      start: 0
+      end: 34
+    - source: typing
+      style: secondary
+      start: 5
+      end: 11
+    - source: Dict
+      style: secondary
+      start: 19
+      end: 23
+  from typing import List:
+    labels:
+    - source: from typing import List
+      style: primary
+      start: 0
+      end: 23
+    - source: typing
+      style: secondary
+      start: 5
+      end: 11
+    - source: List
+      style: secondary
+      start: 19
+      end: 23

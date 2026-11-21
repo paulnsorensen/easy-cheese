@@ -87,6 +87,7 @@ jobs:
         run: |
           pip install --no-cache-dir pytest==9.0.3 pytest-xdist==3.8.0 pyyaml==6.0.2
           pip install --disable-pip-version-check --no-cache-dir --require-hashes --requirement requirements/runtime.txt
+          pip install --disable-pip-version-check --no-cache-dir --only-binary=:all: --require-hashes --requirement requirements/ast-grep.txt
 
       - name: Gate the checked-in runtime
         run: python3 scripts/runtime_gates.py
@@ -139,6 +140,10 @@ jobs:
 
       - name: Run schema conformance tests
         run: python3 -m pytest tests/schemas/python -q -p xdist -n auto
+
+      # The suite runs `ast-grep test` on the packaged rule pack.
+      - name: Run easy-cheese-review tests
+        run: python3 -m pytest tests/review/python -q -p xdist -n auto
 
   mold-review:
     name: test mold-review playwright

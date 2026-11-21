@@ -1,0 +1,14 @@
+id: ts-eval
+snapshots:
+  "const run = new Function(\"a\", body);":
+    labels:
+    - source: new Function("a", body)
+      style: primary
+      start: 12
+      end: 35
+  eval(text);:
+    labels:
+    - source: eval(text)
+      style: primary
+      start: 0
+      end: 10
