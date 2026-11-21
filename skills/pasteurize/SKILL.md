@@ -30,6 +30,8 @@ Stop at each red flag:
 | Rationalization | Answer |
 | --- | --- |
 | "The cause is obvious." | Build the loop. An obvious cause takes one run to confirm. |
+| "The user said to skip the loop or the test." | A user request does not waive them. Say so in one line, then run both. |
+| "An existing test already covers it." | It did not catch the bug. Add a new test that fails on the old code. |
 | "The loop is too slow to write." | A slow loop still beats a wrong fix. |
 | "Any failure proves the bug." | Match the expected exit code or output. |
 | "The mocked seam is close enough." | Record the missing seam and route to Mold. |
@@ -202,7 +204,7 @@ Do not add a test at an incorrect seam.
 
 When a correct seam exists, complete these steps:
 
-1. Convert the minimum reproduction into a failing test at that seam.
+1. Convert the minimum reproduction into a new failing test at that seam.
 2. Run the test and observe the failure.
 3. Apply the smallest production change that can fix the failure.
 4. Run the test and observe success.
@@ -278,22 +280,13 @@ A lower evidence score produces more agents because it represents a larger searc
 | cold bug | no score | deterministic | 3 |
 | cold bug | no score | non-deterministic | 5 |
 
-A score of 250 defines a tight range.
-
-A reviewer reasoned these constants. Runs have not measured them.
-Reviewer thresholds use 30 repository commits.
-These constants have no run history.
-Keep the named constants adjustable.
-Review them when real runs exist.
+A reviewer reasoned these constants; runs have not measured them.
 
 Bundle-only hosts can call the policy with this command:
 
 ```bash
 python3 skills/pasteurize/scripts/pasteurize.pyz pasteurize-route <request.json>
 ```
-
-The command reads JSON and writes JSON.
-It follows the `age-route` bundle convention.
 
 ## Preferred tools
 
@@ -408,7 +401,7 @@ Do not replace evidence with a best guess.
 - Do not form hypotheses without a reproduction loop.
 - Change only the regression test and the minimum production code in Phase 5.
 - Remove every `[DEBUG-...]` tag before handoff.
-- Do not claim that Pasteurize ships the change.
+- Do not commit, push, or claim that Pasteurize ships the change, even when the user insists. The fix stays in the working tree for `/cook`.
 - Use this completion claim: "cause named, regression green, fix in tree, ready for chain".
 - Record an architectural gap in the slug.
 

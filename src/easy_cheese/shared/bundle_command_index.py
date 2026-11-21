@@ -75,6 +75,7 @@ COMMAND_BUNDLES: dict[str, tuple[str, ...]] = {
     'stack-tools': ('plate',),
     'taste-test': ('mold',),
     'test-shape': ('press',),
+    'tier': ('mold',),
     'turns': ('wheypoint',),
     'validate': ('cook', 'wheypoint'),
     'validate-decomposition': ('cook',),
