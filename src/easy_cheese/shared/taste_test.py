@@ -1284,8 +1284,18 @@ def taste_test_cmd(
         gate = decomposition_gate(result, correction_round=correction_round)
         if not gate.allowed:
             suffix = ", ".join(gate.reopened_forks) or "none"
+            blockers = "; ".join(
+                f"{category}: {blocker}"
+                for category, items in (
+                    ("contradictions", result.contradictions),
+                    ("orphaned_decisions", result.orphaned_decisions),
+                    ("unsupported_assumptions", result.unsupported_assumptions),
+                    ("acceptance_gaps", result.acceptance_gaps),
+                )
+                for blocker in items
+            )
             raise fromargs.CliError(
-                f"{gate.reason}: reopen={suffix}", exit_code=4
+                f"{gate.reason}: reopen={suffix}; blockers={blockers}", exit_code=4
             )
         return result.to_dict()
     except (OSError, json.JSONDecodeError, TasteTestError) as exc:

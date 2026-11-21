@@ -10,6 +10,7 @@
 | `finalize` | Finalize a Mold spec and print a ready result for bound Cook execution |  |
 | `gate-graph` | Render the gate state machine as dot, svg, png, or mermaid |  |
 | `normalize-planner` | Materialize a planner writer envelope into a canonical PlannerResult |  |
+| `planner-brief` | Emit the planner writer contract and request-bound examples |  |
 | `render-html` | Render a markdown report into one self-contained offline HTML file |  |
 | `review` | Serve and manage the local Mold review canvas |  |
 | `taste-test` | Run the applicability, contract, and fork-coherence taste gate; --precheck runs the lexical pre-check on the draft without a verdict |  |
