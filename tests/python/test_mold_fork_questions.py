@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import cast
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MOLD = REPO_ROOT / "skills" / "mold"
@@ -47,11 +48,35 @@ def test_rules_bullet_routes_fork_questions_to_the_reference() -> None:
 
 def test_fork_card_states_the_decision_and_draws_the_branches() -> None:
     card = _section(_text(FORK_QUESTIONS), "## Fork card")
-    for field in ("Decides:", "Moves:", "Today:", "Legend:"):
+    for field in ("Basis:", "Decides:", "Moves:", "Today:", "Legend:"):
         assert field in card, field
+    # The worked example leads into the fork from cited ledger ids.
+    assert re.search(r"Basis: +Based on ev-\d+ .* the next question is", card, re.S)
     # The worked example must draw branches, not only list labels.
     assert re.search(r"```text\n.*──▶.*```", card, re.S)
     assert "✔" in card and "✘" in card
+
+
+def test_basis_leads_from_ledger_evidence_into_the_fork() -> None:
+    basis = _section(_text(FORK_QUESTIONS), "## Basis")
+    assert "Based on X and Y, the next question is" in _rules_bullet("Fork cards")
+    assert "ledger id" in basis
+    assert "Cite only settled forks" in basis
+    assert "not ready" in basis
+
+
+def test_ledger_decisions_are_ears_requirements() -> None:
+    bullet = _rules_bullet("Decision ledger")
+    assert "EARS requirement" in bullet
+    assert "(references/decision-ledger.md)" in bullet
+    ledger = _text(MOLD / "references" / "decision-ledger.md")
+    example = _section(ledger, "## EARS requirements")
+    entries = cast(list[str], re.findall(r"^  (?:F|AD)-\d+: (.*)$", example, re.M))
+    # `Asking` lines carry a basis; every other entry is a decision.
+    decided = [line for line in entries if "Basis:" not in line]
+    assert decided, "the example ledger has no decisions"
+    assert all(" SHALL " in line for line in decided), decided
+    assert "[prose-fallback]" in example
 
 
 def test_explain_more_is_an_explicit_choice_that_keeps_the_fork_open() -> None:

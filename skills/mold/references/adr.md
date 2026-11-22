@@ -21,7 +21,7 @@ spec body already states plainly.
 ## Decision ledger
 
 Mold's per-round decision ledger (`Decided / Asking / [AGENT-DECIDED]`, see
-`../SKILL.md` § Rules) persists **here at curdle**: each consequential decision
+`../SKILL.md` § Rules and `decision-ledger.md` for the EARS line shapes) persists **here at curdle**: each consequential decision
 (per the leverage line in `../../age/references/voice.md`) earns an ADR — it is exactly the kind of decision a future reader would
 otherwise reverse-engineer. `[AGENT-DECIDED]` calls ride the spec's one-line
 decision-log (`curdle.md` § Spec template) with their vetoable alternative,

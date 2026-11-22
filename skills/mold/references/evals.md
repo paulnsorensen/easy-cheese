@@ -37,6 +37,8 @@ For each completed `/mold` Grill-mode run, verify:
 5. **Every user fork names what it moves.** Each `Asking` entry cites the acceptance criterion, public seam, or non-goal it changes. A fork with no such target is `[AGENT-DECIDED]` or a follow-up candidate, never a question.
 6. **The `Goal:` line survives every round.** The ledger repeats the pinned goal verbatim from the bounds pass to the handshake. A reworded goal traces to an explicit user fork.
 7. **Every `G-n` clause reaches the handshake with a disposition.** The bounds pass prints the clauses. The narrowing delta names each one as covered, follow-up, non-goal, or `[TBD]`. A spec that covers fewer than half the clauses triggers a re-pin-or-widen fork, never a silent proceed.
+8. **Every ledger decision is an EARS requirement.** Each `Decided` and `[AGENT-DECIDED]` entry is one EARS requirement, or prose with `[prose-fallback]`, and keeps its fork id, basis, and veto alternative. See `decision-ledger.md`.
+9. **Evidence leads into every fork.** Each consequential question opens with a basis sentence that cites ledger ids: "Based on X and Y, the next question is ...". See `fork-questions.md` § Basis.
 
 ## Failure modes to watch for
 
@@ -45,7 +47,8 @@ For each completed `/mold` Grill-mode run, verify:
 - **Over-batching** — a consequential item with a real tension gets swept into the "batch-reported as upheld" exception meant only for clean steelmans.
 - **Under-batching** — a below-the-line item (naming, internal scope, a trade-off that fires no trigger) gets its own user turn instead of a ledger line.
 - **Altitude drift** — three or more consecutive forks move no acceptance criterion, seam, or non-goal, and the decision map never renders. The rabbit hole this eval exists to catch: every noun traces to the user, so the noun-level scope gates stay green while the dialogue burrows.
-- **Terse fork** — a consequential question shows bare option labels with no fork card, no `Decides:` line, or no branch symbols or graph. Or it offers no `Explain more` choice, or it answers an unclear reply with a guess or a new fork. See `fork-questions.md`.
+- **Terse fork** — a consequential question shows bare option labels with no fork card, no `Basis:` or `Decides:` line, or no branch symbols or graph. Or it offers no `Explain more` choice, or it answers an unclear reply with a guess or a new fork. See `fork-questions.md`.
+- **Free-text ledger** — a `Decided` or `[AGENT-DECIDED]` entry records a label such as "SQLite, one file" instead of an EARS requirement, so the spec has no checkable trace of the decision.
 - **Goal fade** — the `Goal:` line drops out of the ledger render or silently rewords. The taste test catches the terminal form as `goal-drift`; the per-round render is the early form.
 - **Quarter build** — the goal sentence survives and every noun traces, but Acceptance delivers a fraction of the clauses and the agent presents the slice as the whole. The pre-check catches the terminal form as `goal-coverage:G-n` or `goal-coverage-cap`; a missing narrowing delta at the handshake is the early form.
 - **Spec altitude drift** — the draft spec fills Interface sketches with code, schema, or config bodies, or it reads as a slogan with no rejected option. The altitude evals below catch both forms.
@@ -145,7 +148,8 @@ Each change and state is an original prompt about a generic shop, ledger, or API
 | `R-FORK-C4` | An architecture fork names its C4 level and elements. | `fork-questions.md` § Fork card |
 | `R-FORK-TABLE` | A fork whose branches differ only in properties uses a symbol table and no graph. | `fork-questions.md` § Fork card |
 | `R-FORK-NO-MERMAID` | A terminal host gets no mermaid fence in a fork card. | `fork-questions.md` § Fork card |
-| `R-FORK-FIELDS` | Each card holds the title, `Decides:`, `Moves:`, `Today:`, the branches, and `Legend:`. | `fork-questions.md` § Fork card |
+| `R-FORK-FIELDS` | Each card holds `Basis:`, the title, `Decides:`, `Moves:`, `Today:`, the branches, and `Legend:`. | `fork-questions.md` § Fork card |
+| `R-FORK-BASIS` | Each card's basis cites ledger ids from the state, such as `ev-n` or `AC-n`, and ends with the fork's question. | `fork-questions.md` § Basis |
 | `Q-FORK-SCOPE` | Each graph shows only the elements that its branches change. | `fork-questions.md` § Fork card |
 | `Q-FORK-SYMBOLS` | Each card uses each symbol with one meaning. | `fork-questions.md` § Fork card |
 
