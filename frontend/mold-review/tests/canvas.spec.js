@@ -496,7 +496,7 @@ for (const viewport of [{width: 375, height: 667}, {width: 844, height: 390}]) {
       // Two boundingBox calls are two round trips; a late layout or scroll between them mixes coordinates, so read both rects in one frame and retry until they settle.
       await expect.poll(() => page.evaluate(() => {
         const shapes = document.querySelector('section.mc-shapes').getBoundingClientRect();
-        const conversation = document.querySelector('aside.mc-convo').getBoundingClientRect();
+        const conversation = document.querySelector('aside[aria-label="Conversation"]').getBoundingClientRect();
         return conversation.y - (shapes.y + shapes.height);
       })).toBeGreaterThanOrEqual(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

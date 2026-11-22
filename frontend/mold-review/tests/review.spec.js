@@ -84,6 +84,8 @@ const declaredSceneFixture={
 };
 
 test('declared artifacts render and reload as editable scenes',async({page,request})=>{
+  // Two draws, a reload, and their durable saves do not fit the 30s default under load.
+  test.slow();
   const state=await mkdtemp(join(tmpdir(),'mold-review-artifacts-'));
   const input=join(state,'revision.json');
   await writeFile(input,JSON.stringify({questions:[],artifacts:[
@@ -114,20 +116,32 @@ test('declared artifacts render and reload as editable scenes',async({page,reque
     };
     const sceneCount=async()=>(await sceneSnapshot()).elements?.length||0;
     const rectangle=page.getByTestId('toolbar-rectangle');
-    // Excalidraw drops pointer input while it (re)initializes under load, so retry the whole gesture until the autosave lands.
-    const drawSaved=(minimum,x,y)=>expect(async()=>{
-      const saved=autosaved(page,feedback=>(feedback.artifacts?.scene?.scene?.elements?.length||0)>minimum,5000);
-      saved.catch(()=>{});
-      await rectangle.locator('..').click();
-      await canvas.scrollIntoViewIfNeeded({timeout:5000});
-      const box=await canvas.boundingBox();
-      expect(box).not.toBeNull();
-      await page.mouse.move(box.x+x,box.y+y);
-      await page.mouse.down();
-      await page.mouse.move(box.x+x+140,box.y+y+110,{steps:5});
-      await page.mouse.up();
-      await saved;
-    }).toPass({timeout:20000});
+    // Excalidraw drops pointer input while it (re)initializes under load. Retry only the gesture, and stop at the
+    // first autosave request that carries the new element. The save itself is awaited once, outside the retry, so a
+    // slow save cannot cause a second draw and a lost save still fails the test.
+    const drawSaved=async(minimum,x,y)=>{
+      const sent=[];
+      const onRequest=req=>{
+        if(req.url().endsWith('/api/autosave')&&req.method()==='POST'&&(JSON.parse(req.postData()||'{}').feedback?.artifacts?.scene?.scene?.elements?.length||0)>minimum)sent.push(req);
+      };
+      page.on('request',onRequest);
+      try{
+        await expect(async()=>{
+          if(sent.length)return;
+          await rectangle.locator('..').click();
+          await canvas.scrollIntoViewIfNeeded({timeout:5000});
+          const box=await canvas.boundingBox();
+          expect(box).not.toBeNull();
+          await page.mouse.move(box.x+x,box.y+y);
+          await page.mouse.down();
+          await page.mouse.move(box.x+x+140,box.y+y+110,{steps:5});
+          await page.mouse.up();
+          // A good gesture can queue behind an earlier fsync-bound save, so wait well past the 400ms debounce before redrawing.
+          await expect.poll(()=>sent.length,{timeout:8000}).toBeGreaterThan(0);
+        }).toPass({timeout:30000});
+      }finally{page.off('request',onRequest);}
+      expect((await sent[0].response())?.ok()).toBeTruthy();
+    };
     await drawSaved(1,120,220);
     await expect.poll(sceneCount,{timeout:10000}).toBeGreaterThan(1);
     const saved=await sceneSnapshot();
