@@ -29,15 +29,28 @@
       "items": [
         {
           "id": "F-1",
-          "text": "SQLite, one file at `.cheese/db/store.sqlite`"
+          "text": "THE store SHALL keep every record in one SQLite file at `.cheese/db/store.sqlite`."
         },
         {
           "id": "F-2",
-          "text": "WAL mode plus a writer lock file carrying the pid"
+          "text": "WHEN two agents write at once THE store SHALL serialize the writes through a writer lock file that carries the pid."
         },
         {
           "id": "F-3",
-          "text": "Store facade: open, put, get, query"
+          "text": "THE store SHALL expose only `open`, `put`, `get`, and `query` through one Store facade."
+        }
+      ]
+    },
+    {
+      "label": "evidence",
+      "items": [
+        {
+          "id": "ev-1",
+          "text": "certain, round log: rounds two to four added no new evidence"
+        },
+        {
+          "id": "ev-2",
+          "text": "don't know: lock behavior on network mounts is unverified"
         }
       ]
     },
@@ -161,15 +174,15 @@
     "settled": [
       {
         "id": "F-1",
-        "text": "SQLite, one file at `.cheese/db/store.sqlite`"
+        "text": "THE store SHALL keep every record in one SQLite file at `.cheese/db/store.sqlite`."
       },
       {
         "id": "F-2",
-        "text": "WAL mode plus a writer lock file carrying the pid"
+        "text": "WHEN two agents write at once THE store SHALL serialize the writes through a writer lock file that carries the pid."
       },
       {
         "id": "F-3",
-        "text": "Store facade: open, put, get, query"
+        "text": "THE store SHALL expose only `open`, `put`, `get`, and `query` through one Store facade."
       }
     ],
     "open": [
@@ -197,6 +210,17 @@
       "id": "R-4",
       "prompt": "How does round four get new evidence?",
       "meta": "routes the next step · nothing settles",
+      "basis": [
+        {
+          "ref": "ev-1",
+          "text": "three rounds added no new evidence"
+        },
+        {
+          "ref": "ev-2",
+          "text": "lock behavior on network mounts is unverified",
+          "confidence": "don't know"
+        }
+      ],
       "selection_mode": "single",
       "recommended_option_id": "validate",
       "options": [

@@ -25,11 +25,11 @@
       "items": [
         {
           "id": "F-1",
-          "text": "SQLite, one file at `.cheese/db/store.sqlite`"
+          "text": "THE store SHALL keep every record in one SQLite file at `.cheese/db/store.sqlite`."
         },
         {
           "id": "F-2",
-          "text": "WAL mode plus a single writer lock file"
+          "text": "WHEN two agents write at once THE store SHALL serialize the writes through one writer lock file in WAL mode."
         }
       ]
     },
@@ -38,13 +38,48 @@
       "items": [
         {
           "id": "F-3",
-          "text": "Shape of the public interface"
+          "text": "Shape of the public interface · basis: F-1, F-2"
         }
       ]
     },
     {
       "label": "agent-decided",
-      "text": "Python stdlib only, no ORM · schema version in a `meta` table"
+      "items": [
+        {
+          "id": "AD-1",
+          "text": "THE store SHALL import only the Python standard library. · veto: an ORM"
+        },
+        {
+          "id": "AD-2",
+          "text": "WHEN the store opens THE store SHALL read the schema version from the `meta` table. · veto: a version file"
+        }
+      ]
+    }
+  ],
+  "settled_fork_ids": ["F-1", "F-2"],
+  "requirements": [
+    {
+      "id": "R-1",
+      "text": "THE store SHALL keep every record in one SQLite file at `.cheese/db/store.sqlite`.",
+      "status": "settled",
+      "fork_ids": ["F-1"]
+    },
+    {
+      "id": "R-2",
+      "text": "WHEN two agents write at once THE store SHALL serialize the writes through one writer lock file in WAL mode.",
+      "status": "settled",
+      "fork_ids": ["F-2"]
+    },
+    {
+      "id": "R-3",
+      "text": "THE store SHALL import only the Python standard library.",
+      "status": "settled"
+    },
+    {
+      "id": "R-4",
+      "text": "WHEN a caller reads or writes a record THE store SHALL take the writer lock through one public entry point.",
+      "status": "draft",
+      "fork_ids": ["F-3"]
     }
   ],
   "placement": {
@@ -175,6 +210,16 @@
       "id": "F-3",
       "prompt": "Which shape does the public interface take?",
       "meta": "moves the Store seam, AC-4",
+      "basis": [
+        {
+          "ref": "F-1",
+          "text": "one SQLite file"
+        },
+        {
+          "ref": "F-2",
+          "text": "one writer lock must guard every write"
+        }
+      ],
       "selection_mode": "single",
       "recommended_option_id": "facade",
       "options": [

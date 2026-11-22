@@ -197,6 +197,13 @@ function toText(value) {
   return typeof value === 'string' ? value : undefined;
 }
 
+// A basis entry needs text; a malformed entry drops instead of rendering blank.
+function basisEntries(value) {
+  return toArray(value)
+    .filter(item => toText(item?.text)?.trim())
+    .map(item => ({text: item.text, ref: toText(item.ref), confidence: toText(item.confidence)}));
+}
+
 // Guards against agent-supplied fields with the wrong type, so a malformed
 // document renders instead of throwing.
 function normalizeDocument(doc) {
@@ -212,7 +219,7 @@ function normalizeDocument(doc) {
     shape_note: toText(doc.shape_note),
     trail: toArray(doc.trail),
     revisions: toArray(doc.revisions),
-    questions: toArray(doc.questions),
+    questions: toArray(doc.questions).map(question => (question && typeof question === 'object' ? {...question, basis: basisEntries(question.basis)} : question)),
     requirements: toArray(doc.requirements)
       .filter(requirement => toText(requirement?.id) !== undefined && toText(requirement?.text) !== undefined && ['settled', 'draft'].includes(requirement?.status))
       .map(requirement => ({...requirement, fork_ids: toArray(requirement.fork_ids).filter(id => typeof id === 'string')})),
