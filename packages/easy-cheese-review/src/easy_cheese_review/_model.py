@@ -48,16 +48,36 @@ class Hit:
 
 
 @dataclass(frozen=True)
+class Skipped:
+    """A file the scan left out because it is larger than the size limit.
+
+    `tree` is `head` or `base`; `size` is the file size in bytes.
+    """
+
+    tree: Literal["head", "base"]
+    path: str
+    size: int
+
+    def to_json(self) -> dict[str, object]:
+        return {"tree": self.tree, "path": self.path, "bytes": self.size}
+
+
+@dataclass(frozen=True)
 class Evidence:
-    """The scan result: `status` is `ok` or `failed:<reason>`."""
+    """The scan result: `status` is `ok` or `failed:<reason>`.
+
+    `skipped` names each file that no ast-grep run read, because it is larger
+    than the size limit. A skipped file has no hits.
+    """
 
     status: str
     hits: tuple[Hit, ...]
     facts: Mapping[str, Fact]
+    skipped: tuple[Skipped, ...] = ()
 
     def to_json(self) -> dict[str, object]:
         return {
-            "scan": {"status": self.status},
+            "scan": {"status": self.status, "skipped": [item.to_json() for item in self.skipped]},
             "hits": [hit.to_json() for hit in self.hits],
             "facts": {name: fact.to_json() for name, fact in self.facts.items()},
         }

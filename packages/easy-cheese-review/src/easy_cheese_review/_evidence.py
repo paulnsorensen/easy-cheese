@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager
@@ -10,9 +11,13 @@ from typing import TypeVar, cast
 
 import easy_cheese_review._ast_grep as _ast_grep
 import easy_cheese_review._facts as _facts
-from easy_cheese_review._model import FACT_NAMES, Evidence, Fact, Hit
+from easy_cheese_review._model import FACT_NAMES, Evidence, Fact, FactValue, Hit, Skipped
 
 LineRange = tuple[int, int]
+
+# Files above this size are not scanned: one generated or vendored file must
+# not cost unbounded ast-grep time and memory.
+MAX_FILE_BYTES = 1024 * 1024
 
 _T = TypeVar("_T")
 
@@ -94,38 +99,125 @@ def _guarded(compute: Callable[[], _T]) -> _T | Fact:
         return Fact("unknown", {"reason": f"ast-grep {exc}"})
 
 
-def _compute_facts(
-    binary: str | None, config: Path, head: Path, changed: Sequence[str], base: Path | None
-) -> dict[str, Fact]:
-    """Compute each fact on its own, so one failed ast-grep run spoils only its facts."""
+def _split(root: Path, paths: Sequence[str], limit: int) -> tuple[list[str], dict[str, int]]:
+    """Split `paths` into the files within `limit` bytes and the sizes of the others."""
+    kept: list[str] = []
+    oversized: dict[str, int] = {}
+    for path in paths:
+        size = (root / path).stat().st_size
+        if size > limit:
+            oversized[path] = size
+        else:
+            kept.append(path)
+    return kept, oversized
 
-    def imports(root: Path, paths: Sequence[str]) -> dict[str, list[str]]:
-        return _ast_grep.imports(_require(binary), config, root, paths)
+
+def _oversized_in_tree(root: Path, limit: int) -> dict[str, int]:
+    """Return the size of each file under `root` that ast-grep parses and that is above `limit`.
+
+    Like the ast-grep directory walk, the walk skips hidden entries and links.
+    """
+    found: dict[str, int] = {}
+    for folder, dirs, files in os.walk(root):
+        dirs[:] = [name for name in dirs if not name.startswith(".")]
+        for name in files:
+            candidate = Path(folder, name)
+            if name.startswith(".") or candidate.suffix not in _facts.SCAN_SUFFIXES:
+                continue
+            if candidate.is_symlink() or not candidate.is_file():
+                continue
+            size = candidate.stat().st_size
+            if size > limit:
+                found[candidate.relative_to(root).as_posix()] = size
+    return found
+
+
+def _unless_skipped(fact: Fact, doubtful: FactValue, skipped: Iterable[str]) -> Fact:
+    """Return `unknown` when `fact` is `doubtful` and a skipped file can change that answer."""
+    names = sorted(skipped)
+    if fact.value == doubtful and names:
+        return Fact("unknown", {**fact.detail, "reason": "file-too-large", "skipped": names})
+    return fact
+
+
+def _compute_facts(
+    binary: str | None, config: Path, head: Path, changed: Sequence[str], base: Path | None, limit: int
+) -> tuple[dict[str, Fact], tuple[Skipped, ...], list[str]]:
+    """Compute each fact on its own, so one failed ast-grep run spoils only its facts.
+
+    Return the facts, the skipped files, and the head code files within `limit`.
+    No ast-grep run reads a file above `limit` bytes. A skip makes a fact
+    `unknown` only when the missing file can change its value:
+
+    - `tests` pairs file names and reads no file, so it never changes.
+    - `scope`: a missing import can only join groups, so `yes` becomes `unknown`.
+    - `compat`: a changed file skipped in either tree is not compared, so
+      `no` becomes `unknown`.
+    - `dependencies`: a skipped head file can hide a new import, so `no`
+      becomes `unknown`. A skipped base file can hide a known import, so a
+      `yes` that rests only on `added_imports` becomes `unknown`.
+    """
+
+    def imports(root: Path, paths: Sequence[str], exclude: Sequence[str] = ()) -> dict[str, list[str]]:
+        return _ast_grep.imports(_require(binary), config, root, paths, exclude)
 
     def exports(root: Path, paths: Sequence[str]) -> dict[str, list[_ast_grep.JsonObject]]:
         return _ast_grep.outline(_require(binary), config, root, paths, "exports")
 
     code_paths = _facts.tree_files(head, changed, _facts.CODE_SUFFIXES)
-    head_imports = _guarded(lambda: imports(head, code_paths))
+    head_kept, head_over = _split(head, code_paths, limit)
+    skipped = [Skipped("head", path, size) for path, size in head_over.items()]
+    head_imports = _guarded(lambda: imports(head, head_kept))
     computed: dict[str, Fact] = {"tests": _facts.tests_fact(code_paths)}
     if isinstance(head_imports, Fact):
         computed["scope"] = head_imports
     else:
-        computed["scope"] = _facts.scope_fact(code_paths, head_imports)
+        computed["scope"] = _unless_skipped(_facts.scope_fact(code_paths, head_imports), "yes", head_over)
     if base is None:
         computed["compat"] = computed["dependencies"] = Fact("unknown", {"reason": "no base tree"})
     else:
         base_paths = _facts.tree_files(base, changed, _facts.CODE_SUFFIXES)
-        computed["compat"] = _guarded(
-            lambda: _facts.compat_fact(base_paths, exports(base, base_paths), exports(head, code_paths))
+        base_kept, base_over = _split(base, base_paths, limit)
+        tree_over = _oversized_in_tree(base, limit) | base_over
+        skipped.extend(Skipped("base", path, size) for path, size in tree_over.items())
+        unread = set(base_over) | (set(head_over) & set(base_paths))
+        compared = [path for path in base_kept if path not in unread]
+        compat = _guarded(
+            lambda: _facts.compat_fact(compared, exports(base, compared), exports(head, head_kept))
         )
+        computed["compat"] = _unless_skipped(compat, "no", unread)
         if isinstance(head_imports, Fact):
             computed["dependencies"] = head_imports
         else:
-            computed["dependencies"] = _guarded(
-                lambda: _facts.dependencies_fact(head, changed, head_imports, imports(base, ["."]))
+            base_imports = _guarded(lambda: imports(base, ["."], sorted(tree_over)))
+            computed["dependencies"] = (
+                base_imports
+                if isinstance(base_imports, Fact)
+                else _dependencies(head, changed, head_imports, base_imports, head_over, tree_over)
             )
-    return {name: computed[name] for name in FACT_NAMES}
+    ordered = tuple(sorted(skipped, key=lambda item: (item.tree, item.path)))
+    return {name: computed[name] for name in FACT_NAMES}, ordered, head_kept
+
+
+def _dependencies(
+    head: Path,
+    changed: Sequence[str],
+    head_imports: Mapping[str, list[str]],
+    base_imports: Mapping[str, list[str]],
+    head_over: Mapping[str, int],
+    base_over: Mapping[str, int],
+) -> Fact:
+    """Return the `dependencies` fact, `unknown` where a skipped file can change it."""
+    fact = _facts.dependencies_fact(head, changed, head_imports, base_imports)
+    fact = _unless_skipped(fact, "no", head_over)
+    if fact.detail.get("manifests") or fact.detail.get("lockfiles"):
+        return fact
+    # `dependencies_fact` keys added imports by language, so only a skipped file of that class can hide one.
+    added = fact.detail.get("added_imports")
+    rows = cast(list[object], added) if isinstance(added, list) else []
+    languages = {_facts.is_python(str(_mapping(item).get("path"))) for item in rows}
+    same_language = {path: size for path, size in base_over.items() if _facts.is_python(path) in languages}
+    return _unless_skipped(fact, "yes", same_language)
 
 
 @contextmanager
@@ -144,6 +236,7 @@ def facts(
     *,
     base: Path | None = None,
     ast_grep: str | None = None,
+    max_file_bytes: int = MAX_FILE_BYTES,
 ) -> dict[str, Fact]:
     """Return the compat, dependencies, tests, and scope facts for a change.
 
@@ -151,9 +244,11 @@ def facts(
     facts that need ast-grep (`compat`, `dependencies`, `scope`) are
     `unknown`, with the reason. `tests` needs no ast-grep and stays known.
     `compat` and `dependencies` are `unknown` when `base` is None.
+    No ast-grep run reads a file larger than `max_file_bytes`; a fact that
+    such a file can change is `unknown` with the reason `file-too-large`.
     """
     with _setup(changed, ast_grep) as (paths, binary, config):
-        return _compute_facts(binary, config, head, paths, base)
+        return _compute_facts(binary, config, head, paths, base, max_file_bytes)[0]
 
 
 def _on_changed_lines(hit: Hit, hunks: Mapping[str, Sequence[LineRange]]) -> bool:
@@ -193,6 +288,7 @@ def scan(
     base: Path | None = None,
     hunks: Mapping[str, Sequence[LineRange]] | None = None,
     ast_grep: str | None = None,
+    max_file_bytes: int = MAX_FILE_BYTES,
 ) -> Evidence:
     """Run the packaged rule pack over the changed files of `head`.
 
@@ -202,16 +298,16 @@ def scan(
     so git output with no hunk for it (a binary diff) hides none of its hits.
     A failed hit scan, a missing ast-grep binary included, gives
     `failed:<reason>` and no hits; the facts are still computed as in `facts`.
+    A file larger than `max_file_bytes` is not scanned and is in `skipped`.
     """
     with _setup(changed, ast_grep) as (paths, binary, config):
-        code_paths = _facts.tree_files(head, paths, _facts.CODE_SUFFIXES)
-        computed = _compute_facts(binary, config, head, paths, base)
+        computed, skipped, head_kept = _compute_facts(binary, config, head, paths, base, max_file_bytes)
         try:
-            rows = _ast_grep.scan(_require(binary), config, head, code_paths)
+            rows = _ast_grep.scan(_require(binary), config, head, head_kept)
         except _ast_grep.AstGrepError as exc:
-            return Evidence(f"failed:{exc}", (), computed)
+            return Evidence(f"failed:{exc}", (), computed, skipped)
         hits = [hit for row in rows if (hit := _hit(row)) is not None]
         if hunks is not None:
             hits = [hit for hit in hits if _on_changed_lines(hit, hunks)]
         hits.sort(key=lambda hit: (hit.path, hit.line, hit.rule_id))
-        return Evidence("ok", tuple(hits), computed)
+        return Evidence("ok", tuple(hits), computed, skipped)

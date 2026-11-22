@@ -10,6 +10,7 @@ from io import StringIO
 import subprocess
 from collections.abc import Callable, Generator, Iterator
 from pathlib import Path
+from typing import cast
 from urllib.parse import urlsplit
 
 import pytest
@@ -399,6 +400,17 @@ def _requirement(requirement_id: str, status: str = "settled") -> dict[str, obje
     return {"id": requirement_id, "text": f"WHEN {requirement_id} applies THE SYSTEM SHALL act.", "status": status}
 
 
+BASIS = [{"ref": "ev-1", "text": "two agents write the store at once"}]
+
+
+def _with_basis(document: dict[str, object]) -> dict[str, object]:
+    """Give each question a basis so a test sees only the warnings it targets."""
+    questions = document.get("questions")
+    if not isinstance(questions, list):
+        return document
+    return {**document, "questions": [{**question, "basis": BASIS} for question in cast(list[dict[str, object]], questions)]}
+
+
 def test_publish_returns_empty_warnings_for_a_clean_document(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -413,14 +425,147 @@ def test_publish_returns_empty_warnings_for_a_clean_document(
     second: dict[str, object] = {
         "requirements": [_requirement("R-1"), _requirement("R-2", "draft")],
         "settled_fork_ids": ["F-1"],
+        "ledger": [
+            {"label": "decided", "items": [{"id": "F-1", "text": "THE store SHALL keep one SQLite file."}]},
+            {"label": "agent-decided", "items": [{"id": "AD-1", "text": "Ship this quarter. [prose-fallback]"}]},
+            {"label": "asking", "items": [{"id": "F-2", "text": "Choose migration"}]},
+            {"label": "non-goals", "text": "no remote sync"},
+        ],
         "questions": [{"id": "F-2", "prompt": "Choose migration", "depends_on": ["F-1"]}],
     }
 
-    outputs = _publish_outputs(tmp_path, capsys, legacy, first, second)
+    outputs = _publish_outputs(tmp_path, capsys, *map(_with_basis, (legacy, first, second)))
 
     assert [output["warnings"] for output in outputs] == [[], [], []]
     assert set(outputs[-1]) == {"number", "document", "digest", "parent", "warnings"}
     assert outputs[-1]["number"] == 3
+
+
+@pytest.mark.parametrize("name", ["01-bounds.json", "02-sketch.json", "03-decision-map.json"])
+def test_canvas_examples_publish_without_warnings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], name: str
+) -> None:
+    example = Path(__file__).resolve().parents[2] / "frontend" / "mold-review" / "examples" / name
+
+    [output] = _publish_outputs(tmp_path, capsys, json.loads(example.read_text(encoding="utf-8")))
+
+    assert output["warnings"] == []
+
+
+def test_publish_accepts_a_prose_fallback_bounds_mapping_line(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    document: dict[str, object] = {
+        "ledger": [
+            {
+                "label": "agent-decided",
+                "items": [
+                    {"id": "AD-1", "text": "Goals: one file. Non-goals: remote sync. [prose-fallback]"}
+                ],
+            }
+        ]
+    }
+
+    [output] = _publish_outputs(tmp_path, capsys, document)
+
+    assert output["warnings"] == []
+
+
+def test_publish_warns_when_a_basis_cites_an_open_fork(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    document: dict[str, object] = {
+        "settled_fork_ids": ["F-1"],
+        "questions": [
+            {
+                "id": "F-2",
+                "basis": [
+                    {"ref": "ev-1", "text": "evidence"},
+                    {"ref": "F-1", "text": "settled fork"},
+                    {"ref": "F-3", "text": "open fork"},
+                ],
+            },
+            {"id": "F-3", "basis": BASIS},
+        ],
+    }
+
+    [output] = _publish_outputs(tmp_path, capsys, document)
+
+    assert output["warnings"] == [
+        "question F-2: basis cites F-3, which is still an open fork; cite only settled forks"
+    ]
+
+
+def test_publish_warns_about_forks_without_a_basis(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    document: dict[str, object] = {
+        "questions": [
+            {"id": "F-1"},
+            {"id": "F-2", "basis": []},
+            {"id": "F-3", "basis": [{"ref": "F-1"}]},
+            {"id": "F-4", "basis": [{"ref": "ev-1", "text": "  "}, "ev-2"]},
+            {"id": "F-5", "basis": "ev-1"},
+            {"id": "F-6", "basis": BASIS},
+            {"prompt": "No id"},
+        ],
+    }
+
+    [output] = _publish_outputs(tmp_path, capsys, document)
+
+    suffix = ": basis is missing; lead the fork with the ledger evidence that opened it"
+    assert output["warnings"] == [
+        f"{label}{suffix}" for label in ("question F-1", "question F-2", "question F-3", "question F-4", "question F-5", "questions[6]")
+    ]
+    assert MoldReview.load(tmp_path / "state" / "review.json").revisions[-1].document == document
+
+
+def test_publish_warns_about_decisions_and_requirements_that_are_not_ears(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    document: dict[str, object] = {
+        "questions": [],
+        "requirements": [
+            _requirement("R-1"),
+            {"id": "R-2", "text": "Store facade", "status": "draft"},
+            {"id": "R-3", "text": "The team ships this quarter. [prose-fallback]", "status": "settled"},
+        ],
+        "ledger": [
+            {
+                "label": "decided",
+                "items": [
+                    {"id": "F-1", "text": "when two agents write, the store shall serialize the writes."},
+                    {"id": "F-4", "text": "Shall we revisit WAL later?"},
+                    {"id": "F-6", "text": "we shall see"},
+                    {"id": "F-5", "text": "THE store SHALL keep one file."},
+                    {"id": "F-2", "text": "WAL mode plus a single writer lock file"},
+                    {"text": "Store facade"},
+                ],
+            },
+            {"label": "agent-decided", "text": "Python stdlib only"},
+            {"label": "asking", "items": [{"id": "F-3", "text": "Shape of the public interface"}]},
+            {"label": "non-goals", "text": "no remote sync"},
+        ],
+    }
+
+    [output] = _publish_outputs(tmp_path, capsys, document)
+
+    suffix = (
+        ": text is not an EARS requirement;"
+        + " write [WHEN|WHILE|IF|WHERE ...] THE <system> SHALL <response>, or mark it [prose-fallback]"
+    )
+    assert output["warnings"] == [
+        f"{label}{suffix}"
+        for label in (
+            "requirement R-2",
+            "ledger decided F-1",
+            "ledger decided F-4",
+            "ledger decided F-6",
+            "ledger decided F-2",
+            "ledger decided items[5]",
+            "ledger agent-decided text",
+        )
+    ]
 
 
 @pytest.mark.parametrize(
@@ -484,6 +629,8 @@ def test_publish_warns_about_fork_dependency_problems_and_still_stores_the_docum
     document: dict[str, object],
     expected: list[str],
 ) -> None:
+    document = _with_basis(document)
+
     [output] = _publish_outputs(tmp_path, capsys, document)
 
     assert output["warnings"] == expected
@@ -508,16 +655,17 @@ def test_publish_warns_when_requirements_from_the_previous_revision_are_missing(
     ]
 
 
-def test_publish_warnings_follow_question_then_cycle_then_requirement_order(
+def test_publish_warnings_follow_question_cycle_basis_ears_then_requirement_order(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     first: dict[str, object] = {"questions": [], "requirements": [_requirement("R-1")]}
     broken: dict[str, object] = {
         "questions": [
-            {"id": "F-1", "depends_on": ["F-2"]},
-            {"id": "F-2", "depends_on": ["F-1", "F-9"]},
+            {"id": "F-1", "depends_on": ["F-2"], "basis": BASIS},
+            {"id": "F-2", "depends_on": ["F-1", "F-9"], "basis": BASIS},
             {"id": "F-3", "depends_on": "F-1"},
         ],
+        "ledger": [{"label": "decided", "items": [{"id": "F-0", "text": "SQLite, one file"}]}],
     }
 
     outputs = _publish_outputs(tmp_path, capsys, first, broken)
@@ -527,5 +675,8 @@ def test_publish_warnings_follow_question_then_cycle_then_requirement_order(
         "question F-3: depends_on is not a list of question IDs",
         "depends_on cycle among open questions: the dependency graph has cycle"
         + " F-1 -> F-2 -> F-1; these questions wait forever",
+        "question F-3: basis is missing; lead the fork with the ledger evidence that opened it",
+        "ledger decided F-0: text is not an EARS requirement;"
+        + " write [WHEN|WHILE|IF|WHERE ...] THE <system> SHALL <response>, or mark it [prose-fallback]",
         "requirements from revision 1 are missing: R-1; republish the full requirement list",
     ]

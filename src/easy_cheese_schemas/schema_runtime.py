@@ -72,6 +72,7 @@ from easy_cheese_schemas.contracts import (
     curd_plan_digest,
     derive_curd_disposition,
     marked_contracts_in,
+    writer_payload_types,
 )
 
 DRAFT_2020_12 = "https://json-schema.org/draft/2020-12/schema"
@@ -659,6 +660,12 @@ def _class_hints_and_fields(
     return hints, fields
 
 
+class _UnionMatchError(ContractValidationError):
+    def __init__(self, path: str, message: str) -> None:
+        super().__init__(message)
+        self.path: str = path
+
+
 def _structure(value: object, annotation: object, path: str = "$") -> object:
     origin = get_origin(annotation)
     if origin is types.UnionType:
@@ -668,8 +675,9 @@ def _structure(value: object, annotation: object, path: str = "$") -> object:
                 return _structure(value, member, path)
             except ContractValidationError as error:
                 failures.append(str(error))
-        raise ContractValidationError(
-            f"{path} does not match any allowed shape: {'; '.join(failures)}"
+        raise _UnionMatchError(
+            path,
+            f"{path} does not match any allowed shape: {'; '.join(failures)}",
         )
     if origin in {list, tuple}:
         if not isinstance(value, list):
@@ -814,11 +822,24 @@ def load_curd_plan(raw: object) -> CurdPlan:
     return validate_curd_plan(value)
 
 
-def load_agent_writer_view(raw: object) -> AgentWriterView:
-    """Structure an agent-owned writer envelope without granting host authority."""
-    value = _structure(_raw_mapping(raw), AgentWriterView)
+def _structure_writer_view(data: Mapping[str, object]) -> AgentWriterView:
+    try:
+        value = _structure(data, AgentWriterView)
+    except ContractValidationError as error:
+        if isinstance(error, _UnionMatchError) and error.path == "$.payload":
+            _ = _structure(
+                data["payload"],
+                writer_payload_types()[WriterViewKind(cast(str, data["kind"]))],
+                "$.payload",
+            )
+        raise
     assert isinstance(value, AgentWriterView)
     return value
+
+
+def load_agent_writer_view(raw: object) -> AgentWriterView:
+    """Structure an agent-owned writer envelope without granting host authority."""
+    return _structure_writer_view(_raw_mapping(raw))
 
 
 def validate_contract(
@@ -873,6 +894,8 @@ def validate_contract(
         assert isinstance(value, CurdPlan)
         assert supported_version is not None
         _ = _validate_curd_plan_against(value, supported_version)
+    elif contract is AgentWriterView:
+        value = _structure_writer_view(data)
     else:
         value = _structure(data, contract)
     return _artifact(value, source_version)
@@ -1357,8 +1380,7 @@ def normalize_agent_value(view: object, invocation: object) -> object:
         if forbidden is not None:
             path, name = forbidden
             raise ContractValidationError(f"{path} supplies host-owned field {name!r}")
-        writer = _structure(raw, AgentWriterView)
-        assert isinstance(writer, AgentWriterView)
+        writer = _structure_writer_view(raw)
 
     payload = writer.payload
     if isinstance(payload, CurdPlanWriterView):

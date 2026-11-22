@@ -39,17 +39,53 @@
       "text": "Light · two forks are yours: concurrency and contracts fired"
     },
     {
+      "label": "evidence",
+      "items": [
+        {
+          "id": "ev-1",
+          "text": "certain, explorer digest: each CLI command runs in its own process; no daemon exists"
+        },
+        {
+          "id": "ev-2",
+          "text": "certain, explorer digest: two agents can run commands on one repo at once"
+        }
+      ]
+    },
+    {
       "label": "asking",
       "items": [
         {
           "id": "F-1",
-          "text": "Storage format"
+          "text": "Storage format · basis: ev-1, ev-2, G-3"
         }
       ]
     },
     {
       "label": "agent-decided",
-      "text": "Non-goals: no remote sync, no encryption at rest · store lives at `.cheese/db/`"
+      "items": [
+        {
+          "id": "AD-1",
+          "text": "THE store SHALL keep its files under `.cheese/db/`. · veto: a path from an environment variable"
+        }
+      ]
+    },
+    {
+      "label": "non-goals",
+      "tone": "dim",
+      "text": "no remote sync · no encryption at rest"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "R-1",
+      "text": "THE store SHALL keep its files under `.cheese/db/`.",
+      "status": "settled"
+    },
+    {
+      "id": "R-2",
+      "text": "WHEN two agents write at once THE store SHALL commit both writes without corruption.",
+      "status": "draft",
+      "fork_ids": ["F-1"]
     }
   ],
   "gates": {
@@ -90,6 +126,20 @@
       "id": "F-1",
       "prompt": "Which storage format?",
       "meta": "moves AC-3, the open() seam",
+      "basis": [
+        {
+          "ref": "ev-1",
+          "text": "no daemon can own the writes"
+        },
+        {
+          "ref": "ev-2",
+          "text": "two agents can write at once"
+        },
+        {
+          "ref": "G-3",
+          "text": "concurrent writes never corrupt"
+        }
+      ],
       "selection_mode": "single",
       "recommended_option_id": "sqlite",
       "options": [
