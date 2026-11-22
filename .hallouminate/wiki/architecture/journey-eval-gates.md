@@ -2,7 +2,7 @@
 
 The deterministic gates of the `/skillz autoimprove` journey suites live as Python sources under `scripts/journey_gates/`.
 `scripts/journey_gate_compiler.py` inlines them into each `skills/<skill>/evals/autoimprove.json` as `kinds.journey.argv = ["python3", "-I", "-c", SOURCE]`.
-Edit the sources, then run the compiler. `tests/python/test_journey_gates.py` and `tests/python/test_journey_gates_core_loop.py` (age, cure, wheypoint) fail on drift, so `just check` catches a hand edit of the JSON.
+Edit the sources, then run the compiler. `tests/python/test_journey_gates.py` and `tests/python/test_journey_gates_core_loop.py` (age, cure, plate, wheypoint) fail on drift, so `just check` catches a hand edit of the JSON.
 The compiler finds each skill from its gate module, so a new suite needs only `scripts/journey_gates/<skill>.py` and its contract.
 
 ## Why the sources live outside `skills/`
@@ -11,7 +11,7 @@ The compiler finds each skill from its gate module, so a new suite needs only `s
 - skillz also accepts a `gate` file under `evals/gates/`, but that file would be Python under `skills/`.
 - Inline `argv` keeps the doctrine and still gives the sources lint, type checks, and unit tests.
 - `common.py` holds the shared code. Each skill module imports it inside a `# gate:strip-begin` / `# gate:strip-end` block, which the compiler drops. The compiler exits 2 on an unpaired marker or CRLF.
-- Each compiled gate is one argv string, which must stay under 64 KiB (`test_compiled_gate_fits_one_argv_string`). Every gate inlines all of `common.py`, so the gates sit near the limit (about 58-62 KB after the compiler drops comment-only lines). Watch the size when you grow `common.py` or a gate module.
+- Each compiled gate is one argv string, which must stay under 64 KiB (`test_compiled_gate_fits_one_argv_string`). Every gate inlines all of `common.py`, so the gates sit near the limit after the compiler drops comment-only lines: about 56-61 KB for most skills, and 65.5 KB for plate. Plate has about 25 bytes of headroom, so any growth of `common.py` fails plate's size test first. Make room in `common.py` or `plate.py` before you add code to either.
 - The strip block also drops the skill module's own imports. A module that `common.py` does not import (for example `shutil` or `tempfile`) must sit below `# gate:strip-end`, or the compiled gate raises `NameError`. Put the `# pyright:` pragma inside the strip block.
 
 ## Runtime limits that shape the code
@@ -52,6 +52,7 @@ The compiler finds each skill from its gate module, so a new suite needs only `s
 - Interpreter code on stdin (`python3 - <<EOF`) gets the same publication scan as `python3 -c`.
 - One `CODE_EXT` tuple in `common.py` defines the code extensions for the Mold and Press rules.
 - Age replays the case's `restore-repo.sh` in a temp dir and fails `production-changed` when the visible output tree differs. This catches a write by any route, including `python -c` and `git checkout --`.
+- Plate reads each shell step's exit code (Claude `tool_result`, Codex `exitCode`), because `commit-after-failed-gate` depends on it. A step counts as a gate run only when it runs the gate, not when it reads `scripts/check.sh`.
 - Cure fails `test-regressed` when a test that passed on the fixture tree fails or vanishes in the output. A deferred finding may leave its own test red.
 - Router and thinking gates (`cheese.py`, `briesearch.py`, `culture.py`) forbid visible writes or code writes; hidden state (`.cheese/`) and scratch paths (`/tmp/`, workspace `tmp/`) stay exempt. Strip the trace's workspace root before a scratch check, because both harnesses report absolute paths.
 - Cheese reports a `sed -i`, `cp`, or `touch` target as `shell-file-write` and only other `facts.writes` targets as `shell-redirect-write`, so one write gives one fail code.
@@ -77,7 +78,7 @@ The age gate replays the script with a private `HOME`; a replay that fails skips
 - The compiler derives each skill from a gate file stem, so the stem equals the skill directory: `scripts/journey_gates/hard-cheese.py`, not `hard_cheese.py`.
 - Each gate module keeps `# pyright:` pragmas inside its `gate:strip` block, as `common.py` does. The compiled source drops `from __future__ import annotations`, so annotations run on Python 3.9: use `Optional` and built-in generics, never `X | Y`.
 - `tests/python/test_journey_gates.py` runs the shared checks (compile, stdlib, fixture replay, Codex parity) over `GATE_SKILLS`. Its synthetic `clean()` scenarios model a Cook workspace, so the generic push and pull-request tests cover only `SKILLS`. Rule tests for affinage, melt, and hard-cheese live in `tests/python/test_journey_gates_<skill>.py` and import helpers from `tests.python.test_journey_gates`.
-- Age, cure, and wheypoint (`CORE_LOOP_SKILLS`) keep their fixture replay, Codex parity, and rule tests in `tests/python/test_journey_gates_core_loop.py`. The shared file still checks that every gate source belongs to `GATE_SKILLS` or `CORE_LOOP_SKILLS` and fits one argv string.
+- Age, cure, plate, and wheypoint (`CORE_LOOP_SKILLS`) keep their fixture replay, Codex parity, and rule tests in `tests/python/test_journey_gates_core_loop.py`. The shared file still checks that every gate source belongs to `GATE_SKILLS` or `CORE_LOOP_SKILLS` and fits one argv string.
 - Affinage cases stub `gh` in `bin/gh` (including `pr checkout` and `repo view`), and requests stop at the `/cure` handoff, because sibling skills are not staged.
 - Melt cases build the conflict with `restore-repo.sh` under `GIT_CONFIG_GLOBAL=/dev/null`; the gate fails `not-restored` when no step runs it.
 - Hard-cheese cases expect `--no-judge` (LOGGED) when no judge sub-agent can run; an `ERROR` attempt without a judge run is a dealbreaker.
@@ -90,7 +91,7 @@ Every scored journey case needs EARS `expected.criteria`.
 `skillz-experiment.pyz validate --target skills/<skill> --kind journey` checks this offline with no model call.
 
 Run `/skillz autoimprove` against the skill directory inside the repository, not a copy. Each `skills/<skill>/wedge.toml` inherits `skills/wedge.toml`, whose paths are repo-relative, so a copied skill stops with `wedge-config-invalid`.
-skillz checks the `family` of every `evals.json` task entry even in a `--kind journey` run, and a seed task entry with `files: []` fails the draft loader.
+skillz checks the `family` of every `evals.json` task entry even in a `--kind journey` run, and a seed task entry with `files: []` fails the draft loader. The plate `evals.json` prompt entries carry a family for this reason.
 
 
 ## Case hardness and run planning
