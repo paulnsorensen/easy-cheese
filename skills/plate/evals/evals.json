@@ -41,7 +41,7 @@
         "Does not ask the user any question and does not stop for confirmation; output/halt.md does not exist.",
         "output/plan.json has shape stacked_linear with exactly three groups in the order protocol schema (0d18e5f), writer (4be7c21), wiring (a93f1d0). The first group is based on main, each later group is based on the previous group's branch and depends_on it, and each commit sits in exactly one group.",
         "Each output/pr-<n>.md has exactly one line that starts with `Plated as stacked_linear:` and gives a reason that names the dependency order.",
-        "Each PR body has a `Stack: <n> of 3` line, and at least the first body has a mermaid flowchart of the three stacked PRs.",
+        "Each PR body has a `Stack: <n> of 3` line, and no PR body has a mermaid block that draws the stack, PR, or branch order.",
         "No group is single or orthogonal_flat, and the plan does not merge the layers into one group."
       ],
       "files": ["evals/files/stack-recommendation-choice/branch.txt"]
@@ -339,12 +339,12 @@
       "name": "stack-protocol-impl-wiring",
       "family": "stack-dependent",
       "prompt": "Open PRs for this branch. Dry run: the finished branch is described in evals/files/stack-protocol-impl-wiring/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
-      "expected_output": "Decides a three-layer stack without asking: schema, then Cook producer, then Cure consumer. Uses the commit boundaries. Each body states its stack position and links its neighbors, and carries a small mermaid graph of the stack.",
+      "expected_output": "Decides a three-layer stack without asking: schema, then Cook producer, then Cure consumer. Uses the commit boundaries. Each body states its stack position and links its neighbors in its Stack line. No body draws the stack order.",
       "assertions": [
         "Does not ask the user any question and does not stop for confirmation.",
         "output/plan.json has shape stacked_linear with three groups in schema, cook, cure order; the first is based on main and each later group is based on the previous branch.",
         "Each PR body states its position in the stack (for example 1 of 3) and names the PR or branch below and above it, where one exists.",
-        "At least the first PR body has a mermaid flowchart or graph of the three stacked PRs; the mermaid syntax is valid (quoted labels with punctuation, no bare lowercase end node).",
+        "No PR body has a mermaid block whose nodes are the PRs, their branches, or main; any mermaid block draws code from that layer's own diff.",
         "The schema PR body asks the reviewer to check the contract field names.",
         "Each PR body is at most 40 lines, not counting the diagram."
       ],
@@ -565,6 +565,22 @@
         "Does not rewrite, squash, or reorder history, and does not split a file across groups."
       ],
       "files": ["evals/files/explicit-stack-no-boundaries/branch.txt"]
+    },
+    {
+      "id": 49,
+      "name": "stack-no-order-diagram",
+      "family": "diagram-none",
+      "prompt": "Open the stacked PRs for this spec. Dry run: the finished branch is described in evals/files/stack-no-order-diagram/branch.txt. This sandbox has no remote and no gh, so do not run git, gh, or any stack CLI. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "Decides a three-layer stack without asking: command, then workflow, then merge gate. Each body gives its position and neighbors in one `Stack:` line. No body draws a mermaid chart of the PR or branch order, such as main --> layer 1 --> layer 2 --> layer 3 with this PR marked. Negative case from paulnsorensen/affineur#19.",
+      "assertions": [
+        "Does not ask the user any question and does not stop for confirmation; output/halt.md does not exist.",
+        "output/plan.json has shape stacked_linear with three groups in the order 7e1a2c0, 8f3b9d1, 9a4c0e2; the first is based on main and each later group is based on the previous branch.",
+        "Each PR body has a `Stack: <n> of 3` line that names the PR or branch below and above it, where one exists.",
+        "No PR body has a mermaid block whose nodes are the PRs, their branches, or main, and no mermaid block marks `this PR`.",
+        "The workflow layer body (8f3b9d1) lists actionlint and a GitHub run as not run, and has at most one mermaid block.",
+        "Each PR body is at most 40 non-blank lines."
+      ],
+      "files": ["evals/files/stack-no-order-diagram/branch.txt"]
     }
   ]
 }

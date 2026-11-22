@@ -67,20 +67,64 @@ def test_filler_words_are_rejected(word: str) -> None:
     assert "filler word" in errors[0]
 
 
-def test_stack_layer_needs_position_line_diagram_and_stacked_shape() -> None:
+def test_stack_layer_needs_position_line_and_stacked_shape() -> None:
     errors = pr_body.check_body(_body(), stack_layer=True)
 
     assert errors == [
         "stack layer needs a stacked shape, got Plated as single",
         "stack layer needs a line: Stack: <n> of <total>",
-        "stack layer needs a mermaid flowchart of the stack order",
     ]
 
 
-def test_complete_stack_layer_passes() -> None:
-    body = _body("Stack: 2 of 3", _DIAGRAM).replace("Plated as single", "Plated as stacked_linear")
+def test_complete_stack_layer_passes_without_a_diagram() -> None:
+    body = _body("Stack: 2 of 3. Below: #18. Above: #20.").replace(
+        "Plated as single", "Plated as stacked_linear"
+    )
 
     assert pr_body.check_body(body, stack_layer=True) == []
+
+
+_STACK_CHART = """```mermaid
+flowchart BT
+  main[main] --> p18["#18 outcomes command"]
+  p18 --> p19["#19 outcomes workflow (this PR)"]
+  p19 --> p20["#20 merge gate thresholds"]
+  style p19 stroke-width:3px
+```
+"""
+
+
+@pytest.mark.parametrize("stack_layer", [True, False])
+def test_a_chart_of_pr_numbers_is_rejected(stack_layer: bool) -> None:
+    body = _body("Stack: 2 of 3. Below: #18. Above: #20.", _STACK_CHART).replace(
+        "Plated as single", "Plated as stacked_linear"
+    )
+
+    errors = pr_body.check_body(body, stack_layer=stack_layer)
+
+    assert errors == [
+        "mermaid block draws PRs (#18, #19, #20), not code; the Stack line gives the order, so remove it"
+    ]
+
+
+def test_a_chart_that_marks_this_pr_by_branch_name_is_rejected() -> None:
+    chart = (
+        "```mermaid\nflowchart TB\n  L2[\"feat/outcome-workflow<br>THIS PR\"] --> L1[\"feat/outcome-command\"]\n"
+        "  L1 --> Trunk[\"main\"]\n```\n"
+    )
+
+    assert pr_body.check_body(_body(chart)) == [
+        "mermaid block draws PRs, not code; the Stack line gives the order, so remove it"
+    ]
+
+
+def test_a_code_diagram_with_hex_styles_and_one_pr_ref_passes() -> None:
+    diagram = (
+        "```mermaid\nflowchart LR\n  router --> cache[\"cache (see #12)\"]\n"
+        "  style cache fill:#333,stroke:#111\n  classDef hot fill: #900\n```\n"
+    )
+
+    assert pr_body.check_body(_body(diagram)) == []
 
 
 def test_cli_exits_one_and_lists_every_error(

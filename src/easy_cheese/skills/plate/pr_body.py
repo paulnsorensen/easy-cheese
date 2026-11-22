@@ -27,6 +27,9 @@ _SHAPES = _STACK_SHAPES | {"single", _FLAT_SHAPE}
 _PLATED = re.compile(r"^Plated as (?P<shape>[a-z_]+): \S", re.MULTILINE)
 _STACK_LINE = re.compile(r"^Stack: \d+ of \d+", re.MULTILINE)
 _NO_DIAGRAM = re.compile(r"^Diagram: none, \S", re.MULTILINE)
+_PR_REF = re.compile(r"(?<![\w:#])#\d+\b")
+_STYLE_LINE = re.compile(r"^\s*(style|classDef|linkStyle|class)\b")
+_THIS_PR = re.compile(r"\bthis PR\b", re.IGNORECASE)
 _CHECKLIST = re.compile(r"^\s*[-*] \[[ xX]\]")
 _FILLER = re.compile(
     r"\b(comprehensive|robust|seamless(ly)?|leverag(e|es|ed|ing)|significantly|dramatically)\b",
@@ -82,6 +85,11 @@ def _draws(diagrams: list[list[str]], kind: str) -> bool:
     return any(_header(block) in kinds for block in diagrams)
 
 
+def _pr_refs(block: list[str]) -> set[str]:
+    """Return the `#<n>` PR references in a mermaid block, outside style lines with hex colors."""
+    return {hit.group(0) for line in block if not _STYLE_LINE.match(line) for hit in _PR_REF.finditer(line)}
+
+
 def plated_shape(body: str) -> str | None:
     plated = _PLATED.search(body)
     return None if plated is None else plated.group("shape")
@@ -117,8 +125,15 @@ def check_body(
     if stack_layer:
         if _STACK_LINE.search(body) is None:
             errors.append("stack layer needs a line: Stack: <n> of <total>")
-        if not _draws(diagrams, "flowchart"):
-            errors.append("stack layer needs a mermaid flowchart of the stack order")
+
+    # A chart of PRs repeats the Stack line and shows no code structure.
+    for block in diagrams:
+        refs = _pr_refs(block)
+        if len(refs) >= 2 or any(_THIS_PR.search(line) for line in block):
+            named = f" ({', '.join(sorted(refs))})" if len(refs) >= 2 else ""
+            errors.append(
+                f"mermaid block draws PRs{named}, not code; the Stack line gives the order, so remove it"
+            )
 
     if (
         need is not None
@@ -185,7 +200,7 @@ def check_cmd(
     body_file
         Path to the drafted PR body.
     stack_layer
-        Require the stack position line and the stack-order flowchart.
+        Require a stacked shape and the stack position line.
     template_file
         Path to the repository PR template; its `##` headings replace the defaults.
     diagram_base
