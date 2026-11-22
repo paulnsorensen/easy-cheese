@@ -126,7 +126,7 @@ Under `.github/workflows/`:
 | `publish-dist.yml` | push main, hourly schedule, dispatch | build archives from the `main` tip, append one full-tree commit to `dist` |
 | `retarget-dist-prs.yml` | PRs opened against `dist` | move the PR base to `main` |
 | `release.yml` | tag `v[0-9]*` | build archives, stage slim tree, force-push `release` branch, GitHub release |
-| `publish-pypi.yml` | push main touching `pyproject.toml`, dispatch | publish `easy-cheese-schemas` to PyPI |
+| `publish-pypi.yml` | push main touching `pyproject.toml` or `packages/easy-cheese-review/pyproject.toml`, dispatch | publish `easy-cheese-schemas`, then `easy-cheese-review`, to PyPI; each job imports its wheel on Python 3.11 first |
 | `docs.yml` | push/PR on docs paths, dispatch | `pnpm run docs:build` (Astro/Starlight), deploy Pages on main |
 | `docs-retry.yml` | `docs` workflow_run failure | auto re-run failed `docs` jobs on main, up to 3 attempts |
 | `skill-overlap.yml` | PRs on `skills/**/*.md` + tools, weekly cron, dispatch | semantic skill-overlap ratchet (`calibrate` / `report` / `check`) |

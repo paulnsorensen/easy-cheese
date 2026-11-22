@@ -149,6 +149,8 @@ Pre-1.0 caveat: while the version is `0.x`, minor bumps may break. The policy ab
 
 **4.0.0 note.** Version 4.0.0 renames `ReviewSeverity.CRITICAL` (`critical`) to `BLOCKER` (`blocker`). It renames `ReviewDebt.critical` to `ReviewDebt.blocker`. It also adds `static` to `EvidenceKind` and the `tests`, `compat`, `scope`, and `dependencies` values to `ReviewDimension`. This release does not bump `SCHEMA_VERSION`. The clean-break rule applies (`src/easy_cheese_schemas/AGENTS.md`, section "Clean-break redesign"). A stored 3.x artifact fails closed on load only when it carries the removed `critical` value. That is a review finding with severity `critical`, or a remediation state with a `critical` debt key. Other 3.x artifacts still load. Do not delete a rejected artifact. Move it out of the active location and keep it for inspection. Then run the review again.
 
+**4.0.1 note.** Versions 2.0.0 through 4.0.0 declare Python 3.11 support but fail to import on 3.11, because they import `override` from `typing`. Version 4.0.1 imports it from `typing-extensions` and adds that dependency. It makes no contract change.
+
 ## Releasing (repo owner)
 
 **A pending publisher must exist on PyPI before the first publish.** Publishing uses PyPI Trusted Publishing (OIDC), so no long-lived token is stored in the repository — but that means PyPI has to be told, in advance, which workflow in which repository is allowed to publish. Create the pending publisher on PyPI with the project name, the repository, and the publishing workflow's filename. This is a one-time manual step and it cannot be automated: without it, the first release run fails at upload.
