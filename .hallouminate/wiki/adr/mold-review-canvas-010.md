@@ -41,6 +41,16 @@ A lowered legacy sheet does not hide conversation controls after switching to a 
 ## Consequences
 
 On a phone, a requirements document scrolls the page past the panes. Each pane scrolls its own content.
+
+### Open defect: desktop shell does not scroll
+
+The rule "the page scrolls on short screens" holds on a phone, not on a short desktop viewport.
+`.mc-shell` sets `block-size: 100dvh` (`frontend/mold-review/src/style.css:16`), so the document is never taller than the viewport.
+The requirements pane takes up to `min(42dvh, 420px)` (`style.css:24`), and the nested scroll panes get the remainder.
+Issue #900 measured the result at 1280x640: the page did not scroll, the shapes pane was 0 px tall, and the fork pane was 160 px tall.
+Issue #900 carries the label `triage/clear-fix`.
+Issues #901 to #904 cover related phone-layout and fork-card readability work, and each is `triage/needs-design`.
+Do not cite this consequence as a guarantee for desktop widths until #900 closes.
 `review publish` checks these fields and returns non-blocking `warnings` in its output.[^6]
 It warns about malformed or missing `depends_on` references, open prerequisites in `settled_fork_ids`, `depends_on` cycles, and dropped requirement IDs.
 The agent sees each problem in the same turn and republishes a corrected document.

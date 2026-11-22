@@ -141,3 +141,4 @@
 - 2026-11-21 · affinage:pr-887 · curated · architecture.md · the pipeline table calls `/age` a seventeen-dimension review.
 - 2026-11-21 · affinage:pr-887 · curated · ideas/minimal-easy-cheese.md · the Age dimension-count drift is now past tense; 4.0.0 aligned the router wiki and the skill at seventeen.
 
+- 2026-11-22 · wiki-harvest · curated · gotchas/cheese-dir-receipts-block-worktree-cleanup.md, gotchas/index.md, adr/mold-review-canvas-010.md · recorded the #869 receipt-lifecycle gap and the #900 desktop-scroll defect that contradicts the ADR 010 scroll rule.

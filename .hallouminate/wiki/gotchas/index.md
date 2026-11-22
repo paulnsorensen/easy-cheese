@@ -2,6 +2,7 @@
 
 <!-- HALLOUMINATE:INDEX-START -->
 - [age-review-lock-invariants](./age-review-lock-invariants.md) — Age review lock invariants
+- [cheese-dir-receipts-block-worktree-cleanup](./cheese-dir-receipts-block-worktree-cleanup.md) — `.cheese/` receipts block worktree cleanup
 - [codeql-generated-file-implicit-concat](./codeql-generated-file-implicit-concat.md) — CodeQL implicit-string-concat on pprint-generated files
 - [press-telemetry-path-classification](./press-telemetry-path-classification.md) — Press telemetry path classification and attempt bounds
 - [red-gate-worktree-symlinks](./red-gate-worktree-symlinks.md) — Gotcha: red-gate phase snapshotting halts on directory symlinks
