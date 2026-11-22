@@ -17,6 +17,7 @@ import fromargs
 import pytest
 
 from easy_cheese.skills.age import review_evidence
+from easy_cheese_review import MAX_FILE_BYTES
 
 BASE = "def load(path):\n    return read(path)\n\n\ndef drop():\n    pass\n"
 HEAD = "def load(path):\n    try:\n        return read(path)\n    except Exception:\n        pass\n"
@@ -83,7 +84,7 @@ def test_review_evidence_reports_hits_and_facts(
     path_env = os.pathsep.join({str(Path(binary).parent), str(Path(git).parent)})
     evidence = _evidence(skill_archive("age"), repo, path_env, tmp_path)
 
-    assert evidence["scan"] == {"status": "ok"}
+    assert evidence["scan"] == {"status": "ok", "skipped": []}
     hits = cast(list[dict[str, object]], evidence["hits"])
     assert [(hit["rule_id"], hit["dimension"], hit["line"]) for hit in hits] == [
         ("py-swallowed-exception", "correctness", 4)
@@ -106,7 +107,7 @@ def test_review_evidence_without_ast_grep_still_completes(
     (no_ast_grep / "git").symlink_to(git)
     evidence = _evidence(skill_archive("age"), repo, str(no_ast_grep), tmp_path)
 
-    assert evidence["scan"] == {"status": "failed:ast-grep-missing"}
+    assert evidence["scan"] == {"status": "failed:ast-grep-missing", "skipped": []}
     assert evidence["hits"] == []
     facts = cast(dict[str, dict[str, object]], evidence["facts"])
     assert facts["tests"] == {"value": "yes", "detail": {"untested": ["src/store.py"], "sources": 1}}
@@ -146,7 +147,7 @@ def test_review_evidence_scans_untracked_files_and_skips_base_links(
 
     evidence = _evidence(skill_archive("age"), root, path_env, tmp_path)
 
-    assert evidence["scan"] == {"status": "ok"}
+    assert evidence["scan"] == {"status": "ok", "skipped": []}
     hits = cast(list[dict[str, object]], evidence["hits"])
     assert [(hit["rule_id"], hit["path"]) for hit in hits] == [("py-eval-exec", "src/fresh.py")]
     facts = cast(dict[str, dict[str, object]], evidence["facts"])
@@ -176,7 +177,7 @@ def test_review_evidence_keeps_hits_in_files_git_calls_binary(
 
     evidence = _evidence(skill_archive("age"), root, _tool_path(), tmp_path, base="HEAD~1")
 
-    assert evidence["scan"] == {"status": "ok"}
+    assert evidence["scan"] == {"status": "ok", "skipped": []}
     hits = cast(list[dict[str, object]], evidence["hits"])
     assert [(hit["rule_id"], hit["path"]) for hit in hits] == [(rule_id, name)]
 
@@ -197,7 +198,7 @@ def test_review_evidence_keeps_the_hit_after_a_line_break_character(
 
     evidence = _evidence(skill_archive("age"), root, _tool_path(), tmp_path)
 
-    assert evidence["scan"] == {"status": "ok"}
+    assert evidence["scan"] == {"status": "ok", "skipped": []}
     hits = cast(list[dict[str, object]], evidence["hits"])
     assert [(hit["rule_id"], hit["path"], hit["line"]) for hit in hits] == [("py-eval-exec", "run.py", 5)]
 
@@ -235,7 +236,7 @@ def test_review_evidence_keeps_the_hits_of_files_whose_names_are_not_utf8(
     """A changed file and an untracked file keep their hits when their names are not UTF-8."""
     evidence = _evidence(skill_archive("age"), raw_name_repo, _tool_path(), tmp_path)
 
-    assert evidence["scan"] == {"status": "ok"}
+    assert evidence["scan"] == {"status": "ok", "skipped": []}
     hits = cast(list[dict[str, object]], evidence["hits"])
     assert [(hit["rule_id"], hit["line"]) for hit in hits] == [("py-eval-exec", 1), ("py-eval-exec", 1)]
 
@@ -248,7 +249,8 @@ def test_review_evidence_never_drops_a_file_with_a_raw_name_in_silence(
 
     hits = cast(list[dict[str, object]], evidence["hits"])
     rule_ids = [hit["rule_id"] for hit in hits]
-    assert evidence["scan"] != {"status": "ok"} or rule_ids == ["py-eval-exec", "py-eval-exec"]
+    scan = cast(dict[str, object], evidence["scan"])
+    assert scan["status"] != "ok" or rule_ids == ["py-eval-exec", "py-eval-exec"]
 
 
 def test_review_evidence_ignores_a_textconv_driver(
@@ -271,7 +273,7 @@ def test_review_evidence_ignores_a_textconv_driver(
 
     evidence = _evidence(skill_archive("age"), root, _tool_path(), tmp_path)
 
-    assert evidence["scan"] == {"status": "ok"}
+    assert evidence["scan"] == {"status": "ok", "skipped": []}
     hits = cast(list[dict[str, object]], evidence["hits"])
     assert [(hit["rule_id"], hit["path"], hit["line"]) for hit in hits] == [("py-eval-exec", "run.py", 4)]
 
@@ -313,6 +315,43 @@ def test_review_evidence_counts_imports_of_base_mts_files(
     facts = cast(dict[str, dict[str, object]], evidence["facts"])
     detail = cast(dict[str, object], facts["dependencies"]["detail"])
     assert detail["added_imports"] == [{"path": "app.ts", "module": "fresh-pkg"}]
+
+
+def test_review_evidence_skips_and_reports_oversized_files(
+    skill_archive: Callable[[str], Path], tmp_path: Path
+) -> None:
+    """A file above the size limit is not scanned, in head or in base, and the result names it."""
+    root = tmp_path / "huge"
+    root.mkdir()
+    filler = "x = 1\n" * (MAX_FILE_BYTES // 6 + 1)
+    _ = (root / "vendor.py").write_text("import requests\n" + filler, encoding="utf-8")
+    _ = (root / "lib.py").write_text("def keep():\n    pass\n", encoding="utf-8")
+    _git(root, "init", "-q")
+    _commit(root, "base")
+    _ = (root / "gen.py").write_text("eval(token)\n" + filler, encoding="utf-8")
+    _ = (root / "app.py").write_text("import requests\n\n\ndef run():\n    return eval(token)\n", encoding="utf-8")
+
+    evidence = _evidence(skill_archive("age"), root, _tool_path(), tmp_path)
+
+    scan = cast(dict[str, object], evidence["scan"])
+    assert scan["status"] == "ok"
+    assert scan["skipped"] == [
+        {"tree": "base", "path": "vendor.py", "bytes": (root / "vendor.py").stat().st_size},
+        {"tree": "head", "path": "gen.py", "bytes": (root / "gen.py").stat().st_size},
+    ]
+    hits = cast(list[dict[str, object]], evidence["hits"])
+    assert [(hit["rule_id"], hit["path"]) for hit in hits] == [("py-eval-exec", "app.py")]
+    facts = cast(dict[str, dict[str, object]], evidence["facts"])
+    # Only the skipped base file imports `requests`, so `added_imports` cannot be trusted.
+    assert facts["dependencies"]["value"] == "unknown"
+    dependencies = cast(dict[str, object], facts["dependencies"]["detail"])
+    assert (dependencies["reason"], dependencies["skipped"]) == ("file-too-large", ["vendor.py"])
+    assert dependencies["added_imports"] == [{"path": "app.py", "module": "requests"}]
+    # `gen.py` has no visible imports, so it looks like a second group.
+    assert facts["scope"]["value"] == "unknown"
+    scope = cast(dict[str, object], facts["scope"]["detail"])
+    assert (scope["reason"], scope["skipped"]) == ("file-too-large", ["gen.py"])
+    assert facts["tests"] == {"value": "yes", "detail": {"untested": ["app.py", "gen.py"], "sources": 2}}
 
 
 def test_extract_base_writes_only_code_files(tmp_path: Path) -> None:

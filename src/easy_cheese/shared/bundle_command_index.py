@@ -51,6 +51,7 @@ COMMAND_BUNDLES: dict[str, tuple[str, ...]] = {
     'pasteurize-route': ('pasteurize',),
     'paths': ('age', 'cook', 'cure'),
     'phase-decision': ('cook',),
+    'planner-brief': ('mold',),
     'post-reply': ('affinage',),
     'pr-plan-to-branches': ('cook',),
     'pr-status': ('affinage',),

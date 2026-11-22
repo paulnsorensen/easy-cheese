@@ -1,0 +1,14 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/queue-backoff. No PR exists for this branch.
+Quality gate: `just check` passed at HEAD (exit 0). Required artifacts: none.
+The user asked: "Plate this branch and tell me whether the diff is safe to merge."
+
+$ git log --oneline main..HEAD
+4a8e2c7 test(queue): cover the retry cap
+f10b9d3 feat(queue): add capped exponential backoff
+
+$ git diff --name-status --find-renames main...HEAD
+M	src/easy_cheese/shared/queue.py
+M	tests/python/test_queue.py
+
+$ git diff --shortstat main...HEAD
+ 2 files changed, 64 insertions(+), 9 deletions(-)
