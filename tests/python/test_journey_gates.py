@@ -29,7 +29,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 # Skills whose synthetic scenarios (`clean`) model a Cook-shaped workspace.
 SKILLS = ("cook", "mold", "press", "pasteurize")
-# Every skill with a compiled journey gate. Skill-specific rule tests for the
+# Skills whose fixtures this file replays. Skill-specific rule tests for the
 # skills outside SKILLS live in `test_journey_gates_<skill>.py`; the routing and
 # thinking gates (cheese, briesearch, culture) have theirs in
 # `test_journey_gates_routing.py`.
@@ -45,6 +45,11 @@ GATE_SKILLS = (
     "pasteurize",
     "press",
 )
+# Skills whose fixtures, replays, and rule tests live in
+# `test_journey_gates_core_loop.py`.
+CORE_LOOP_SKILLS = ("age", "cure", "wheypoint")
+# Every skill with a compiled journey gate.
+ALL_GATE_SKILLS = GATE_SKILLS + CORE_LOOP_SKILLS
 SHAPES = ("claude", "codex")
 OLD_GATES = REPO_ROOT / ".cheese" / "scratch" / "gates"
 ABS = "/work/ws/"
@@ -372,7 +377,7 @@ def copy_compiler_tree(root: Path) -> None:
     shutil.copytree(
         REPO_ROOT / "scripts" / "journey_gates", root / "scripts" / "journey_gates"
     )
-    for skill in GATE_SKILLS:
+    for skill in ALL_GATE_SKILLS:
         target = root / "skills" / skill / "evals"
         target.mkdir(parents=True)
         shutil.copy(REPO_ROOT / "skills" / skill / "evals" / "autoimprove.json", target)
@@ -395,7 +400,7 @@ def test_compiler_check_names_drifted_suites_and_write_repairs_them(
     assert run_compiler(tmp_path, "--check").returncode == 0
     pasteurize = tmp_path / "scripts" / "journey_gates" / "pasteurize.py"
     pasteurize.write_text(
-        pasteurize.read_text(encoding="utf-8") + "\n# drift\n", encoding="utf-8"
+        pasteurize.read_text(encoding="utf-8") + "\nDRIFT = 1\n", encoding="utf-8"
     )
     drift = run_compiler(tmp_path, "--check")
     assert drift.returncode == 1
@@ -1947,12 +1952,25 @@ def test_compiler_derives_skills_from_the_gate_sources() -> None:
     gates = REPO_ROOT / "scripts" / "journey_gates"
     expected = sorted(p.stem for p in gates.glob("*.py") if p.stem != "common")
     assert load_compiler().skills(REPO_ROOT) == expected
-    assert set(expected) == set(GATE_SKILLS)
+    assert set(expected) == set(ALL_GATE_SKILLS)
 
 
-@pytest.mark.parametrize("skill", GATE_SKILLS)
+@pytest.mark.parametrize("skill", ALL_GATE_SKILLS)
 def test_compiled_gate_fits_one_argv_string(skill: str) -> None:
     assert len(contract_argv(skill)[3].encode("utf-8")) < 65536
+
+
+def test_compiler_drops_comment_only_lines_but_keeps_hashes_in_code() -> None:
+    source = 'x = 1  # trailing\n    # alone\n# alone\ns = """\n# kept in a string\n"""\n'
+    assert load_compiler().without_comment_lines(source) == (
+        'x = 1  # trailing\ns = """\n# kept in a string\n"""\n'
+    )
+
+
+@pytest.mark.parametrize("skill", ALL_GATE_SKILLS)
+def test_compiled_gate_has_no_comment_only_lines(skill: str) -> None:
+    source = contract_argv(skill)[3]
+    assert load_compiler().without_comment_lines(source) == source
 
 
 # --- review fixes: compiler input validation ---------------------------------------
@@ -2122,6 +2140,10 @@ def test_write_then_logged_run_in_one_step_counts_as_verified(
         "perl -i -E 's/a/b/' tests/test_pricing.py",
         "sed --in-place 's/a/b/' tests/test_pricing.py",
         "perl -pi -e 's/a/b/' tests/test_pricing.py",
+        "perl -Mstrict -pi -e 's/a/b/' tests/test_pricing.py",
+        "perl -i -pe's/a/b/' tests/test_pricing.py",
+        "perl -pie 's/a/b/' tests/test_pricing.py",
+        "perl -i -pe'm/a/ && s/a/b/' tests/test_pricing.py",
         "cp /tmp/new.py tests/test_pricing.py",
         "mv /tmp/new.py tests/test_pricing.py",
         "cp -t tests /tmp/test_pricing.py",
@@ -2143,6 +2165,8 @@ def test_in_place_edits_and_copies_are_writes(
         "sed -n 's/a/b/p' tests/test_pricing.py",
         "cp tests/test_pricing.py /tmp/backup.txt",
         "mv /tmp/a.txt /tmp/b.txt",
+        "perl -Mstrict -ne 'print if /a/' tests/test_pricing.py",
+        "perl -Ilib -ne 'print if /a/' tests/test_pricing.py",
     ],
 )
 def test_reads_and_scratch_edits_are_not_writes(
