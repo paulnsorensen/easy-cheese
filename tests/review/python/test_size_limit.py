@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -221,6 +222,40 @@ def test_an_oversized_python_file_in_base_still_hides_an_added_python_import(
     )
 
     evidence = scan(head, ["app.py"], base=base_root, ast_grep=ast_grep_binary, max_file_bytes=LIMIT)
+
+    assert evidence.facts["dependencies"].value == "unknown"
+    assert evidence.facts["dependencies"].detail["reason"] == "file-too-large"
+
+
+def test_an_oversized_script_file_in_base_does_not_hide_a_python_import_in_a_mixed_change(
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
+) -> None:
+    base_root, head = _trees(
+        tmp_path,
+        write_tree,
+        {"vendor.js": "import x from 'requests';" + PAD},
+        {"app.py": "import requests\n", "web.js": "import y from 'left-pad';\n"},
+    )
+
+    evidence = scan(head, ["app.py", "web.js"], base=base_root, ast_grep=ast_grep_binary, max_file_bytes=LIMIT)
+
+    added = cast(list[dict[str, str]], evidence.facts["dependencies"].detail["added_imports"])
+    assert sorted(item["path"] for item in added) == ["app.py", "web.js"]
+    assert evidence.facts["dependencies"].value == "yes"
+    assert [item.path for item in evidence.skipped] == ["vendor.js"]
+
+
+def test_oversized_base_files_of_both_classes_hide_every_import_in_a_mixed_change(
+    tmp_path: Path, write_tree: WriteTree, ast_grep_binary: str
+) -> None:
+    base_root, head = _trees(
+        tmp_path,
+        write_tree,
+        {"vendor.js": "import x from 'left-pad';" + PAD, "vendor.py": "import requests" + PAD},
+        {"app.py": "import requests\n", "web.js": "import y from 'left-pad';\n"},
+    )
+
+    evidence = scan(head, ["app.py", "web.js"], base=base_root, ast_grep=ast_grep_binary, max_file_bytes=LIMIT)
 
     assert evidence.facts["dependencies"].value == "unknown"
     assert evidence.facts["dependencies"].detail["reason"] == "file-too-large"
