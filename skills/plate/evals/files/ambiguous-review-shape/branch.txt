@@ -1,0 +1,21 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/cook-resume. No PR exists for this branch. Mode: auto.
+Quality gate: `just check` passed at HEAD (exit 0). Required artifacts: none.
+
+$ git log --oneline main..HEAD
+e2a7740 feat(cook): resume from the saved checkpoint
+8d1c9f3 refactor(cook): extract checkpoint loading
+3b60a52 feat(cook): save a checkpoint after each curd
+
+$ git log --name-status --format=%h main..HEAD
+e2a7740
+M	src/easy_cheese/skills/cook/checkpoint.py
+M	tests/python/test_cook_checkpoint.py
+8d1c9f3
+M	src/easy_cheese/skills/cook/checkpoint.py
+M	src/easy_cheese/skills/cook/runner.py
+3b60a52
+M	src/easy_cheese/skills/cook/checkpoint.py
+A	tests/python/test_cook_checkpoint.py
+
+All three commits edit the same function in checkpoint.py (load_checkpoint, lines 40-95); their hunks overlap.
+The overall change is 140 insertions and 31 deletions. The branch serves one goal: resume a cook run.

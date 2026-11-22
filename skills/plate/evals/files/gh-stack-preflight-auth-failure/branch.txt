@@ -1,0 +1,13 @@
+Repository: easy-cheese (owner example). Trunk: main. Branch: feat/audit-log with three local commits (schema, writer, wiring). The user wants a gh-stack stack.
+Quality gate: `just check` passed at HEAD (exit 0).
+
+$ python3 skills/plate/scripts/plate.pyz stack-tools
+{"providers":{"graphite":{"installed":false,"repository_signal":false,"status":"not-installed"},"git-town":{"installed":false,"repository_signal":false,"status":"not-installed"},"gh-stack":{"installed":true,"repository_signal":null,"status":"auth-required","http_status":401,"exit_status":1,"stderr":"gh: Bad credentials (HTTP 401)"}},"recommended":"gh-stack"}
+
+$ gh api --include "repos/{owner}/{repo}/stacks"
+HTTP/2.0 401 Unauthorized
+
+$ git log --oneline main..HEAD
+c3d4e5f feat(audit): wire the audit log into the cook runner
+b2c3d4e feat(audit): implement the audit log writer
+a1b2c3d feat(audit): add the audit event protocol schema

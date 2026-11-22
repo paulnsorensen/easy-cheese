@@ -15,6 +15,15 @@ $ git diff --stat main...HEAD
  skills/briesearch/SKILL.md                        | 12 +-
  7 files changed, 336 insertions(+), 14 deletions(-)
 
+$ git diff --name-status --find-renames main...HEAD
+M	skills/briesearch/SKILL.md
+M	src/easy_cheese/shared/cache.py
+A	src/easy_cheese/skills/briesearch/cli_probe.py
+A	src/easy_cheese/skills/briesearch/mcp_probe.py
+M	src/easy_cheese/skills/briesearch/report.py
+A	src/easy_cheese/skills/briesearch/router.py
+A	tests/python/test_briesearch_router.py
+
 Data flow at HEAD: SKILL.md step 2 calls router.select(provider). router checks shared/cache.py first.
 On a miss it calls cli_probe; when the CLI is absent it calls mcp_probe; when both fail it returns route "web".
 The router writes the result to the cache and report.py renders the chosen route.
