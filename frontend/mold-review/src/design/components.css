@@ -63,11 +63,13 @@
 .ec-segment button[aria-pressed="true"] { background: var(--panel); color: var(--accent); box-shadow: 0 0 0 1px var(--hairline); }
 
 /* Question */
+/* Question. The legend floats inside the card, so it never sits on the top border. */
 .ec-question { min-inline-size: 0; margin: 0; }
-.ec-question legend { padding: 0 var(--space-1); color: var(--text); font: 600 17px/24px var(--font-sans); letter-spacing: -0.02em; }
-.ec-question-meta { display: block; color: var(--text-dim); font: 400 0.72rem/1.4 var(--font-mono); letter-spacing: 0.04em; }
+.ec-question legend { float: inline-start; inline-size: 100%; margin: 0 0 var(--space-2); padding: 0; color: var(--text); font: 600 17px/24px var(--font-sans); letter-spacing: -0.02em; }
+.ec-question legend + * { clear: both; }
+.ec-question-meta { display: block; color: var(--text-dim); font: 400 0.8rem/1.5 var(--font-mono); letter-spacing: 0.02em; }
 .ec-question-help { margin: var(--space-3) 0 0; color: var(--text-dim); font: 400 13px/1.5 var(--font-sans); }
-.ec-options { display: grid; gap: var(--space-2); margin-block: var(--space-3) var(--space-4); }
+.ec-options { display: grid; gap: var(--space-3); margin-block: var(--space-4); }
 
 /* ArtifactPanel */
 .ec-artifact-note { margin: var(--space-1) 0 var(--space-4); color: var(--text-dim); font: 400 13px/1.5 var(--font-sans); }
@@ -91,14 +93,19 @@
 @media (max-width: 56rem) { .ec-split { grid-template-columns: minmax(0, 1fr); } .ec-canvas-tools { align-items: flex-start; } .ec-embed { block-size: 390px; } }
 
 /* OptionCard, Field */
-.ec-option { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: var(--space-1) var(--space-3); align-items: start; padding: var(--space-3); border: var(--border-hairline) solid var(--edge); border-radius: var(--radius-md); background: var(--panel); cursor: pointer; transition: border-color var(--duration-fast) ease, background var(--duration-fast) ease; }
+.ec-option { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: var(--space-1) var(--space-3); align-items: start; padding: var(--space-4); border: var(--border-hairline) solid var(--edge); border-radius: var(--radius-md); background: var(--panel); cursor: pointer; transition: border-color var(--duration-fast) ease, background var(--duration-fast) ease; }
 .ec-option:hover { border-color: var(--accent); }
 .ec-option:has(input:checked) { border-color: var(--accent); background: var(--accent-low); box-shadow: 0 0 0 1px var(--accent); }
 .ec-option:has(input:focus-visible) { outline: var(--focus-width) solid var(--accent); outline-offset: var(--focus-offset); }
 .ec-option input { inline-size: 16px; block-size: 16px; margin: 3px 0 0; accent-color: var(--accent); }
-.ec-option strong { font: 600 14px/1.5 var(--font-sans); color: var(--text); }
-.ec-option small { display: block; margin-block-start: 2px; color: var(--text-dim); font: 400 12px/1.5 var(--font-sans); }
-.ec-option:has(input:checked) small { color: var(--accent-high); }
+.ec-option-body { display: grid; gap: var(--space-2); min-inline-size: 0; }
+.ec-option strong { font: 600 15px/1.5 var(--font-sans); color: var(--text); }
+.ec-option-id { margin-inline-start: var(--space-1); padding: 0.1em 0.4em; border-radius: var(--radius-sm); background: var(--field-sunk); color: var(--text-dim); font: 400 0.8rem/1.4 var(--font-mono); }
+.ec-option-detail, .ec-option-points { color: var(--text); font: 400 14px/1.6 var(--font-sans); overflow-wrap: anywhere; }
+.ec-option-points { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.ec-option-point { display: grid; grid-template-columns: 1.4em minmax(0, 1fr); }
+.ec-option-point--gain .ec-option-mark { color: var(--accent); }
+.ec-option-point--risk .ec-option-mark { color: var(--sev-medium); }
 .ec-field { display: grid; gap: var(--space-2); color: var(--text); font: 600 13px/1.4 var(--font-sans); }
 .ec-field small { color: var(--text-dim); font-weight: 400; }
 .ec-input { inline-size: 100%; padding: 10px var(--space-3); border: var(--border-hairline) solid var(--edge); border-radius: var(--radius-md); background: var(--field-sunk); color: var(--text); font: 400 14px/1.5 var(--font-sans); }

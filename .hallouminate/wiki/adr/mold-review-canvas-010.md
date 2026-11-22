@@ -1,6 +1,6 @@
 # ADR: Keep requirements and fork settlement visible in the review canvas
 
-Status: accepted (2026-11-01). Amends [mold-review-canvas-008](./mold-review-canvas-008.md).
+Status: accepted (2026-11-01). Amends [mold-review-canvas-008](./mold-review-canvas-008.md). The phone layout rules are superseded by [mold-review-canvas-012](./mold-review-canvas-012.md).
 
 ## Context
 
