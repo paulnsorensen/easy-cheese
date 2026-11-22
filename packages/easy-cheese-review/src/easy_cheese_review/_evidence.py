@@ -216,6 +216,9 @@ def _dependencies(
     added = fact.detail.get("added_imports")
     rows = cast(list[object], added) if isinstance(added, list) else []
     languages = {_facts.is_python(str(_mapping(item).get("path"))) for item in rows}
+    # An added import of a class with no skipped base file is certainly new, so `yes` holds.
+    if languages - {_facts.is_python(path) for path in base_over}:
+        return fact
     same_language = {path: size for path, size in base_over.items() if _facts.is_python(path) in languages}
     return _unless_skipped(fact, "yes", same_language)
 
