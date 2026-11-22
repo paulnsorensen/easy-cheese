@@ -11,7 +11,7 @@ async function serverAt(cwd){const state=await mkdtemp(join(tmpdir(),'mold-revie
 async function start(state,cwd=root){const child=spawn('python3',[archive,'review','serve','--state-dir',state,'--port','0'],{cwd,env:globalThis.process.env,stdio:['ignore','pipe','inherit']});const line=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('server did not start')),10000);child.stdout.once('data',d=>{clearTimeout(timer);resolve(JSON.parse(d.toString()))});});return {state,child,...line};}
 const question=page=>page.locator('fieldset.question');
 // Durable writes fsync while they hold the server lock, so wait for the response that commits the state, not a fixed time budget.
-const autosaved=(page,match=()=>true)=>page.waitForResponse(res=>res.url().endsWith('/api/autosave')&&res.request().method()==='POST'&&res.ok()&&match(JSON.parse(res.request().postData()||'{}').feedback||{}));
+const autosaved=(page,match=()=>true,timeout)=>page.waitForResponse(res=>res.url().endsWith('/api/autosave')&&res.request().method()==='POST'&&res.ok()&&match(JSON.parse(res.request().postData()||'{}').feedback||{}),{timeout});
 const submitResponse=page=>page.waitForResponse(res=>res.url().endsWith('/api/submit')&&res.request().method()==='POST');
 const sawRevision=(page,number)=>page.waitForResponse(async res=>res.url().endsWith('/api/review')&&res.ok()&&(await res.json()).revision?.number===number);
 test('renders offline review and switches shape views',async({page})=>{const s=await server();try{await page.goto(`${s.url}`);await expect(question(page).getByText('Pick a layout')).toBeVisible();await expect(question(page).getByText('q-layout',{exact:true})).toBeVisible();await expect(question(page).getByText('frontend',{exact:true})).toBeVisible();await expect(question(page).getByText('backend',{exact:true})).toBeVisible();await expect(question(page).getByText('recommended',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'ledger',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'placement',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'gates',exact:true})).toBeDisabled();await page.getByRole('button',{name:'diagram',exact:true}).click();await expect(page.getByRole('button',{name:'diagram',exact:true})).toHaveAttribute('aria-pressed','true');await expect(page.getByLabel('Mermaid source')).toBeVisible();await question(page).getByRole('radio').first().check();}finally{s.child.kill();}});
@@ -84,6 +84,8 @@ const declaredSceneFixture={
 };
 
 test('declared artifacts render and reload as editable scenes',async({page,request})=>{
+  // Two draws, a reload, and their durable saves do not fit the 30s default under load.
+  test.slow();
   const state=await mkdtemp(join(tmpdir(),'mold-review-artifacts-'));
   const input=join(state,'revision.json');
   await writeFile(input,JSON.stringify({questions:[],artifacts:[
@@ -113,18 +115,34 @@ test('declared artifacts render and reload as editable scenes',async({page,reque
       return review.working?.[review.revision.number]?.artifacts?.scene?.scene||{};
     };
     const sceneCount=async()=>(await sceneSnapshot()).elements?.length||0;
-    const sceneSaved=minimum=>autosaved(page,feedback=>(feedback.artifacts?.scene?.scene?.elements?.length||0)>minimum);
-    const drawn=sceneSaved(1);
     const rectangle=page.getByTestId('toolbar-rectangle');
-    await rectangle.locator('..').click();
-    await canvas.scrollIntoViewIfNeeded();
-    const box=await canvas.boundingBox();
-    expect(box).not.toBeNull();
-    await page.mouse.move(box.x+120,box.y+220);
-    await page.mouse.down();
-    await page.mouse.move(box.x+260,box.y+330,{steps:5});
-    await page.mouse.up();
-    await drawn;
+    // Excalidraw drops pointer input while it (re)initializes under load. Retry only the gesture, and stop at the
+    // first autosave request that carries the new element. The save itself is awaited once, outside the retry, so a
+    // slow save cannot cause a second draw and a lost save still fails the test.
+    const drawSaved=async(minimum,x,y)=>{
+      const sent=[];
+      const onRequest=req=>{
+        if(req.url().endsWith('/api/autosave')&&req.method()==='POST'&&(JSON.parse(req.postData()||'{}').feedback?.artifacts?.scene?.scene?.elements?.length||0)>minimum)sent.push(req);
+      };
+      page.on('request',onRequest);
+      try{
+        await expect(async()=>{
+          if(sent.length)return;
+          await rectangle.locator('..').click();
+          await canvas.scrollIntoViewIfNeeded({timeout:5000});
+          const box=await canvas.boundingBox();
+          expect(box).not.toBeNull();
+          await page.mouse.move(box.x+x,box.y+y);
+          await page.mouse.down();
+          await page.mouse.move(box.x+x+140,box.y+y+110,{steps:5});
+          await page.mouse.up();
+          // A good gesture can queue behind an earlier fsync-bound save, so wait well past the 400ms debounce before redrawing.
+          await expect.poll(()=>sent.length,{timeout:8000}).toBeGreaterThan(0);
+        }).toPass({timeout:30000});
+      }finally{page.off('request',onRequest);}
+      expect((await sent[0].response())?.ok()).toBeTruthy();
+    };
+    await drawSaved(1,120,220);
     await expect.poll(sceneCount,{timeout:10000}).toBeGreaterThan(1);
     const saved=await sceneSnapshot();
     expect(saved.elements.some(element=>element.id==='seed-image')).toBeTruthy();
@@ -137,16 +155,7 @@ test('declared artifacts render and reload as editable scenes',async({page,reque
     expect(restored.elements.length).toBe(savedCount);
     expect(restored.files['seed-image']).toMatchObject({dataURL:seededImageData,mimeType:'image/png'});
     expect(restored.appState).toMatchObject({viewBackgroundColor:'#fef3c7',gridSize:24,gridStep:6});
-    await rectangle.locator('..').click();
-    await canvas.scrollIntoViewIfNeeded();
-    const restoredBox=await canvas.boundingBox();
-    expect(restoredBox).not.toBeNull();
-    const redrawn=sceneSaved(savedCount);
-    await page.mouse.move(restoredBox.x+300,restoredBox.y+220);
-    await page.mouse.down();
-    await page.mouse.move(restoredBox.x+400,restoredBox.y+320,{steps:5});
-    await page.mouse.up();
-    await redrawn;
+    await drawSaved(savedCount,300,220);
     await expect.poll(sceneCount,{timeout:10000}).toBeGreaterThan(savedCount);
     const edited=await sceneSnapshot();
     expect(edited.files['seed-image']).toMatchObject({dataURL:seededImageData,mimeType:'image/png'});

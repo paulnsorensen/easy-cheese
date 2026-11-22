@@ -493,11 +493,12 @@ for (const viewport of [{width: 375, height: 667}, {width: 844, height: 390}]) {
       const stack = page.locator('.mc-shapes > .mc-stack');
       await stack.scrollIntoViewIfNeeded();
       expect(await stack.evaluate(element => element.clientHeight)).toBeGreaterThanOrEqual(160);
-      const [shapesBox, conversationBox] = await Promise.all([
-        page.locator('section.mc-shapes').boundingBox(),
-        page.getByRole('complementary', {name: 'Conversation'}).boundingBox(),
-      ]);
-      expect(shapesBox.y + shapesBox.height).toBeLessThanOrEqual(conversationBox.y);
+      // Two boundingBox calls are two round trips; a late layout or scroll between them mixes coordinates, so read both rects in one frame and retry until they settle.
+      await expect.poll(() => page.evaluate(() => {
+        const shapes = document.querySelector('section.mc-shapes').getBoundingClientRect();
+        const conversation = document.querySelector('aside[aria-label="Conversation"]').getBoundingClientRect();
+        return conversation.y - (shapes.y + shapes.height);
+      })).toBeGreaterThanOrEqual(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     } finally {
       s.child.kill();
