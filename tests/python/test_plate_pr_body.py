@@ -127,6 +127,25 @@ def test_a_code_diagram_with_hex_styles_and_one_pr_ref_passes() -> None:
     assert pr_body.check_body(_body(diagram)) == []
 
 
+def test_a_chart_of_pr_numbers_in_a_tilde_fence_is_rejected() -> None:
+    chart = _STACK_CHART.replace("```", "~~~~")
+
+    assert pr_body.check_body(_body(chart)) == [
+        "mermaid block draws PRs (#18, #19, #20), not code; the Stack line gives the order, so remove it"
+    ]
+
+
+def test_hex_theme_colors_in_frontmatter_and_init_directives_are_not_pr_refs() -> None:
+    diagram = (
+        "```mermaid\n---\ntitle: Cache path for this PR\nconfig:\n  themeVariables:\n"
+        "    primaryColor: '#333'\n    primaryTextColor: '#111'\n---\n"
+        "%%{init: {'themeVariables': {'lineColor': '#222', 'secondaryColor': '#444'}}}%%\n"
+        "flowchart LR\n  router --> cache\n```\n"
+    )
+
+    assert pr_body.check_body(_body(diagram)) == []
+
+
 def test_cli_exits_one_and_lists_every_error(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
