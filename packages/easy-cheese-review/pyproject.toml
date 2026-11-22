@@ -25,7 +25,8 @@ classifiers = [
 # The package is pure Python. The ast-grep binary is optional at run time:
 # without it, the scan returns no hits, `tests` is still computed, and
 # `compat`, `dependencies`, and `scope` are `unknown` with a reason.
-dependencies = ["easy-cheese-schemas>=4,<5", "typing-extensions>=4.12.2"]
+# easy-cheese-schemas 4.0.0 and older fail to import on Python 3.11.
+dependencies = ["easy-cheese-schemas>=4.0.1,<5", "typing-extensions>=4.12.2"]
 
 [project.urls]
 Homepage = "https://github.com/paulnsorensen/easy-cheese"
