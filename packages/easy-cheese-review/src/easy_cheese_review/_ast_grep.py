@@ -144,17 +144,30 @@ def scan(binary: str, config: Path, cwd: Path, paths: Sequence[str]) -> list[Jso
     return list(_batch_rows(binary, args, cwd, paths))
 
 
-def imports(binary: str, config: Path, cwd: Path, paths: Sequence[str]) -> dict[str, list[str]]:
+def _exclude_glob(path: str) -> str:
+    """Return a `--globs` value that excludes exactly `path`, relative to the run directory.
+
+    The leading `/` anchors the glob, and a backslash makes every other
+    character literal.
+    """
+    return "!/" + "".join(char if char.isalnum() or char in "/._-" else "\\" + char for char in path)
+
+
+def imports(
+    binary: str, config: Path, cwd: Path, paths: Sequence[str], exclude: Sequence[str] = ()
+) -> dict[str, list[str]]:
     """Return the full text of every import statement, grouped by path.
 
     A path may be a directory; the result keys are file paths relative to `cwd`.
+    A file path in `exclude` is never read, also when a directory holds it.
     The run keeps only the file and text of each row, never the whole row.
     """
     found: dict[str, list[str]] = {}
     if not paths:
         return found
     query = (resources.files(__package__) / "queries" / "imports.yml").read_text(encoding="utf-8")
-    args = ["scan", "-c", str(config), "--inline-rules", query, "--json=stream"]
+    globs = [arg for path in exclude for arg in ("--globs", _exclude_glob(path))]
+    args = ["scan", "-c", str(config), "--inline-rules", query, *globs, "--json=stream"]
     for row in _batch_rows(binary, args, cwd, paths):
         rule_id = row.get("ruleId")
         path = row.get("file")

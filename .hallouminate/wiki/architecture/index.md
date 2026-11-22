@@ -11,6 +11,7 @@
 - [plate-runtime-contract](./plate-runtime-contract.md) — Plate runtime contract
 - [publication-gateway-invariants](./publication-gateway-invariants.md) — Publication gateway invariants
 - [pyz-bundling-pipeline](./pyz-bundling-pipeline.md) — Pyz bundling pipeline
+- [review-evidence-file-size-limit](./review-evidence-file-size-limit.md) — Review evidence file size limit
 - [schema-similarity-and-consolidation-audit](./schema-similarity-and-consolidation-audit.md) — Schema similarity and consolidation audit
 - [skill-python-bundle-doctrine](./skill-python-bundle-doctrine.md) — Skill Python bundle doctrine
 - [spec-landing-block](./spec-landing-block.md) — Spec landing block: the PR shape is settled at mold time
