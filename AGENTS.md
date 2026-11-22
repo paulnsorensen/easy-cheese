@@ -48,8 +48,8 @@ them while enforcement is implemented separately.
   kebab-case; Python package segments use underscores.
 - `easy-cheese-review` is a second distribution. It lives in
   `packages/easy-cheese-review/` with its own `pyproject.toml` and
-  `src/easy_cheese_review/`, so it builds its own wheel. No publish workflow
-  exists for it yet. It holds the `/age`
+  `src/easy_cheese_review/`, so it builds its own wheel. `publish-pypi.yml`
+  publishes it after `easy-cheese-schemas`. It holds the `/age`
   severity rubric, the ast-grep rule pack as package data, and the review
   facts. It may import only `easy_cheese_schemas`. The `/age` archive includes
   it through `skills/age/wedge.toml`.

@@ -7,14 +7,13 @@ The package holds three parts:
 - `easy_cheese_review.rules`: an ast-grep rule pack for Python and TypeScript/JavaScript. Every rule carries `metadata: {dimension, base}`.
 - `easy_cheese_review.scan` and `easy_cheese_review.facts`: a scan of changed files and four deterministic facts (`compat`, `dependencies`, `tests`, `scope`).
 
-The package is not on PyPI yet, because no workflow publishes it.
-Install it from a checkout of the repository:
+Install it from PyPI:
 
 ```sh
-pip install ./packages/easy-cheese-review
+pip install easy-cheese-review
 ```
 
-Requires Python 3.11 or newer and `easy-cheese-schemas>=4,<5`.
+Requires Python 3.11 or newer and `easy-cheese-schemas>=4.0.1,<5`.
 The [ast-grep](https://ast-grep.github.io) binary is optional.
 When `ast-grep` is not on `PATH`, `scan` returns `status: failed:ast-grep-missing` and no hits.
 The `tests` fact needs no ast-grep and stays known; `compat`, `dependencies`, and `scope` are `unknown` with the reason.
