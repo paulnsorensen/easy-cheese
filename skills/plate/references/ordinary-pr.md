@@ -82,7 +82,8 @@ A reviewer reads a short body. Agent-written bodies that claim changes the diff 
 When the repository tracks `.github/PULL_REQUEST_TEMPLATE.md`, use its section headings.
 Otherwise use `## Why`, `## What changed`, `## Non-obvious changes`, `## How to verify`, and `## Risk`.
 `check-pr-body` enforces the 40-line cap, the required headings, the `Plated as` line, the filler-word ban,
-the diagram that `--diagram-base` triggers, and, for a stack layer, the `Stack: <n> of <total>` line and the stack-order flowchart.
+the diagram that `--diagram-base` triggers, and, for a stack layer, the `Stack: <n> of <total>` line.
+It rejects a mermaid block that names two or more PRs or marks `this PR`, because a chart of PRs shows no code.
 The 20-line cap for a small change, the claims, and the reading order stay a judgment call.
 Keep the body file transient unless the repository tracks PR templates or release artifacts.
 Leave a transient body file unstaged after verification.
@@ -112,7 +113,8 @@ Claims:
 - A `## Non-obvious changes` section names every hunk whose intent is not visible from the diff alone, with one line of reason each.
   Write `None` when every hunk is self-evident. Author-annotated reviews carry markedly lower defect density (Cisco review data).
 - List generated files, such as `.pyz` archives and lockfiles, as generated. Tell the reviewer to skip them.
-- Add the topology line `Plated as <shape>: <reason>`. A stack layer adds `Stack: <n> of <total>`, with the PRs below and above it.
+- Add the topology line `Plated as <shape>: <reason>`. A stack layer adds one line: `Stack: <n> of <total>. Below: #<pr>. Above: #<pr>.`
+  That line is the whole stack map. Do not draw the stack order.
   An independent PR does not describe the other groups.
 - State size risk, a weakened check, or a landing-shape deviation under the risk section.
 
@@ -123,11 +125,12 @@ Pick it with the checklist and the smallest-set rules in [`diagrams.md`](../../c
 When several items apply, draw the one that shows the riskiest change.
 
 Add no diagram to a small fix, a docs-only pull request, or an independent PR.
-A stack layer keeps a `flowchart` of the stack order, with this PR marked.
+Never draw the PR stack, such as `main --> #18 --> #19 --> #20`. It repeats the `Stack:` line and shows no code.
+A stack layer gets a diagram only when its own diff calls for one.
 `check-pr-body --diagram-base <base>` applies the three-module flow item to the paths changed since `<base>`.
 It requires a `flowchart` when three or more code modules change and one is added, removed, or renamed.
 Tests, fixtures, vendored code, and built assets are not modules. When it requires none, it prints one line that says why.
-The required `flowchart` takes priority over the other checklist items. On a stack layer, the stack-order flowchart meets it.
+The required `flowchart` takes priority over the other checklist items. It draws the changed modules, never the PRs.
 If the review does not need it, write `Diagram: none, <reason>` in the body instead.
 For example, a rename that keeps every boundary draws none and gives that reason.
 The other checklist items stay a judgment call.

@@ -27,6 +27,10 @@ _SHAPES = _STACK_SHAPES | {"single", _FLAT_SHAPE}
 _PLATED = re.compile(r"^Plated as (?P<shape>[a-z_]+): \S", re.MULTILINE)
 _STACK_LINE = re.compile(r"^Stack: \d+ of \d+", re.MULTILINE)
 _NO_DIAGRAM = re.compile(r"^Diagram: none, \S", re.MULTILINE)
+_MERMAID_FENCE = re.compile(r"^(`{3,}|~{3,})\s*mermaid\b")
+_PR_REF = re.compile(r"(?<![\w:#])#\d+\b")
+_STYLE_LINE = re.compile(r"^\s*(style|classDef|linkStyle|class)\b")
+_THIS_PR = re.compile(r"\bthis PR\b", re.IGNORECASE)
 _CHECKLIST = re.compile(r"^\s*[-*] \[[ xX]\]")
 _FILLER = re.compile(
     r"\b(comprehensive|robust|seamless(ly)?|leverag(e|es|ed|ing)|significantly|dramatically)\b",
@@ -34,14 +38,27 @@ _FILLER = re.compile(
 )
 
 
+def _blocks(lines: list[str]) -> list[tuple[int, int]]:
+    """Return the (open, close) line indexes of every closed backtick or tilde mermaid fence."""
+    blocks: list[tuple[int, int]] = []
+    start: int | None = None
+    fence = ""
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if start is None:
+            opened = _MERMAID_FENCE.match(stripped)
+            if opened is not None:
+                start, fence = index, opened.group(1)
+        elif stripped.startswith(fence) and not stripped.strip(fence[0]):
+            blocks.append((start, index))
+            start = None
+    return blocks
+
+
 def _split_first_diagram(lines: list[str]) -> tuple[list[str], list[str]]:
     """Return (lines outside the first mermaid block, lines of that block)."""
-    for start, line in enumerate(lines):
-        if line.strip().startswith("```mermaid"):
-            for end in range(start + 1, len(lines)):
-                if lines[end].strip().startswith("```"):
-                    return lines[:start] + lines[end + 1 :], lines[start : end + 1]
-            return lines, []
+    for start, end in _blocks(lines)[:1]:
+        return lines[:start] + lines[end + 1 :], lines[start : end + 1]
     return lines, []
 
 
@@ -51,28 +68,23 @@ def _headings(text: str) -> list[str]:
 
 def _diagrams(lines: list[str]) -> list[list[str]]:
     """Return the content lines of every closed mermaid block."""
-    blocks: list[list[str]] = []
-    start: int | None = None
-    for index, line in enumerate(lines):
-        stripped = line.strip()
-        if start is None:
-            if stripped.startswith("```mermaid"):
-                start = index
-        elif stripped.startswith("```"):
-            blocks.append(lines[start + 1 : index])
-            start = None
-    return blocks
+    return [lines[start + 1 : end] for start, end in _blocks(lines)]
 
 
-def _header(block: list[str]) -> str:
-    """Return the diagram type header: the first content line after any frontmatter or comment."""
+def _statements(block: list[str]) -> list[str]:
+    """Return the diagram lines without the frontmatter, `%%` directives and comments, or blanks."""
     content = [line.strip() for line in block]
     if content and content[0] == "---":
         if "---" not in content[1:]:
-            return ""
+            return []
         content = content[content.index("---", 1) + 1 :]
-    header = next((line for line in content if line and not line.startswith("%%")), "")
-    return header.split(maxsplit=1)[0] if header else ""
+    return [line for line in content if line and not line.startswith("%%")]
+
+
+def _header(block: list[str]) -> str:
+    """Return the diagram type header: the first statement line."""
+    statements = _statements(block)
+    return statements[0].split(maxsplit=1)[0] if statements else ""
 
 
 def _draws(diagrams: list[list[str]], kind: str) -> bool:
@@ -80,6 +92,16 @@ def _draws(diagrams: list[list[str]], kind: str) -> bool:
     # Mermaid reads `graph` as an alias of `flowchart`.
     kinds = (kind, "graph") if kind == "flowchart" else (kind,)
     return any(_header(block) in kinds for block in diagrams)
+
+
+def _pr_refs(block: list[str]) -> set[str]:
+    """Return the `#<n>` PR references in a mermaid block's statements, outside hex colors."""
+    return {
+        hit.group(0)
+        for line in _statements(block)
+        if not _STYLE_LINE.match(line)
+        for hit in _PR_REF.finditer(line)
+    }
 
 
 def plated_shape(body: str) -> str | None:
@@ -117,8 +139,15 @@ def check_body(
     if stack_layer:
         if _STACK_LINE.search(body) is None:
             errors.append("stack layer needs a line: Stack: <n> of <total>")
-        if not _draws(diagrams, "flowchart"):
-            errors.append("stack layer needs a mermaid flowchart of the stack order")
+
+    # A chart of PRs repeats the Stack line and shows no code structure.
+    for block in diagrams:
+        refs = _pr_refs(block)
+        if len(refs) >= 2 or any(_THIS_PR.search(line) for line in _statements(block)):
+            named = f" ({', '.join(sorted(refs))})" if len(refs) >= 2 else ""
+            errors.append(
+                f"mermaid block draws PRs{named}, not code; the Stack line gives the order, so remove it"
+            )
 
     if (
         need is not None
@@ -185,7 +214,7 @@ def check_cmd(
     body_file
         Path to the drafted PR body.
     stack_layer
-        Require the stack position line and the stack-order flowchart.
+        Require a stacked shape and the stack position line.
     template_file
         Path to the repository PR template; its `##` headings replace the defaults.
     diagram_base
