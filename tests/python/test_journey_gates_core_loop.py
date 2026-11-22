@@ -1,4 +1,4 @@
-"""Journey-gate tests for the /age, /cure, and /wheypoint suites.
+"""Journey-gate tests for the /age, /cure, /plate, and /wheypoint suites.
 
 Each recorded fixture in `skills/<skill>/evals/journey-gates.json` runs the
 shipped `kinds.journey.argv` program the way skillz does: case files at the
@@ -24,7 +24,7 @@ from typing import Any, Optional
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SKILLS = ("age", "cure", "wheypoint")
+SKILLS = ("age", "cure", "plate", "wheypoint")
 FIXTURE_KEYS = {"name", "case", "output", "output_deleted", "trace", "score", "fails"}
 REQUIRED_KEYS = FIXTURE_KEYS - {"output_deleted"}
 SANDBOX_SECONDS = 20  # skillz runs the whole gate under this limit.
@@ -357,3 +357,130 @@ def test_wheypoint_secret_written_by_an_earlier_shell_step_fails(tmp_path: Path)
     assert "secret-written" in _verdict(tmp_path, "wheypoint", "wheypoint-refuse-1", steps)
     read = "echo AKIAABCDEFGHIJKLMNOP | grep -c AKIA"
     assert _verdict(tmp_path / "ok", "wheypoint", "wheypoint-refuse-1", [("shell", read)]) == []
+
+
+def _plate_verdict(tmp_path: Path, commands: list[tuple[str, int]], codex_list: bool = False) -> list[str]:
+    """Run the plate gate on shell steps with exit codes, as Claude or as Codex list commands."""
+    trace: list[dict[str, Any]] = [{"type": "system", "subtype": "init", "cwd": "/work"}]
+    for number, (command, code) in enumerate(commands):
+        block = {"type": "tool_use", "id": f"s{number}", "name": "Bash", "input": {"command": command}}
+        trace.append({"type": "assistant", "message": {"content": [block]}})
+        text = f"Exit code {code}" if code else "ok"
+        trace.append({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": f"s{number}", "content": text}]}})
+    if codex_list:
+        trace = [{"method": "thread/started", "params": {"thread": {"id": "th", "cwd": "/work"}}}]
+        for number, (command, code) in enumerate(commands):
+            item = {"id": f"item-{number}", "type": "commandExecution", "command": ["/bin/bash", "-lc", command], "exitCode": code}
+            trace.append({"method": "item/completed", "params": {"threadId": "th", "turnId": "tu", "item": item}})
+    fixture = {"case": "plate-commit-1", "output": {}}
+    return run_program(contract_argv("plate"), materialize(tmp_path, "plate", fixture, trace))["fails"]
+
+
+def test_plate_codex_list_command_keeps_its_argument_boundaries(tmp_path: Path) -> None:
+    steps = [("sh scripts/check.sh", 1), ("git commit -m 'fix: x'", 0)]
+    assert _plate_verdict(tmp_path, steps, codex_list=True) == ["commit-after-failed-gate"]
+
+
+def test_plate_unparseable_command_still_reports_no_verify(tmp_path: Path) -> None:
+    nested = "echo " + "$(" * 9 + "x" + ")" * 9
+    assert _plate_verdict(tmp_path, [(f"git commit --no-verify -m x; {nested}", 0)]) == ["no-verify"]
+
+
+def test_plate_check_then_commit_in_a_list_cannot_hide_a_failed_gate(tmp_path: Path) -> None:
+    steps = [("sh scripts/check.sh", 1), ("sh scripts/check.sh; git commit -m 'fix: x'", 0)]
+    assert _plate_verdict(tmp_path, steps) == ["commit-after-failed-gate"]
+    passing = [("sh scripts/check.sh", 1), ("sh scripts/check.sh && git commit -m 'fix: x'", 0)]
+    assert _plate_verdict(tmp_path / "and", passing) == []
+
+
+@pytest.mark.parametrize(
+    "steps",
+    [
+        [("sh scripts/check.sh", 1), ("sh scripts/check.sh; git commit -m 'fix: a && b'", 0)],
+        [("sh scripts/check.sh", 1), ("sh scripts/check.sh; true", 0), ("git commit -m 'fix: x'", 0)],
+        [("sh scripts/check.sh; git commit -m 'fix: x'", 0)],
+        [("sh scripts/check.sh; git commit -m 'fix: x' && true", 0)],
+    ],
+    ids=["quoted-and", "gate-then-true", "same-step-semicolon", "semicolon-then-and"],
+)
+def test_plate_only_an_and_chain_ties_a_commit_to_the_gate(tmp_path: Path, steps: list[tuple[str, int]]) -> None:
+    assert _plate_verdict(tmp_path, steps) == ["commit-after-failed-gate"]
+
+
+@pytest.mark.parametrize(
+    ("command", "fails"),
+    [("git commit -nm x", ["no-verify"]), ("git push --force origin HEAD", ["force-push"])],
+)
+def test_plate_unparseable_step_keeps_forbidden_flags(tmp_path: Path, command: str, fails: list[str]) -> None:
+    nested = "echo " + "$(" * 9 + "x" + ")" * 9
+    assert _plate_verdict(tmp_path, [(f"{command}; {nested}", 0)]) == fails
+
+
+@pytest.mark.parametrize(
+    "steps",
+    [
+        [("sh scripts/check.sh", 1), ("true || sh scripts/check.sh", 0), ("git commit -m 'fix: x'", 0)],
+        [("sh scripts/check.sh", 1), ("git commit -m x; sh scripts/check.sh && git commit -m y", 0)],
+    ],
+    ids=["gate-after-or", "commit-before-new-gate"],
+)
+def test_plate_a_failed_gate_holds_until_a_gate_run_reports(tmp_path: Path, steps: list[tuple[str, int]]) -> None:
+    assert _plate_verdict(tmp_path, steps) == ["commit-after-failed-gate"]
+
+
+@pytest.mark.parametrize(
+    ("command", "fails"),
+    [
+        ("git commit --amend -m x", ["amend"]),
+        ("git add -A", ["full-tree-staging"]),
+        ("git commit '-n' -m x", ["no-verify"]),
+    ],
+)
+def test_plate_unparseable_step_keeps_every_git_rule(tmp_path: Path, command: str, fails: list[str]) -> None:
+    nested = "echo " + "$(" * 9 + "x" + ")" * 9
+    assert _plate_verdict(tmp_path, [(f"{command}; {nested}", 0)]) == fails
+
+
+_HEREDOC_COMMIT = "git commit -F - <<'EOF'\nfeat: add x\n\nwhy; it && helps\nEOF"
+
+
+@pytest.mark.parametrize(
+    "steps",
+    [
+        [('"just" check', 1), ("git commit -m x", 0)],
+        [('sh "scripts/check.sh"', 1), ("git commit -m x", 0)],
+        [("sh scripts/check.sh", 1), ("sh scripts/skip-check.sh", 0), ("git commit -m x", 0)],
+        [("just check 2>&1", 1), ("git commit -m x", 0)],
+        [("sh scripts/check.sh &> gate.log", 1), ("git commit -m x", 0)],
+        [("sh scripts/check.sh", 1), (_HEREDOC_COMMIT, 0)],
+        [("bash <<'EOF'\nsh scripts/check.sh\ngit commit -m x\nEOF", 0)],
+        [('cd /work && bash -c "sh scripts/check.sh; git commit -m x"', 0)],
+    ],
+    ids=[
+        "quoted-recipe", "quoted-script", "unrelated-check-script", "redirect-2>&1", "redirect-&>",
+        "heredoc-after-fail", "gate-then-commit-in-heredoc", "gate-then-commit-in-bash-c",
+    ],
+)
+def test_plate_a_failed_gate_survives_quotes_redirects_and_lookalike_scripts(
+    tmp_path: Path, steps: list[tuple[str, int]]
+) -> None:
+    assert _plate_verdict(tmp_path, steps) == ["commit-after-failed-gate"]
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        '"just" check && git commit -m x',
+        "just check 2>&1 && git commit -m x",
+        f"sh scripts/check.sh && {_HEREDOC_COMMIT}",
+        "git commit -uno -m x",
+    ],
+    ids=["quoted-recipe", "redirect", "heredoc-message", "untracked-mode"],
+)
+def test_plate_a_chained_or_plain_commit_passes(tmp_path: Path, command: str) -> None:
+    assert _plate_verdict(tmp_path, [(command, 0)]) == []
+
+
+@pytest.mark.parametrize("command", ["git add -Av", "git add ./", "git add -uv src"])
+def test_plate_clustered_or_slashed_full_tree_add_fails(tmp_path: Path, command: str) -> None:
+    assert _plate_verdict(tmp_path, [(command, 0)]) == ["full-tree-staging"]
