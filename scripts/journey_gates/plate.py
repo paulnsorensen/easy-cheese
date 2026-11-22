@@ -34,7 +34,7 @@ HOOK_DIRS = (".git/hooks/", "githooks/")
 def is_hook_path(word: str) -> bool:
     return any(hook in word.rstrip("/") + "/" for hook in HOOK_DIRS)
 FULL_ADD = {"-A", "--all", ".", "*", ":/", "-u", "--update"}
-# Commit options with a value (rest of cluster or next word); u only attached (-uno).
+# Commit options with a value (rest of cluster or next word); u: attached only.
 VALUE_FLAGS, ATTACHED_FLAGS = "mFCct", "u"
 SHELLS = ("sh", "bash", "zsh", "dash")
 
@@ -118,7 +118,6 @@ def _mask(match: re.Match[str]) -> str:
 
 
 def segments(command: str) -> list[tuple[str, list[list[str]]]]:
-    """Each command with the operator before it."""
     text = cut = script(command)
     for mask in MASKS:
         cut = mask.sub(_mask, cut)
@@ -141,13 +140,15 @@ def commit_in(chain: list[Any]) -> bool:
 
 
 def gate_links(command: str) -> tuple[bool, bool, bool]:
-    """(commit after the last gate via && only, step status is the gate's, commit before it)."""
+    """(commit after last gate via && only, status is the gate's, commit before it)."""
     chain = segments(command)
     gates = [i for i, (_, argvs) in enumerate(chain) if any(map(runs_gate, argvs))]
     if not gates:
         return False, False, False
     last = gates[-1]
-    ran = all(op != "||" for op, _ in chain[1 : last + 1])
+    # A command after the gate in its segment owns the status.
+    hits = [*map(runs_gate, chain[last][1])][::-1]
+    ran = all(op != "||" for op, _ in chain[1 : last + 1]) and not hits.index(True)
     linked = ran and all(op == "&&" for op, _ in chain[last + 1 :])
     return linked and commit_in(chain[last + 1 :]), linked, commit_in(chain[:last])
 

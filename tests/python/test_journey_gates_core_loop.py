@@ -453,8 +453,13 @@ _HEREDOC_COMMIT = "git commit -F - <<'EOF'\nfeat: add x\n\nwhy; it && helps\nEOF
         [("just check 2>&1", 1), ("git commit -m x", 0)],
         [("sh scripts/check.sh &> gate.log", 1), ("git commit -m x", 0)],
         [("sh scripts/check.sh", 1), (_HEREDOC_COMMIT, 0)],
+        [("bash <<'EOF'\nsh scripts/check.sh\ngit commit -m x\nEOF", 0)],
+        [('cd /work && bash -c "sh scripts/check.sh; git commit -m x"', 0)],
     ],
-    ids=["quoted-recipe", "quoted-script", "unrelated-check-script", "redirect-2>&1", "redirect-&>", "heredoc-after-fail"],
+    ids=[
+        "quoted-recipe", "quoted-script", "unrelated-check-script", "redirect-2>&1", "redirect-&>",
+        "heredoc-after-fail", "gate-then-commit-in-heredoc", "gate-then-commit-in-bash-c",
+    ],
 )
 def test_plate_a_failed_gate_survives_quotes_redirects_and_lookalike_scripts(
     tmp_path: Path, steps: list[tuple[str, int]]
