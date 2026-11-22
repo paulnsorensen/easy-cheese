@@ -618,7 +618,8 @@
         "[R-FORK-C4 | pass-fail | Event] WHEN a fork is an architecture fork THE graph SHALL name the C4 level and the elements that `diagrams.md` defines.",
         "[R-FORK-TABLE | pass-fail | Unwanted] IF the branches of a fork differ only in properties, such as a metric, a person, a date, or a policy, THE card SHALL use a symbol table and no graph.",
         "[R-FORK-NO-MERMAID | pass-fail | Unwanted] IF the host does not render Mermaid THE answer SHALL hold no mermaid fence.",
-        "[R-FORK-FIELDS | pass-fail | Ubiquitous] THE answer SHALL give each card the `F-n` title, `Decides:`, `Moves:`, `Today:`, the branches with their gains, costs, and risks, and a `Legend:` line.",
+        "[R-FORK-FIELDS | pass-fail | Ubiquitous] THE answer SHALL give each card a `Basis:` line, the `F-n` title, `Decides:`, `Moves:`, `Today:`, the branches with their gains, costs, and risks, and a `Legend:` line.",
+        "[R-FORK-BASIS | pass-fail | Ubiquitous] THE answer SHALL open each card with a basis sentence that cites ledger ids from the state, such as `ev-n` or `AC-n`, with their findings, and ends with the fork's question.",
         "[Q-FORK-SCOPE | quality | Ubiquitous] THE answer SHALL show in each graph only the elements that its branches change.",
         "[Q-FORK-SYMBOLS | quality | Ubiquitous] THE answer SHALL use each `fork-questions.md` symbol with one meaning."
       ]
@@ -638,7 +639,8 @@
         "[R-FORK-C4 | pass-fail | Event] WHEN a fork is an architecture fork THE graph SHALL name the C4 level and the elements that `diagrams.md` defines.",
         "[R-FORK-TABLE | pass-fail | Unwanted] IF the branches of a fork differ only in properties, such as a metric, a person, a date, or a policy, THE card SHALL use a symbol table and no graph.",
         "[R-FORK-NO-MERMAID | pass-fail | Unwanted] IF the host does not render Mermaid THE answer SHALL hold no mermaid fence.",
-        "[R-FORK-FIELDS | pass-fail | Ubiquitous] THE answer SHALL give each card the `F-n` title, `Decides:`, `Moves:`, `Today:`, the branches with their gains, costs, and risks, and a `Legend:` line.",
+        "[R-FORK-FIELDS | pass-fail | Ubiquitous] THE answer SHALL give each card a `Basis:` line, the `F-n` title, `Decides:`, `Moves:`, `Today:`, the branches with their gains, costs, and risks, and a `Legend:` line.",
+        "[R-FORK-BASIS | pass-fail | Ubiquitous] THE answer SHALL open each card with a basis sentence that cites ledger ids from the state, such as `ev-n` or `AC-n`, with their findings, and ends with the fork's question.",
         "[Q-FORK-SCOPE | quality | Ubiquitous] THE answer SHALL show in each graph only the elements that its branches change.",
         "[Q-FORK-SYMBOLS | quality | Ubiquitous] THE answer SHALL use each `fork-questions.md` symbol with one meaning."
       ]
@@ -658,7 +660,8 @@
         "[R-FORK-C4 | pass-fail | Event] WHEN a fork is an architecture fork THE graph SHALL name the C4 level and the elements that `diagrams.md` defines.",
         "[R-FORK-TABLE | pass-fail | Unwanted] IF the branches of a fork differ only in properties, such as a metric, a person, a date, or a policy, THE card SHALL use a symbol table and no graph.",
         "[R-FORK-NO-MERMAID | pass-fail | Unwanted] IF the host does not render Mermaid THE answer SHALL hold no mermaid fence.",
-        "[R-FORK-FIELDS | pass-fail | Ubiquitous] THE answer SHALL give each card the `F-n` title, `Decides:`, `Moves:`, `Today:`, the branches with their gains, costs, and risks, and a `Legend:` line.",
+        "[R-FORK-FIELDS | pass-fail | Ubiquitous] THE answer SHALL give each card a `Basis:` line, the `F-n` title, `Decides:`, `Moves:`, `Today:`, the branches with their gains, costs, and risks, and a `Legend:` line.",
+        "[R-FORK-BASIS | pass-fail | Ubiquitous] THE answer SHALL open each card with a basis sentence that cites ledger ids from the state, such as `ev-n` or `AC-n`, with their findings, and ends with the fork's question.",
         "[Q-FORK-SCOPE | quality | Ubiquitous] THE answer SHALL show in each graph only the elements that its branches change.",
         "[Q-FORK-SYMBOLS | quality | Ubiquitous] THE answer SHALL use each `fork-questions.md` symbol with one meaning."
       ]

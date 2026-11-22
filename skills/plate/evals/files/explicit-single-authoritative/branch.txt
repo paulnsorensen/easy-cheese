@@ -1,0 +1,20 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/manifest-landing. No PR exists for this branch.
+The user said: "Plate this as one PR." Graphite is installed and tracks the repository, which could host a stack.
+Quality gate: not yet run; `just check` exits 0 when run. Required artifacts: none. The remote origin has no such branch yet.
+
+$ git status --short
+ M src/easy_cheese_schemas/landing.py
+ M src/easy_cheese/skills/mold/landing.py
+ M tests/python/test_landing.py
+?? .cheese/plate/body.md
+
+$ git log --oneline main..HEAD
+(no output)
+
+$ git diff --stat
+ src/easy_cheese_schemas/landing.py      | 12 ++++++++++++
+ src/easy_cheese/skills/mold/landing.py  | 27 +++++++++++++++++++++++++--
+ tests/python/test_landing.py            | 30 ++++++++++++++++++++++++++++++
+ 3 files changed, 67 insertions(+), 2 deletions(-)
+
+The schema file is a separable layer, but the user chose one PR.

@@ -292,7 +292,9 @@ def test_fork_card_cases_cover_every_fork_of_the_state() -> None:
         assert all(fork in expected for fork in forks), case["name"]
         assert f"{forks[-1]} uses a symbol table and no graph" in expected
         assert "no mermaid fence" in expected
-        assert {"R-FORK-GRAPH", "R-FORK-TABLE", "R-FORK-NO-MERMAID", "R-FORK-FIELDS"} <= _ids(case)
+        assert {"R-FORK-GRAPH", "R-FORK-TABLE", "R-FORK-NO-MERMAID", "R-FORK-FIELDS", "R-FORK-BASIS"} <= _ids(case)
+        # R-FORK-BASIS needs ledger ids in the state for each card to cite.
+        assert re.search(r"^- ev-\d+ ", state, re.M), case["name"]
 
 
 def _case_id(case: object) -> str:
