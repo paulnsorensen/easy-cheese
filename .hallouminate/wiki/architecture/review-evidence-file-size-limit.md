@@ -22,7 +22,10 @@ The rules live in `_compute_facts` and `_dependencies` in `packages/easy-cheese-
 - `tests` pairs file names and reads no file, so it stays known in every mode.
 - `scope`: a missing import can only join groups, so `yes` becomes `unknown`.
 - `compat`: a changed file skipped in either tree is not compared, so `no` becomes `unknown`.
-- `dependencies`: a head skip turns `no` into `unknown`. A base skip turns a `yes` that rests only on `added_imports` into `unknown`, but only when the skipped file has the language class (Python or script) of an added import; a manifest or lockfile change keeps `yes`.
+- `dependencies`: a head skip turns `no` into `unknown`. A manifest or lockfile change keeps `yes`.
+  A base skip turns a `yes` that rests only on `added_imports` into `unknown` only when every added import has the language class (Python or script) of a skipped base file.
+  One added import of a class with no skipped base file is certainly new, so a mixed-language change keeps `yes`.
+  When the value becomes `unknown`, `skipped` lists only the base files of those classes.
 
 ## Base-tree exclusion
 

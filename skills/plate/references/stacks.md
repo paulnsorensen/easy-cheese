@@ -14,7 +14,7 @@ Ordinary single pull request work never reads this file.
    They inherit the layer when they directly verify or describe the decision.
    Each layer's implementation preserves semantics or alters them, never both.
    Each layer's pull request body follows `ordinary-pr.md` § Body contract, including `## Non-obvious changes` and the stack position line.
-   A stack layer always carries the stack-order diagram.
+   The `Stack:` line is the whole stack map. Do not draw the stack order.
    Check each layer body with `check-pr-body --stack-layer` before the provider creates or edits the PR.
    Put semantics-preserving layers below the semantic changes that depend on their reorganization.
 3. Create or adopt provider lineage in the approved bottom-to-top order.

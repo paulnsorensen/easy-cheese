@@ -1,0 +1,27 @@
+Repository: affineur (Python, GitHub Actions). Trunk: main. Branch: feat/outcome-matcher. No PR exists for this branch.
+Quality gate: `python -m unittest discover -s tests` passed at HEAD and at each commit below (exit 0 each, 461 tests at HEAD).
+Installed stack tools: gh stack (repository preflight returns 200, enabled). Graphite and Git Town are absent.
+No PR template. Spec: .cheese/specs/affineur-outcome-matcher.md, with landing shape stacked_linear in three layers (AC-1..AC-9).
+
+$ git log --oneline --reverse main..HEAD
+7e1a2c0 feat(outcomes): add an outcomes command that matches review findings to merged fixes
+8f3b9d1 feat(outcomes): add a scheduled workflow that commits the outcome report
+9a4c0e2 feat(gate): fail the merge gate when the outcome report is stale or below thresholds
+
+$ git diff --stat per commit
+7e1a2c0  affineur/outcomes.py (+214), affineur/__main__.py (+12 -1), tests/test_outcomes.py (+188)              415 lines
+8f3b9d1  .github/workflows/outcomes.yml (+71), .github/workflows/affineur-outcomes.yml (+14),
+         .github/workflows/review.yml (+22 -6), examples/outcomes-caller.yml (+18), README.md (+24),
+         tests/test_workflows.py (+96)                                                                     245 lines
+9a4c0e2  affineur/gate.py (+83 -9), tests/test_gate.py (+121)                                              213 lines
+
+Commit 8f3b9d1 in detail:
+- outcomes.yml is a reusable workflow. It runs `python -m affineur outcomes` and commits outcomes/report.json to the affineur-records branch. Its token has contents: write and pull-requests: read only.
+- affineur-outcomes.yml calls it on a weekly schedule and on workflow_dispatch.
+- review.yml: the record-branch job now fetches, applies its file again, and retries its push 3 times when the branch moves. Before, a rejected push lost the record.
+- With no affineur-records branch, the outcomes job ends with a notice and writes nothing.
+- tests/test_workflows.py runs both commit scripts against a local remote whose tip moves before the first push.
+- actionlint is not installed. No run on GitHub happened: a new workflow cannot start before it is on the default branch.
+
+Dependencies: 8f3b9d1 runs the command that 7e1a2c0 adds. 9a4c0e2 reads the report that 8f3b9d1 commits.
+Each commit builds and passes the gate alone on top of its parent.
