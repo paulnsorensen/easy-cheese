@@ -1,0 +1,15 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/queue-backoff. No PR exists. Mode: auto. The repo has a .hallouminate/wiki/ tree.
+Durable design decision made in this work: queue retries use capped exponential backoff (2s base, 60s cap) because fixed delays overloaded the broker.
+
+$ /wiki-ingest
+error: MCP server hallouminate failed to connect (connection refused). The wiki cannot be written.
+
+ADR fallback format: skills/mold/references/adr.md. Tracked path: docs/adr/<slug>-NNN.md. Existing ADRs: docs/adr/retry-policy-001.md.
+Quality gate: `just check` exits 0 once the ADR exists.
+
+$ git status --short
+ M src/easy_cheese/shared/queue.py
+ M tests/python/test_queue.py
+
+$ git log --oneline main..HEAD
+(no output)
