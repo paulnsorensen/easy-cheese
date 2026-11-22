@@ -90,33 +90,21 @@ jobs:
 
       - name: Verify the sdist ships only the package
         if: steps.version.outputs.should_publish == 'true'
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import sys
-          import tarfile
-          from pathlib import Path
+        env:
+          ALLOWED: src/easy_cheese_schemas/ docs/easy-cheese-schemas.md
+        run: python3 scripts/sdist_contents_check.py
 
-          sdist = next(Path("dist").glob("*.tar.gz"))
-          members = {n.split("/", 1)[1] for n in tarfile.open(sdist).getnames() if "/" in n}
-          stray = sorted(
-              m for m in members
-              if not m.startswith(("src/easy_cheese_schemas/", "docs/easy-cheese-schemas.md"))
-              and m not in {"LICENSE", "PKG-INFO", "pyproject.toml", ".gitignore"}
-          )
-          if stray:
-              print(f"::error::sdist would publish files outside the package: {stray}")
-              sys.exit(1)
-          print(f"sdist is package-only ({len(members)} members).")
-          PY
-
-      # The suites run on 3.12, so only this step proves the 3.11 floor.
+      # The suites run on 3.12, so only this step proves the 3.11 floor. This
+      # job holds id-token: write, so the venv takes only hash-locked
+      # dependencies and the wheel built here; pip check proves they satisfy it.
       - name: Import the wheel on Python 3.11
         if: steps.version.outputs.should_publish == 'true'
         run: |
           set -euo pipefail
           python3.11 -m venv "$RUNNER_TEMP/py311"
-          "$RUNNER_TEMP/py311/bin/pip" install --no-cache-dir dist/*.whl
+          "$RUNNER_TEMP/py311/bin/pip" install --no-cache-dir --require-hashes --requirement requirements/runtime.txt
+          "$RUNNER_TEMP/py311/bin/pip" install --no-cache-dir --no-deps dist/*.whl
+          "$RUNNER_TEMP/py311/bin/pip" check
           cd "$RUNNER_TEMP"
           py311/bin/python -I -c 'import easy_cheese_schemas'
 
@@ -164,43 +152,34 @@ jobs:
           pip install --no-cache-dir --only-binary=:all: --require-hashes --requirement requirements/ast-grep.txt
           python3 -m pytest tests/review/python -q
 
+      # The schemas wheel comes from this checkout's schemas source, so the 3.11
+      # check needs no PyPI lookup. It matches PyPI only when the publish job
+      # uploaded in this run.
       - name: Build sdist and wheel
         if: steps.version.outputs.should_publish == 'true'
         run: |
           set -euo pipefail
           pip install --no-cache-dir build==1.5.0
           python3 -m build packages/easy-cheese-review --outdir dist
+          python3 -m build --wheel --outdir "$RUNNER_TEMP/schemas-dist"
 
       - name: Verify the sdist ships only the package
         if: steps.version.outputs.should_publish == 'true'
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import sys
-          import tarfile
-          from pathlib import Path
+        env:
+          ALLOWED: src/easy_cheese_review/ README.md
+        run: python3 scripts/sdist_contents_check.py
 
-          sdist = next(Path("dist").glob("*.tar.gz"))
-          members = {n.split("/", 1)[1] for n in tarfile.open(sdist).getnames() if "/" in n}
-          stray = sorted(
-              m for m in members
-              if not m.startswith("src/easy_cheese_review/")
-              and m not in {"LICENSE", "PKG-INFO", "README.md", "pyproject.toml", ".gitignore"}
-          )
-          if stray:
-              print(f"::error::sdist would publish files outside the package: {stray}")
-              sys.exit(1)
-          print(f"sdist is package-only ({len(members)} members).")
-          PY
-
-      # Resolve easy-cheese-schemas from PyPI, as a user install does. The
-      # publish job has uploaded any new schemas version by now.
+      # This job holds id-token: write, so the venv takes only hash-locked
+      # dependencies and wheels built here; pip check proves they satisfy the
+      # review package's declared requirements.
       - name: Import the wheel on Python 3.11
         if: steps.version.outputs.should_publish == 'true'
         run: |
           set -euo pipefail
           python3.11 -m venv "$RUNNER_TEMP/py311"
-          "$RUNNER_TEMP/py311/bin/pip" install --no-cache-dir dist/*.whl
+          "$RUNNER_TEMP/py311/bin/pip" install --no-cache-dir --require-hashes --requirement requirements/runtime.txt
+          "$RUNNER_TEMP/py311/bin/pip" install --no-cache-dir --no-deps dist/*.whl "$RUNNER_TEMP"/schemas-dist/*.whl
+          "$RUNNER_TEMP/py311/bin/pip" check
           cd "$RUNNER_TEMP"
           py311/bin/python -I -c 'import easy_cheese_review, easy_cheese_review.severity'
 
