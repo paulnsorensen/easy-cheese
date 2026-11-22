@@ -6,10 +6,11 @@ import re
 import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from enum import Enum
-from typing import ClassVar, Protocol, TypeVar, cast, override
+from typing import ClassVar, Protocol, TypeVar, cast
 
 import attrs
 from attrs import define, field, validators
+from typing_extensions import override
 
 _attrs_field = field
 

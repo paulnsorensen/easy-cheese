@@ -33,11 +33,11 @@ src/
 `easy_cheese_schemas` is an independently published distribution.
 Wedge copies selected local runtime packages directly; this build does not create internal application or shared-runtime wheels.[^3]
 
-`easy-cheese-review` is a second distribution with its own project directory. It builds its own wheel. No publish workflow exists for it yet:
+`easy-cheese-review` is a second distribution with its own project directory. It builds its own wheel. `publish-pypi.yml` publishes it in a job that waits for the schemas job, because the review package can require a schemas version that only that job uploads:
 
 ```text
 packages/easy-cheese-review/
-├── pyproject.toml          # its own wheel; depends on easy-cheese-schemas>=4,<5
+├── pyproject.toml          # its own wheel; depends on easy-cheese-schemas>=4.0.1,<5
 └── src/easy_cheese_review/ # rubric, ast-grep rule pack (package data), facts
 ```
 
