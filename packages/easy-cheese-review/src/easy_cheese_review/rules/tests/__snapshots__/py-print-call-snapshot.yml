@@ -1,0 +1,8 @@
+id: py-print-call
+snapshots:
+  "print(f\"processing {item}\")":
+    labels:
+    - source: print(f"processing {item}")
+      style: primary
+      start: 0
+      end: 27

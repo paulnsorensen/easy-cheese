@@ -1,0 +1,9 @@
+id: ts-ts-ignore
+valid:
+  - |
+    // @ts-expect-error legacy API typed wrong upstream
+    legacyCall(data);
+invalid:
+  - |
+    // @ts-ignore
+    legacyCall(data);

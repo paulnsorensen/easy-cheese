@@ -1,0 +1,11 @@
+id: ts-explicit-any
+language: typescript
+severity: warning
+message: An explicit `any` turns off type checks for this value.
+note: Use a real type, a generic, or `unknown` with a guard (@typescript-eslint/no-explicit-any).
+metadata:
+  dimension: deslop
+  base: low
+rule:
+  kind: predefined_type
+  regex: '^any$'

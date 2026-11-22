@@ -133,3 +133,11 @@
 - 2026-11-15 · affinage:pr-358 · curated · research/fanout-gating-units-evidence.md, research/schema-grounded-subagent-handoffs.md, architecture/fanout-artifact-format-question.md · promoted the fan-out sizing research and the schema-handoff research from `.cheese/` scratch, and replaced the stale `MIN_CURD_SURFACE`, `MAX_WAVE_SIZE`, and `n=1/2/5` text in the #313 page with ADR-005 links (fork B leaves the #313 disposition at no).
 - 2026-11-15 · wiki-harvest · curated · fanout-engine-entities.md, architecture/workflow-contract-map.md · recorded two durable facts from legacy PR #426: the shared Wiring graph algorithm in `wiring_graph.py` (PR #414; four modules import it on main, including `mold/review.py`) and the optional `ReviewRequest.review_kind` field (PR #405). Dropped the Guard contract entry: `src/cut/` was removed in #560 and `src/mold/taste_test.py` no longer exists.
 - 2026-11-15 · affinage:pr-872 · curated · architecture/workflow-contract-map.md, fanout-engine-entities.md · `ReviewRequest.review_kind` is readable when a producer sets it, and the current workflow leaves it unset; merged the duplicate Wiring graph paragraph from #831 and cited each importer by path and line.
+
+- 2026-11-15 · 4ff8c4581c96fd93 · merged · architecture/age-fanout-router.md · easy-cheese-schemas 4.0.0: seventeen dimensions (tests, compat, scope, dependencies), subject mapping, `blocker` severity word, `static` evidence kind.
+- 2026-11-15 · 4ff8c4581c96fd93 · merged · workflow-invariants.md · /age is now a seventeen-dimension review.
+- 2026-11-15 · 4ff8c4581c96fd93 · merged · architecture/ultracook-agent-topology.md · automatic selection and `ReviewDebt` use `blocker`, not `critical`.
+- 2026-11-21 · affinage:pr-887 · curated · architecture/age-fanout-router.md · `tests` goes to `spec-tests` and `scope` goes to `altitude`, because the altitude worker gets the whole-change view that the `scope` rubric needs; added line anchors to the 4.0.0 citations.
+- 2026-11-21 · affinage:pr-887 · curated · architecture.md · the pipeline table calls `/age` a seventeen-dimension review.
+- 2026-11-21 · affinage:pr-887 · curated · ideas/minimal-easy-cheese.md · the Age dimension-count drift is now past tense; 4.0.0 aligned the router wiki and the skill at seventeen.
+

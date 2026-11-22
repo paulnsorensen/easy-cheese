@@ -1,6 +1,8 @@
 """Unit tests for the pure remediation decision core (mini-spec Sec4/Sec5)."""
 from __future__ import annotations
 
+import re
+
 import attrs
 import pytest
 
@@ -131,6 +133,14 @@ def _state(
     )
 
 
+class TestReviewDebt:
+    def test_score_weights_blocker_at_sixteen(self) -> None:
+        with pytest.raises(ValueError, match=re.escape("16*blocker")):
+            _ = ReviewDebt(blocker=1, high=0, medium=0, contained_low=0, score=15)
+        debt = ReviewDebt(blocker=1, high=0, medium=0, contained_low=0, score=16)
+        assert debt == ReviewDebt.compute(blocker=1, high=0, medium=0, contained_low=0)
+
+
 class TestFindingKey:
     def test_deterministic_for_identical_normalized_content(self) -> None:
         a = _finding(summary="  The Parser Drops   the final item ")
@@ -151,12 +161,13 @@ class TestFindingKey:
 class TestComputeDebt:
     def test_weights_16_8_4_1(self) -> None:
         findings = [
-            _finding("f1", ReviewSeverity.CRITICAL),
+            _finding("f1", ReviewSeverity.BLOCKER),
             _finding("f2", ReviewSeverity.HIGH),
             _finding("f3", ReviewSeverity.MEDIUM),
             _finding("f4", ReviewSeverity.LOW, FixCostNow.CONTAINED),
         ]
         debt = remediation.compute_debt(tuple(findings))
+        assert (debt.blocker, debt.high, debt.medium, debt.contained_low) == (1, 1, 1, 1)
         assert debt.score == 16 + 8 + 4 + 1
 
     def test_non_contained_low_excluded(self) -> None:
@@ -406,7 +417,7 @@ def _reviewed_state(selection: tuple[str, ...]) -> RemediationState:
         selected_finding_keys=selection,
         applied_finding_keys=(),
         deferred_finding_keys=(),
-        debt=ReviewDebt.compute(critical=0, high=1, medium=0, contained_low=0),
+        debt=ReviewDebt.compute(blocker=0, high=1, medium=0, contained_low=0),
         gate_evidence=[],
         touched_paths=[],
         progress=True,

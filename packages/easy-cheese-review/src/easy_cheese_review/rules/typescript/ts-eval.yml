@@ -1,0 +1,12 @@
+id: ts-eval
+language: typescript
+severity: warning
+message: '`eval` or `new Function` runs a string as code.'
+note: Confirm that no input that a user controls reaches this call.
+metadata:
+  dimension: security
+  base: high
+rule:
+  any:
+    - pattern: eval($$$ARGS)
+    - pattern: new Function($$$ARGS)

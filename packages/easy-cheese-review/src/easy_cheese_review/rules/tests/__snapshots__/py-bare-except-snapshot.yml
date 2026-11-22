@@ -1,0 +1,10 @@
+id: py-bare-except
+snapshots:
+  "try:\n    run()\nexcept:\n    handle()\n":
+    labels:
+    - source: |-
+        except:
+            handle()
+      style: primary
+      start: 15
+      end: 35

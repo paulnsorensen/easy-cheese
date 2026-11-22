@@ -20,9 +20,11 @@ A finding that drops the list marker or the location backticks is invisible to `
 - **[<dim>:<sev>]** `path:line` — <claim>
   - location: <tier> · fix-cost-now: <tier> · fix-cost-later: <tier> · confidence: <tier>
   - recommendation: <action>
+  - evidence: static — <rule-or-fact> `path:line`
   - invariants: must-hold: <X>; must-not: <Y>
 ```
 For a `conventions` finding, state the exact rule, source, offending code, and correction. For an `altitude` finding, state the symptom, owner, better placement, and concrete cost; architecture preference alone is not a finding. For a `reframe` finding, state the incidental complexity, new model, deleted concepts, and preserved behavior; a change that only moves complexity is not a finding.
+The `evidence:` line is optional. Place it before `invariants:`, because the parser appends unbulleted lines after `invariants:` to invariants.
 The `invariants:` line is optional.
 Add it to a `blocker` or `high` finding when the fix could break a neighbour.
 `/cure` implements `recommendation:` as the locked fix decision and keeps every `invariants:` clause true.

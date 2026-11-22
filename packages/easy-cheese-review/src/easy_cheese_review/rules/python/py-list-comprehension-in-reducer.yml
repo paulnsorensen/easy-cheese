@@ -1,0 +1,19 @@
+id: py-list-comprehension-in-reducer
+language: python
+severity: warning
+message: A list comprehension builds a whole list that a generator would stream.
+note: Drop the brackets so the reducer reads a generator.
+metadata:
+  dimension: efficiency
+  base: low
+rule:
+  kind: call
+  all:
+    - has:
+        field: function
+        regex: '^(sum|any|all|min|max)$'
+    - has:
+        field: arguments
+        has:
+          kind: list_comprehension
+          nthChild: 1

@@ -59,6 +59,11 @@ def test_runtime_requirements_match_the_uv_lock() -> None:
     assert pinned == _pins(exported)
 
 
+# /age alone ships the published easy-cheese-review package. A skill-level
+# `include` replaces the shared list, so it repeats the shared entries first.
+_EXTRA_INCLUDES = {"age": ["../../packages/easy-cheese-review/src/easy_cheese_review"]}
+
+
 def test_every_python_skill_has_a_consistent_wedge_config() -> None:
     shared = tomllib.loads((REPO_ROOT / "skills" / "wedge.toml").read_text(encoding="utf-8"))
     assert shared["groups"] == ["runtime"]
@@ -70,7 +75,7 @@ def test_every_python_skill_has_a_consistent_wedge_config() -> None:
         config = tomllib.loads(
             (REPO_ROOT / "skills" / skill / "wedge.toml").read_text(encoding="utf-8")
         )
-        assert config == {
+        expected: dict[str, object] = {
             "name": skill,
             "entry": f"easy_cheese.skills.{skill.replace('-', '_')}.commands:main",
             "source_paths": [
@@ -81,6 +86,9 @@ def test_every_python_skill_has_a_consistent_wedge_config() -> None:
                 "cli",
             ],
         }
+        if skill in _EXTRA_INCLUDES:
+            expected["include"] = [*cast(list[str], shared["include"]), *_EXTRA_INCLUDES[skill]]
+        assert config == expected
         source_root = REPO_ROOT / "src" / "easy_cheese"
         for selected in cast(list[str], config["source_paths"]):
             assert (source_root / selected).exists(), selected

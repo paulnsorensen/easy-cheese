@@ -81,6 +81,13 @@ def _validate_spec(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("tier")
+def _tier(argv: list[str]) -> int:
+    from easy_cheese.skills.mold.tier import main
+
+    return main(argv)
+
+
 COMMANDS = (
     derive_command(_review, "Serve and manage the local Mold review canvas"),
     derive_command(
@@ -114,6 +121,7 @@ COMMANDS = (
         "Run the applicability, contract, and fork-coherence taste gate;"
         + " --precheck runs the lexical pre-check on the draft without a verdict",
     ),
+    derive_command(_tier, "Pick the Mold tier from the Bounds-pass facts"),
     derive_command(
         _validate_spec,
         "Check a spec against the current Mold specification requirements",

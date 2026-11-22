@@ -24,7 +24,8 @@ culture → mold → cook (⇄ press) → age → cure → plate
   loop for behavior work.
 - **press** — the adversarial pass that Cook dispatches inside its loop;
   `/press <slug>` stays callable for a manual re-run.
-- **age** — twelve-dimension review producing a findings report.
+- **age** — seventeen-dimension review producing a findings report
+  ([architecture/age-fanout-router](./architecture/age-fanout-router.md)).
 - **cure** — applies the selected findings as focused fixes.
 - **plate** — write and verify final artifacts, run `just check`, commit, then publish an ordinary PR or stack.
 
@@ -207,5 +208,5 @@ rule. This invariant exists so later integration seams cannot dump
 transient noise into durable memory.
 
 
-_Source: repository skills and tests; r014 skill-review round notes (ingest hash 499c49c7b67d5eb6) for the preamble-grammar pointer · Updated: 2026-09-04_
+_Source: repository skills and tests; r014 skill-review round notes (ingest hash 499c49c7b67d5eb6) for the preamble-grammar pointer · Updated: 2026-11-15 (age dimension count, ingest hash 4ff8c4581c96fd93)_
 

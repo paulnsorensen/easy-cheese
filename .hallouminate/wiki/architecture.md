@@ -78,7 +78,7 @@ work, so Press is not a user-selected step
 | `/mold` | Converge a fuzzy idea into an approved spec |
 | `/cook` | Implementation of a spec; owns first acceptance coverage and the Press loop |
 | `/press` | Adversarial pass that Cook dispatches after its taste test (one false-success attack per round); `/press <slug>` stays for a manual re-run |
-| `/age` | Ten-dimension review → severity-grouped findings |
+| `/age` | Seventeen-dimension review → severity-grouped findings |
 | `/cure` | Apply selected findings as focused fixes |
 | `/plate` | Write and verify final artifacts, validate, commit, and publish one PR or a stack |
 | `/ultracook` | Retired (PR #317) — a compatibility redirect to `/cook`. The fresh-context isolation and file-disjoint parallel fan it once ran now live in `/cook`'s fan pathway |
