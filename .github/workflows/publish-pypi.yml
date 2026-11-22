@@ -1,22 +1,27 @@
 name: publish-pypi
 
-# Publish the easy-cheese-schemas package to PyPI when pyproject.toml's version
-# changes on main. release.yml cannot carry this: it force-retargets the version
-# tag onto an orphan `release` branch holding only SKILL.md + wedge launcher + lock + metadata, so
-# no package source is reachable from the published tag. This fires on every
-# pyproject.toml touch and no-ops unless the declared version is new to PyPI.
+# Publish easy-cheese-schemas and easy-cheese-review to PyPI when a version in
+# their pyproject.toml changes on main. release.yml cannot carry this: it
+# force-retargets the version tag onto an orphan `release` branch holding only
+# SKILL.md + wedge launcher + lock + metadata, so no package source is
+# reachable from the published tag. This fires on every touch of either
+# pyproject.toml, and each job no-ops unless its declared version is new to
+# PyPI. The review job waits for the schemas job, because the review package
+# can require a schemas version that only that job uploads.
 #
-# MANUAL PREREQUISITE (not automatable): before the first publish succeeds, the
-# repo owner must create a PyPI *pending publisher* naming the project
-# (easy-cheese-schemas), this repository, and this workflow's filename. The
-# pending publisher is keyed on the FILENAME -- renaming this file breaks
-# publishing until the publisher entry on PyPI is updated to match.
+# MANUAL PREREQUISITE (not automatable): before the first publish of each
+# project succeeds, the repo owner must create a PyPI *pending publisher* that
+# names the project (easy-cheese-schemas or easy-cheese-review), this
+# repository, and this workflow's filename. The pending publisher is keyed on
+# the FILENAME -- renaming this file breaks publishing until the publisher
+# entries on PyPI are updated to match.
 
 on:
   push:
     branches: [main]
     paths:
       - 'pyproject.toml'
+      - 'packages/easy-cheese-review/pyproject.toml'
   # Manual recovery when a publish fails after the version already landed.
   workflow_dispatch:
 
@@ -49,49 +54,35 @@ jobs:
         with:
           persist-credentials: false
 
+      # 3.11 is the declared floor; the last version listed is the default.
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.12"
+          python-version: |
+            3.11
+            3.12
 
       - name: Resolve version and check PyPI
         id: version
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import json
-          import os
-          import tomllib
-          import urllib.error
-          import urllib.request
-          from pathlib import Path
-
-          version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
-          try:
-              with urllib.request.urlopen("https://pypi.org/pypi/easy-cheese-schemas/json", timeout=30) as resp:
-                  released = set(json.load(resp).get("releases", {}))
-          except urllib.error.HTTPError as exc:
-              if exc.code != 404:
-                  raise
-              # 404 = the project has never been published. This is the first release.
-              released = set()
-          publish = version not in released
-          print(f"pyproject.toml declares {version}; already on PyPI: {not publish}")
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-              fh.write(f"version={version}\nshould_publish={str(publish).lower()}\n")
-          PY
+        env:
+          PYPROJECT: pyproject.toml
+          PROJECT: easy-cheese-schemas
+        run: python3 scripts/pypi_release_check.py
 
       # The conformance suite is the mandatory mitigation for shipping types
       # derived from the still-live src/fanout validators. validate.yml runs on
       # the same push but nothing makes this job wait for it, so a version bump
       # merged next to a red suite would publish anyway.
+      # This job builds no skill archives, so it deselects the one test that
+      # runs mold.pyz. validate.yml builds the archives and runs that test.
       - name: Run schema conformance suite
         if: steps.version.outputs.should_publish == 'true'
         run: |
           set -euo pipefail
           pip install --no-cache-dir pytest==9.0.3 pyyaml==6.0.2
           pip install --no-cache-dir --require-hashes --requirement requirements/runtime.txt
-          python3 -m pytest tests/schemas/python -q
+          python3 -m pytest tests/schemas/python -q \
+            --deselect tests/schemas/python/test_writer_diagnostics.py::test_mold_archive_reports_planner_reason_error
 
       - name: Build sdist and wheel
         if: steps.version.outputs.should_publish == 'true'
@@ -102,25 +93,98 @@ jobs:
 
       - name: Verify the sdist ships only the package
         if: steps.version.outputs.should_publish == 'true'
+        env:
+          ALLOWED: src/easy_cheese_schemas/ docs/easy-cheese-schemas.md
+        run: python3 scripts/sdist_contents_check.py
+
+      # The suites run on 3.12, so only this step proves the 3.11 floor. This
+      # job holds id-token: write, so the venv takes only hash-locked
+      # dependencies and the wheel built here; pip check proves they satisfy it.
+      - name: Import the wheel on Python 3.11
+        if: steps.version.outputs.should_publish == 'true'
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import sys
-          import tarfile
-          from pathlib import Path
+          python3.11 -m venv "$RUNNER_TEMP/py311"
+          "$RUNNER_TEMP/py311/bin/pip" install --no-cache-dir --require-hashes --requirement requirements/runtime.txt
+          "$RUNNER_TEMP/py311/bin/pip" install --no-cache-dir --no-deps dist/*.whl
+          "$RUNNER_TEMP/py311/bin/pip" check
+          cd "$RUNNER_TEMP"
+          py311/bin/python -I -c 'import easy_cheese_schemas'
 
-          sdist = next(Path("dist").glob("*.tar.gz"))
-          members = {n.split("/", 1)[1] for n in tarfile.open(sdist).getnames() if "/" in n}
-          stray = sorted(
-              m for m in members
-              if not m.startswith(("src/easy_cheese_schemas/", "docs/easy-cheese-schemas.md"))
-              and m not in {"LICENSE", "PKG-INFO", "pyproject.toml", ".gitignore"}
-          )
-          if stray:
-              print(f"::error::sdist would publish files outside the package: {stray}")
-              sys.exit(1)
-          print(f"sdist is package-only ({len(members)} members).")
-          PY
+      - name: Publish to PyPI
+        if: steps.version.outputs.should_publish == 'true'
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+
+  publish-review:
+    name: publish easy-cheese-review to pypi
+    needs: publish
+    if: >-
+      github.repository == 'paulnsorensen/easy-cheese'
+      && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: |
+            3.11
+            3.12
+
+      - name: Resolve version and check PyPI
+        id: version
+        env:
+          PYPROJECT: packages/easy-cheese-review/pyproject.toml
+          PROJECT: easy-cheese-review
+        run: python3 scripts/pypi_release_check.py
+
+      # validate.yml runs the same suite, but nothing makes this job wait for it.
+      - name: Run easy-cheese-review suite
+        if: steps.version.outputs.should_publish == 'true'
+        run: |
+          set -euo pipefail
+          pip install --no-cache-dir pytest==9.0.3 pyyaml==6.0.2
+          pip install --no-cache-dir --require-hashes --requirement requirements/runtime.txt
+          pip install --no-cache-dir --only-binary=:all: --require-hashes --requirement requirements/ast-grep.txt
+          python3 -m pytest tests/review/python -q
+
+      # The schemas wheel comes from this checkout's schemas source, so the 3.11
+      # check needs no PyPI lookup. It matches PyPI only when the publish job
+      # uploaded in this run.
+      - name: Build sdist and wheel
+        if: steps.version.outputs.should_publish == 'true'
+        run: |
+          set -euo pipefail
+          pip install --no-cache-dir build==1.5.0
+          python3 -m build packages/easy-cheese-review --outdir dist
+          python3 -m build --wheel --outdir "$RUNNER_TEMP/schemas-dist"
+
+      - name: Verify the sdist ships only the package
+        if: steps.version.outputs.should_publish == 'true'
+        env:
+          ALLOWED: src/easy_cheese_review/ README.md
+        run: python3 scripts/sdist_contents_check.py
+
+      # This job holds id-token: write, so the venv takes only hash-locked
+      # dependencies and wheels built here; pip check proves they satisfy the
+      # review package's declared requirements.
+      - name: Import the wheel on Python 3.11
+        if: steps.version.outputs.should_publish == 'true'
+        run: |
+          set -euo pipefail
+          python3.11 -m venv "$RUNNER_TEMP/py311"
+          "$RUNNER_TEMP/py311/bin/pip" install --no-cache-dir --require-hashes --requirement requirements/runtime.txt
+          "$RUNNER_TEMP/py311/bin/pip" install --no-cache-dir --no-deps dist/*.whl "$RUNNER_TEMP"/schemas-dist/*.whl
+          "$RUNNER_TEMP/py311/bin/pip" check
+          cd "$RUNNER_TEMP"
+          py311/bin/python -I -c 'import easy_cheese_review, easy_cheese_review.severity'
 
       - name: Publish to PyPI
         if: steps.version.outputs.should_publish == 'true'
