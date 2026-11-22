@@ -253,27 +253,6 @@ test('decision map example opens on the decision map view', async ({page}) => {
   }
 });
 
-test('phone width turns the conversation into a bottom sheet', async ({page}) => {
-  // The bottom sheet is the legacy layout: a document without requirements.
-  const {requirements, ...legacy} = JSON.parse(await readFile(example('01-bounds.json'), 'utf8'));
-  expect(requirements.length).toBeGreaterThan(0);
-  const s = await serveDocument(legacy);
-  try {
-    await page.setViewportSize({width: 390, height: 844});
-    await page.goto(s.url);
-    const sheet = page.getByRole('complementary', {name: 'Conversation'});
-    await expect(sheet).toHaveCSS('position', 'fixed');
-    await expect(sheet.getByText('Which storage format?')).toBeVisible();
-    await page.getByRole('button', {name: 'Lower sheet'}).click();
-    await expect(sheet.getByText('Which storage format?')).toBeHidden();
-    await page.getByRole('button', {name: 'Raise sheet'}).click();
-    await expect(sheet.getByText('Which storage format?')).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  } finally {
-    s.child.kill();
-  }
-});
-
 test('malformed agent field types still render the question and rail', async ({page}) => {
   const s = await serveDocument({
     goal: 42,
@@ -416,9 +395,8 @@ test('narrow requirements and conversation never overlap, even with a long list'
     await expect(conversation).toHaveCSS('position', 'static');
     const [paneBox, conversationBox] = await Promise.all([pane.boundingBox(), conversation.boundingBox()]);
     expect(paneBox.y + paneBox.height).toBeLessThanOrEqual(conversationBox.y);
-    expect(await pane.locator('.mc-requirements-scroll').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
-    await pane.locator('.mc-requirements-scroll').evaluate(node => { node.scrollTop = node.scrollHeight; });
-    await expect(pane.getByText(requirements[23].text)).toBeVisible();
+    expect(await nestedScrollPanes(page)).toEqual([]);
+    await expectReachableByPageScroll(page, pane.getByText(requirements[23].text));
     await tab(page, 'diagram').click();
     await conversation.getByRole('radio', {name: 'A'}).check();
     const sent = submitResponse(page);
@@ -468,7 +446,7 @@ test('short phone keeps a requirement and a whole question card usable under a l
     const [paneBox, shapesBox, conversationBox] = await Promise.all([pane.boundingBox(), shapes.boundingBox(), conversation.boundingBox()]);
     expect(paneBox.y + paneBox.height).toBeLessThanOrEqual(shapesBox.y);
     expect(shapesBox.y + shapesBox.height).toBeLessThanOrEqual(conversationBox.y);
-    expect(conversationBox.height).toBeLessThanOrEqual(667);
+    expect(await nestedScrollPanes(page)).toEqual([]);
     await conversation.getByRole('radio', {name: /Raw sqlite3 connection/}).check({timeout: 5000});
     const sent = submitResponse(page);
     await page.getByRole('button', {name: 'Send to agent'}).click();
@@ -489,7 +467,7 @@ for (const viewport of [{width: 375, height: 667}, {width: 844, height: 390}]) {
     try {
       await page.setViewportSize(viewport);
       await page.goto(s.url);
-      await expect(page.locator('main.mc-shell--requirements')).toBeAttached();
+      await expect(page.getByRole('region', {name: 'Requirements'})).toBeAttached();
       const stack = page.locator('.mc-shapes > .mc-stack');
       await stack.scrollIntoViewIfNeeded();
       expect(await stack.evaluate(element => element.clientHeight)).toBeGreaterThanOrEqual(160);
@@ -549,31 +527,6 @@ test('invalid dependencies report errors and restored waiting answers never subm
   }
 });
 
-test('requirements revision restores feedback after a lowered legacy phone sheet', async ({page}) => {
-  const s = await serveDocument({questions: [{id: 'F-1', prompt: 'Choose one', options: [{id: 'a', label: 'A'}]}]});
-  try {
-    await page.setViewportSize({width: 390, height: 844});
-    await page.goto(s.url);
-    await page.getByRole('button', {name: 'Lower sheet'}).click();
-    await expect(page.getByRole('button', {name: 'Raise sheet'})).toBeVisible();
-    const input = join(s.state, 'revision.json');
-    await writeFile(input, JSON.stringify({
-      requirements: [{id: 'R-1', text: 'THE SYSTEM SHALL keep feedback available.', status: 'draft'}],
-      questions: [{id: 'F-1', prompt: 'Choose one', options: [{id: 'a', label: 'A'}]}],
-    }));
-    execFileSync('python3', [archive, 'review', 'publish', '--state-dir', s.state, '--input', input, '--base-revision', '1'], {cwd: root});
-    await page.getByRole('button', {name: /new revision available/i}).click();
-    await expect(page.getByRole('region', {name: 'Requirements'})).toBeVisible();
-    await page.getByRole('radio', {name: 'A a', exact: true}).check();
-    const sent = submitResponse(page);
-    await page.getByRole('button', {name: 'Send to agent'}).click();
-    await sent;
-    expect(poll(s.state).feedback.answers['F-1'].selected).toEqual(['a']);
-  } finally {
-    s.child.kill();
-  }
-});
-
 test('malformed requirement records preserve valid requirements and feedback', async ({page}) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -597,6 +550,167 @@ test('malformed requirement records preserve valid requirements and feedback', a
     await sent;
     expect(poll(s.state).feedback.answers['F-1'].selected).toEqual(['a']);
     expect(errors).toEqual([]);
+  } finally {
+    s.child.kill();
+  }
+});
+
+// A dense review: three forks with long option text and a long basis, six requirements, and three diagrams.
+function denseDocument({requirements = true, artifacts = true} = {}) {
+  const tradeoff = n => `Option ${n} keeps the retry count with the job record, so a crash loses nothing; it costs one schema migration and one more write for each attempt, and every reader must accept the new column before rollout. Old workers ignore it, which is safe, but the dashboards read the old field until a later release moves them.`;
+  const basis = 'ev-2: workers crash about once a week and lose their in-memory state, so any count kept only in memory resets; F-1: jobs stay in Postgres as the single source of truth, so a column on the jobs table is cheap to add and to read back after a restart.';
+  const document = {
+    goal: 'Give the agent CLI a file-only database: no server, one directory, safe under concurrent agent writes, and simple to back up.',
+    questions: [1, 2, 3].map(f => ({
+      id: `F-${f}`,
+      prompt: `Fork ${f}: where does the retry count live?`,
+      meta: 'Decides whether a job keeps its retry count after a worker crash',
+      basis: [{ref: 'ev-2', text: basis}],
+      options: ['a', 'b', 'c'].map(o => ({id: `f${f}${o}`, label: `Fork ${f} option ${o}`, tradeoff: tradeoff(`${f}${o}`)})),
+    })),
+  };
+  if (requirements) {
+    document.requirements = Array.from({length: 6}, (_, index) => ({
+      id: `R-${index + 1}`,
+      text: `WHEN event ${index + 1} occurs THE SYSTEM SHALL keep its full requirement text visible.`,
+      status: index < 3 ? 'settled' : 'draft',
+      fork_ids: [`F-${(index % 3) + 1}`],
+    }));
+  }
+  if (artifacts) {
+    document.artifacts = [1, 2, 3].map(n => ({id: `d-${n}`, type: 'mermaid', title: `Diagram ${n}`, source: `graph TD; A${n}-->B${n}; B${n}-->C${n}; C${n}-->D${n}`}));
+  }
+  return document;
+}
+
+// The page is the only vertical scroller: no layout pane clips its content behind an inner scroll bar.
+async function nestedScrollPanes(page) {
+  return page.evaluate(() => ['.mc-requirements-scroll', '.mc-shapes > .mc-stack', '.mc-convo-scroll', '.mc-convo']
+    .flatMap(selector => [...document.querySelectorAll(selector)])
+    .filter(node => node.scrollHeight > node.clientHeight + 1)
+    .map(node => `${node.className} ${node.clientHeight}/${node.scrollHeight}`));
+}
+
+// Scroll the page (never an inner pane) to each target and require the whole target inside the viewport.
+async function expectReachableByPageScroll(page, locator) {
+  const count = await locator.count();
+  expect(count).toBeGreaterThan(0);
+  for (let index = 0; index < count; index += 1) {
+    const target = locator.nth(index);
+    await target.evaluate(node => window.scrollTo(0, node.getBoundingClientRect().top + window.scrollY - 8));
+    const fit = await target.evaluate(node => {
+      const box = node.getBoundingClientRect();
+      return {top: box.top, bottom: box.bottom, height: window.innerHeight};
+    });
+    expect(fit.top, `target ${index} top`).toBeGreaterThanOrEqual(0);
+    expect(Math.min(fit.bottom, fit.height) - fit.top, `target ${index} visible height`).toBeGreaterThan(0);
+  }
+}
+
+for (const viewport of [{width: 1280, height: 640}, {width: 1440, height: 900}]) {
+  test(`desktop page scrolls to every fork option, diagram, and the composer at ${viewport.width}x${viewport.height}`, async ({page}) => {
+    const s = await serveDocument(denseDocument());
+    try {
+      await page.setViewportSize(viewport);
+      await page.goto(s.url);
+      const conversation = page.getByRole('complementary', {name: 'Conversation'});
+      await expect(conversation.getByRole('group', {name: 'Fork 3: where does the retry count live?'})).toBeAttached();
+      await tab(page, 'diagram').click();
+      await expect(page.getByRole('heading', {name: 'Diagram 3'})).toBeAttached();
+      expect(await nestedScrollPanes(page)).toEqual([]);
+      expect(await page.evaluate(() => document.documentElement.scrollHeight > window.innerHeight)).toBe(true);
+      await expectReachableByPageScroll(page, conversation.locator('.ec-option'));
+      await expectReachableByPageScroll(page, page.locator('section.mc-shapes .ec-panel'));
+      await expectReachableByPageScroll(page, page.getByRole('textbox', {name: 'Message the agent'}));
+      // One whole fork card fits the viewport height or the page scrolls past it, so no fork hides behind a short pane.
+      const fork = conversation.locator('.mc-question').first();
+      await fork.evaluate(node => window.scrollTo(0, node.getBoundingClientRect().top + window.scrollY));
+      expect(await fork.evaluate(node => node.getBoundingClientRect().top)).toBeLessThan(viewport.height);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    } finally {
+      s.child.kill();
+    }
+  });
+}
+
+for (const viewport of [{width: 390, height: 844}, {width: 320, height: 640}]) {
+  for (const requirements of [true, false]) {
+    test(`phone ${viewport.width}x${viewport.height} ${requirements ? 'with' : 'without'} requirements uses one page scroll and no overlapping pane`, async ({page}) => {
+      const s = await serveDocument(denseDocument({requirements, artifacts: requirements}));
+      try {
+        await page.setViewportSize(viewport);
+        await page.goto(s.url);
+        const conversation = page.getByRole('complementary', {name: 'Conversation'});
+        await expect(conversation.getByRole('group', {name: 'Fork 3: where does the retry count live?'})).toBeAttached();
+        await expect(conversation).not.toHaveCSS('position', 'fixed');
+        expect(await nestedScrollPanes(page)).toEqual([]);
+        const panes = await page.evaluate(() => ['.mc-requirements', 'section.mc-shapes', 'aside.mc-convo']
+          .map(selector => document.querySelector(selector))
+          .filter(Boolean)
+          .map(node => {
+            const box = node.getBoundingClientRect();
+            return {top: box.top + window.scrollY, bottom: box.bottom + window.scrollY};
+          }));
+        expect(panes.length).toBe(requirements ? 3 : 2);
+        for (let index = 1; index < panes.length; index += 1) {
+          expect(panes[index].top).toBeGreaterThanOrEqual(panes[index - 1].bottom);
+        }
+        await expectReachableByPageScroll(page, conversation.locator('.ec-option'));
+        await expectReachableByPageScroll(page, page.getByRole('textbox', {name: 'Message the agent'}));
+        await conversation.getByRole('radio', {name: /Fork 3 option c/}).check();
+        const sent = submitResponse(page);
+        await page.getByRole('button', {name: 'Send to agent'}).click();
+        await sent;
+        expect(poll(s.state).feedback.answers['F-3'].selected).toEqual(['f3c']);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      } finally {
+        s.child.kill();
+      }
+    });
+  }
+}
+
+test('fork cards read at body size with separate ids, an inset legend, and gains, costs, and risks', async ({page}) => {
+  const document = denseDocument({requirements: false, artifacts: false});
+  document.questions[0].options[0] = {
+    id: 'attempts', label: 'Column on jobs',
+    gains: ['The count survives a worker crash.'],
+    costs: ['One schema migration.'],
+    risks: ['Old dashboards read the old field until they move.'],
+  };
+  const s = await serveDocument(document);
+  try {
+    await page.setViewportSize({width: 1440, height: 900});
+    await page.goto(s.url);
+    const fork = page.getByRole('group', {name: 'Fork 1: where does the retry count live?'});
+    await expect(fork).toBeVisible();
+    const textColor = await page.evaluate(() => getComputedStyle(document.body).color);
+    const detail = fork.locator('.ec-option-detail').first();
+    const style = await detail.evaluate(node => ({size: parseFloat(getComputedStyle(node).fontSize), color: getComputedStyle(node).color}));
+    expect(style.size).toBeGreaterThanOrEqual(14);
+    expect(style.color).toBe(textColor);
+    // The option id sits in its own element, never joined to the detail text.
+    await expect(fork.locator('.ec-option-id')).toHaveText(['attempts', 'f1b', 'f1c']);
+    await expect(fork.locator('.ec-option-detail').first()).not.toContainText('f1b');
+    await expect(fork).not.toContainText('f1b ·');
+    // The legend sits inside the card, below its top border.
+    const [legendTop, cardTop] = await Promise.all([fork.locator('legend').evaluate(node => node.getBoundingClientRect().top), fork.evaluate(node => node.getBoundingClientRect().top)]);
+    expect(legendTop).toBeGreaterThan(cardTop);
+    // Fork text holds about 45-75 characters on a line.
+    const perLine = await page.evaluate(() => ['.mc-question .ec-option-detail', '.mc-fork-basis'].map(selector => {
+      const node = document.querySelectorAll(selector)[1] || document.querySelector(selector);
+      const context = document.createElement('canvas').getContext('2d');
+      const style = getComputedStyle(node);
+      context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      const text = node.textContent;
+      return Math.round(node.clientWidth / (context.measureText(text).width / text.length));
+    }));
+    for (const chars of perLine) {
+      expect(chars).toBeGreaterThanOrEqual(45);
+      expect(chars).toBeLessThanOrEqual(75);
+    }
+    const points = fork.locator('label.ec-option', {hasText: 'Column on jobs'}).locator('li');
+    await expect(points).toHaveText([/^✔\s*gain:\s*The count survives a worker crash\.$/, /^✘\s*cost:\s*One schema migration\.$/, /^⚠\s*risk:\s*Old dashboards read the old field until they move\.$/]);
   } finally {
     s.child.kill();
   }

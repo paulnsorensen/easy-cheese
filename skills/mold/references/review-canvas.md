@@ -40,9 +40,10 @@ The canvas requires only `questions`. Every other field is optional, and the can
 
 | Field | Shape | Canvas use |
 |---|---|---|
-| `questions` | `[{id, prompt, meta?, basis?, selection_mode, recommended_option_id?, depends_on?, options: [{id, label, tradeoff?}]}]` | Open fork cards in the conversation rail |
+| `questions` | `[{id, prompt, meta?, basis?, selection_mode, recommended_option_id?, depends_on?, options: [{id, label, tradeoff?, gains?, costs?, risks?}]}]` | Open fork cards in the conversation rail |
 | `questions[].basis` | `[{ref?, text, confidence?}]` | Lead-in above the fork card: "Based on `ref` text and `ref` text, the next question is"; a `confidence` other than `certain` shows in parentheses |
-| `requirements` | `[{id, text, status, fork_ids?}]`; status is `settled` or `draft` | Full EARS text and linked forks in a persistent, scrollable pane outside the shape tabs; drafts list before settled entries |
+| `questions[].options[].gains`, `costs`, `risks` | lists of strings | One line for each item under the option, with its fork-card mark and word: `✔ gain`, `✘ cost`, `⚠ risk` ([`fork-questions.md`](fork-questions.md) § Fork card); `tradeoff` still renders as one paragraph |
+| `requirements` | `[{id, text, status, fork_ids?}]`; status is `settled` or `draft` | Full EARS text and linked forks in a persistent pane outside the shape tabs; drafts list before settled entries |
 | `settled_fork_ids` | list of question IDs | Every decision the agent has reconciled so far; cumulative, and republished in full each round, not only the ones settled in this revision |
 | `goal`, `goal_emphasis` | strings | Page title; the emphasis substring shows in the accent color |
 | `tier`, `stage` | strings (`stage`: `bounds`, `shape`, `sketch`, or `decision map`) | Eyebrow; `decision map` opens that view first |
@@ -76,7 +77,7 @@ Each `review publish` output has a `warnings` list. A warning never blocks the p
 
 The list is empty when the document has none of these problems. Read `warnings` after each publish. If the list is not empty, correct the document. Then publish the corrected document as a new revision.
 
-Independent, already-explained forks can share one batch submission. Do not batch a dependent fork before its prerequisites settle. Legacy documents without these fields retain their existing rendering and answer behavior. Desktop requirements sit above shapes beside the conversation. Narrow screens stack requirements, shapes, and conversation in separate, non-overlapping scroll panes. Each pane keeps a usable minimum height. The page scrolls on short screens. Legacy documents keep the phone sheet.
+Independent, already-explained forks can share one batch submission. Do not batch a dependent fork before its prerequisites settle. Legacy documents without these fields retain their existing rendering and answer behavior. The page is the only vertical scroller: no layout pane scrolls its content on its own, so every fork, diagram, and the composer is reachable by page scroll on short screens. Desktop requirements sit above shapes beside the conversation, and the composer stays at the viewport bottom while the conversation is on screen. Narrow screens stack requirements, shapes, and conversation in page order, with or without requirements, and no pane covers another.
 
 `frontend/mold-review/examples/` holds three documents: `01-bounds.json`, `02-sketch.json`, and `03-decision-map.json`.
 

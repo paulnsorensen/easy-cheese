@@ -296,7 +296,6 @@ function App() {
   const [newRevision, setNewRevision] = useState(false);
   const [annotate, setAnnotate] = useState(true);
   const [revisionsOpen, setRevisionsOpen] = useState(false);
-  const [sheetOpen, setSheetOpen] = useState(true);
   const theme = useTheme();
   const revision = data.revision?.number || 0;
   const sourceDoc = data.revision?.document;
@@ -396,7 +395,7 @@ function App() {
 
   return (
     <PinProvider value={pinApi}>
-      <main className={`mc-shell${hasRequirements ? ' mc-shell--requirements' : ''}`}>
+      <main className="mc-shell">
         <header className="mc-bar">
           <span className="ec-brand"><span className="mc-brand-root"><a href="https://cheeselord.dev" target="_blank" rel="noreferrer">cheeselord.dev</a><span className="ec-brand-sep">/</span></span><b>easy-cheese</b><span className="ec-brand-sep">/</span>mold</span>
           <div className="mc-bar-tools">
@@ -464,15 +463,11 @@ function App() {
           </section>
           </div>
 
-          <aside className={`mc-convo${sheetOpen || hasRequirements ? '' : ' mc-convo--lowered'}`} aria-label="Conversation">
-            <div className="mc-sheet-head">
-              <span className="mc-sheet-grip" aria-hidden="true" />
-              <div className="mc-row mc-row--between">
-                <p className={`ec-status${agentStatus && !agentStatus.startsWith('no ') ? ' ec-status--live' : ''}`}>
-                  {agentStatus || 'feedback autosaves'}{pins.length ? ` · ${pins.length} queued` : ''}
-                </p>
-                <button type="button" className="mc-link mc-sheet-toggle" aria-label={sheetOpen ? 'Lower sheet' : 'Raise sheet'} onClick={() => setSheetOpen(open => !open)}>{sheetOpen ? '˅' : '˄'}</button>
-              </div>
+          <aside className="mc-convo" aria-label="Conversation">
+            <div className="mc-convo-head">
+              <p className={`ec-status${agentStatus && !agentStatus.startsWith('no ') ? ' ec-status--live' : ''}`}>
+                {agentStatus || 'feedback autosaves'}{pins.length ? ` · ${pins.length} queued` : ''}
+              </p>
             </div>
             <div className="mc-convo-scroll">
               {doc.summary && <p className="mc-summary"><Inline text={doc.summary} /></p>}

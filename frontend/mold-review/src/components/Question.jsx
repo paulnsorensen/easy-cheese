@@ -1,15 +1,36 @@
 import React, {useId, useState} from 'react';
 import {Inline} from './Shapes.jsx';
 
+// One mark and word per point kind, as the fork-card legend in skills/mold/references/fork-questions.md defines them.
+const POINT_KINDS = [['gains', '✔', 'gain'], ['costs', '✘', 'cost'], ['risks', '⚠', 'risk']];
+
+function texts(value) {
+  const list = Array.isArray(value) ? value : [value];
+  return list.filter(item => typeof item === 'string' && item.trim());
+}
+
 function OptionCard({option, type, name, checked, recommended, onSelect}) {
   const detail = option.tradeoff || option.description;
+  const points = POINT_KINDS.flatMap(([field, mark, word]) => texts(option[field]).map(text => ({mark, word, text})));
   return (
     <label className="ec-option">
       <input type={type} name={name} checked={checked} onChange={onSelect} />
-      <span>
-        <strong>{option.label}</strong>
-        {recommended && <> <span className="ec-badge">recommended</span></>}
-        <small>{option.id}{detail ? ` · ${detail}` : ''}</small>
+      <span className="ec-option-body">
+        <span className="ec-option-head">
+          <strong>{option.label}</strong> <code className="ec-option-id">{option.id}</code>
+          {recommended && <> <span className="ec-badge">recommended</span></>}
+        </span>
+        {detail && <span className="ec-option-detail">{detail}</span>}
+        {points.length > 0 && (
+          <ul className="ec-option-points">
+            {points.map((point, index) => (
+              <li key={index} className={`ec-option-point ec-option-point--${point.word}`}>
+                <span className="ec-option-mark" aria-hidden="true">{point.mark}</span>
+                <span>{point.word}: {point.text}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </span>
     </label>
   );

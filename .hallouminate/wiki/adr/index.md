@@ -55,6 +55,7 @@
 - [mold-review-canvas-009](./mold-review-canvas-009.md) — ADR: Reach the review canvas over Tailscale through tailscale serve
 - [mold-review-canvas-010](./mold-review-canvas-010.md) — ADR: Keep requirements and fork settlement visible in the review canvas
 - [mold-review-canvas-011](./mold-review-canvas-011.md) — ADR: Lead Mold forks from evidence and keep the ledger in EARS
+- [mold-review-canvas-012](./mold-review-canvas-012.md) — ADR: Scroll the review canvas as one page and give fork options room
 - [outer-tdd-gates-001](./outer-tdd-gates-001.md) — ADR: Hybrid outside-in RED evidence uses a phase-neutral receipt
 - [outer-tdd-gates-002](./outer-tdd-gates-002.md) — ADR: Cut owns pre-implementation RED establishment
 - [outer-tdd-gates-003](./outer-tdd-gates-003.md) — ADR: Press retains ownership of bounded corrective Cook continuations
