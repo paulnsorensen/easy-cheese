@@ -803,8 +803,21 @@ def _inplace_targets(argv: list[str]) -> list[str]:
                 i += 1 if "=" in word else 2
                 continue
         elif word.startswith("-") and len(word) > 1:
-            inplace = inplace or bool(INPLACE.match(word[1:]))
-            if word[-1] in script_opts:
+            flags = word[1:]
+            if perl:
+                # A perl cluster ends at -e/-E (the program) or -M/-m/-I (a module
+                # or include path); the rest of the word is that argument.
+                cut = next((k for k, ch in enumerate(flags) if ch in "eEMmI"), len(flags))
+                inplace = inplace or bool(INPLACE.match(flags[:cut]))
+                if flags[cut : cut + 1] in ("e", "E"):
+                    # `-pe'code'` attaches the program; `-pe code` puts it in the next word.
+                    scripted = True
+                    i += 2 if cut + 1 == len(flags) else 1
+                    continue
+                i += 1
+                continue
+            inplace = inplace or bool(INPLACE.match(flags))
+            if flags and flags[-1] in script_opts:
                 scripted = True
                 i += 2
                 continue

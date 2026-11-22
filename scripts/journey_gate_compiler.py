@@ -13,9 +13,11 @@ Usage: journey_gate_compiler.py [--check] [--root PATH]
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import re
 import sys
+import tokenize
 from pathlib import Path
 
 STRIP = re.compile(
@@ -39,7 +41,23 @@ def stripped(path: Path) -> str:
         raise SourceError(
             f"{path.name}: unpaired gate:strip markers ({begins} begin, {ends} end)"
         )
-    return STRIP.sub("", text)
+    return without_comment_lines(STRIP.sub("", text))
+
+
+def without_comment_lines(text: str) -> str:
+    """Drop the lines that hold only a comment.
+
+    Every gate inlines all of common.py into one argv string, which must stay under
+    64 KiB. A comment does not run, so it only spends that budget. Tokenizing keeps a
+    `#` inside a string.
+    """
+    drop = {
+        token.start[0]
+        for token in tokenize.generate_tokens(io.StringIO(text).readline)
+        if token.type == tokenize.COMMENT and not token.line[: token.start[1]].strip()
+    }
+    lines = text.splitlines(keepends=True)
+    return "".join(line for number, line in enumerate(lines, 1) if number not in drop)
 
 
 def skills(root: Path) -> list[str]:
