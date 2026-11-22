@@ -1,0 +1,16 @@
+Repository: easy-cheese. Trunk: main. Provider: Graphite. `$GIT_DIR/.graphite_repo_config` exists and stack-tools reports `"recommended":"graphite"`.
+PR #501 (the bottom branch, feat/a-schema) merged on GitHub just now. PRs #502 and #503 are open. All local commits are pushed.
+
+$ gt log short
+◉ feat/c-wiring (#503)
+◯ feat/b-impl (#502)
+◯ feat/a-schema (#501, merged)
+◯ main
+
+$ git log --oneline origin/feat/c-wiring..feat/c-wiring
+(no output)
+
+$ git status --short
+(clean)
+
+The user asked to sync and republish the remaining stack.

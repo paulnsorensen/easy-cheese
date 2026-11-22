@@ -49,6 +49,13 @@ def _normalize_planner(argv: list[str]) -> int:
     return normalize_planner_main(argv)
 
 
+@bundle_command("planner-brief")
+def _planner_brief(argv: list[str]) -> int:
+    from easy_cheese.skills.mold.planner_brief import main
+
+    return main(argv)
+
+
 @bundle_command("review")
 def _review(argv: list[str]) -> int:
     from easy_cheese.skills.mold.review import close_main, poll_main, publish_main, serve_main
@@ -101,6 +108,10 @@ COMMANDS = (
     derive_command(
         _normalize_planner,
         "Materialize a planner writer envelope into a canonical PlannerResult",
+    ),
+    derive_command(
+        _planner_brief,
+        "Emit the planner writer contract and request-bound examples",
     ),
     derive_command(
         _curd_count, "Count candidate curds in a spec and recommend the next skill"

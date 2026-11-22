@@ -1,0 +1,17 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/route-cache. No PR exists. Mode: auto. The user said: "Make this a stack."
+Quality gate: `just check` passed at HEAD (exit 0). Stack tools: `{"recommended":"graphite"}`.
+
+$ git log --oneline main..HEAD
+5c0e8a1 feat(cheese): cache route decisions
+
+$ git diff --name-status --find-renames main...HEAD
+M	src/easy_cheese/skills/cheese/route.py
+M	src/easy_cheese/skills/cheese/classify.py
+M	tests/python/test_cheese_route.py
+
+$ git diff --shortstat main...HEAD
+ 3 files changed, 83 insertions(+), 3 deletions(-)
+
+One commit. No commit boundary separates layers. Checked on main:
+- classify.py alone fails `just check` (it imports cache_decision, which route.py adds).
+- route.py plus its test alone fails `just check` (test_cheese_route.py calls the new classify signature).
