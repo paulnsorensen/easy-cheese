@@ -61,8 +61,10 @@ def _normalize_planner(
         host = cast(Mapping[str, object], host_raw)
         plan_id_raw = host.get("plan_id")
         curd_ids_raw = host.get("curd_ids")
-        if not isinstance(plan_id_raw, str) or not plan_id_raw.strip():
-            raise FinalizationError("invocation.plan_id is required")
+        if plan_id_raw is not None and (
+            not isinstance(plan_id_raw, str) or not plan_id_raw.strip()
+        ):
+            raise FinalizationError("invocation.plan_id must be a nonempty string or null")
         if not isinstance(curd_ids_raw, Mapping):
             raise FinalizationError("invocation.curd_ids is required")
         if not isinstance(request_raw, Mapping) or not isinstance(writer_raw, Mapping):
