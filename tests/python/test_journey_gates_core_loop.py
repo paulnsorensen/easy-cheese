@@ -439,3 +439,43 @@ def test_plate_a_failed_gate_holds_until_a_gate_run_reports(tmp_path: Path, step
 def test_plate_unparseable_step_keeps_every_git_rule(tmp_path: Path, command: str, fails: list[str]) -> None:
     nested = "echo " + "$(" * 9 + "x" + ")" * 9
     assert _plate_verdict(tmp_path, [(f"{command}; {nested}", 0)]) == fails
+
+
+_HEREDOC_COMMIT = "git commit -F - <<'EOF'\nfeat: add x\n\nwhy; it && helps\nEOF"
+
+
+@pytest.mark.parametrize(
+    "steps",
+    [
+        [('"just" check', 1), ("git commit -m x", 0)],
+        [('sh "scripts/check.sh"', 1), ("git commit -m x", 0)],
+        [("sh scripts/check.sh", 1), ("sh scripts/skip-check.sh", 0), ("git commit -m x", 0)],
+        [("just check 2>&1", 1), ("git commit -m x", 0)],
+        [("sh scripts/check.sh &> gate.log", 1), ("git commit -m x", 0)],
+        [("sh scripts/check.sh", 1), (_HEREDOC_COMMIT, 0)],
+    ],
+    ids=["quoted-recipe", "quoted-script", "unrelated-check-script", "redirect-2>&1", "redirect-&>", "heredoc-after-fail"],
+)
+def test_plate_a_failed_gate_survives_quotes_redirects_and_lookalike_scripts(
+    tmp_path: Path, steps: list[tuple[str, int]]
+) -> None:
+    assert _plate_verdict(tmp_path, steps) == ["commit-after-failed-gate"]
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        '"just" check && git commit -m x',
+        "just check 2>&1 && git commit -m x",
+        f"sh scripts/check.sh && {_HEREDOC_COMMIT}",
+        "git commit -uno -m x",
+    ],
+    ids=["quoted-recipe", "redirect", "heredoc-message", "untracked-mode"],
+)
+def test_plate_a_chained_or_plain_commit_passes(tmp_path: Path, command: str) -> None:
+    assert _plate_verdict(tmp_path, [(command, 0)]) == []
+
+
+@pytest.mark.parametrize("command", ["git add -Av", "git add ./", "git add -uv src"])
+def test_plate_clustered_or_slashed_full_tree_add_fails(tmp_path: Path, command: str) -> None:
+    assert _plate_verdict(tmp_path, [(command, 0)]) == ["full-tree-staging"]

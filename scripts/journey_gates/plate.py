@@ -34,8 +34,9 @@ HOOK_DIRS = (".git/hooks/", "githooks/")
 def is_hook_path(word: str) -> bool:
     return any(hook in word.rstrip("/") + "/" for hook in HOOK_DIRS)
 FULL_ADD = {"-A", "--all", ".", "*", ":/", "-u", "--update"}
-# Short commit options whose value follows; the rest of a cluster is that value.
-VALUE_FLAGS = "mFCct"
+# Commit options with a value (rest of cluster or next word); u only attached (-uno).
+VALUE_FLAGS, ATTACHED_FLAGS = "mFCct", "u"
+SHELLS = ("sh", "bash", "zsh", "dash")
 
 
 def shell_results() -> list[tuple[str, Optional[bool]]]:
@@ -105,7 +106,28 @@ def parsed(command: str) -> Optional[list[list[str]]]:
 
 
 QUOTED = re.compile(r"'[^']*'|\"(?:\\.|[^\"\\])*\"")
-OPERATOR = re.compile(r"(&&|\|\||;|\n|&|\|)")
+OPERATOR = re.compile(r"&&|\|\||;|\n|&|\|")
+# Heredoc bodies, quotes and redirect `&` (2>&1, &>) join no command.
+HEREDOC = re.compile(r"(?<!<)<<(?!<)-?\s*(['\"]?)([\w.-]+)\1[^\n]*(\n(?:.*\n)*?\t*\2)(?=\n|$)")
+MASKS = (HEREDOC, QUOTED, re.compile(r"\d*[<>]&\d*-?|&>>?"))
+
+
+def _mask(match: re.Match[str]) -> str:
+    keep = match.start(3) - match.start() if match.re is HEREDOC else 0
+    return match.group(0)[:keep] + "x" * (len(match.group(0)) - keep)
+
+
+def segments(command: str) -> list[tuple[str, list[list[str]]]]:
+    """Each command with the operator before it."""
+    text = cut = script(command)
+    for mask in MASKS:
+        cut = mask.sub(_mask, cut)
+    chain: list[tuple[str, list[list[str]]]] = []
+    joined, start = "", 0
+    for match in OPERATOR.finditer(cut):
+        chain.append((joined, parsed(text[start : match.start()]) or []))
+        joined, start = match.group(0), match.end()
+    return chain + [(joined, parsed(text[start:]) or [])]
 
 
 def script(command: str) -> str:
@@ -119,11 +141,12 @@ def commit_in(chain: list[Any]) -> bool:
 
 
 def gate_links(command: str) -> tuple[bool, bool, bool]:
-    """(a commit follows the last gate only through &&, the step's status is the gate's,
-    a commit runs before the last gate)."""
-    parts = OPERATOR.split(QUOTED.sub("''", script(command)))
-    chain = [(parts[i - 1] if i else "", parsed(parts[i]) or []) for i in range(0, len(parts), 2)]
-    last = [i for i, (_, argvs) in enumerate(chain) if any(map(runs_gate, argvs))][-1]
+    """(commit after the last gate via && only, step status is the gate's, commit before it)."""
+    chain = segments(command)
+    gates = [i for i, (_, argvs) in enumerate(chain) if any(map(runs_gate, argvs))]
+    if not gates:
+        return False, False, False
+    last = gates[-1]
     ran = all(op != "||" for op, _ in chain[1 : last + 1])
     linked = ran and all(op == "&&" for op, _ in chain[last + 1 :])
     return linked and commit_in(chain[last + 1 :]), linked, commit_in(chain[:last])
@@ -145,14 +168,25 @@ def commit_flags(args: list[str]) -> set[str]:
                 if letter in VALUE_FLAGS:
                     skip = index == len(word) - 2
                     break
+                if letter in ATTACHED_FLAGS:
+                    break
     return found
 
 
+def is_gate_file(word: str) -> bool:
+    path = word[2:] if word.startswith("./") else word
+    return any(path == gate or path.endswith("/" + gate) for gate in GATE_FILES)
+
+
 def runs_gate(argv: list[str]) -> bool:
-    words = [_basename(argv[0])] + argv[1:]
-    if words[0] in ("sh", "bash", "zsh", "dash"):
+    if _basename(argv[0]) in SHELLS:
         words = [w for w in argv[1:] if not w.startswith("-")][:1]
-    return bool(words) and (words[0].endswith("check.sh") or words[:2] in GATE_RECIPES)
+        return bool(words) and is_gate_file(words[0])
+    return is_gate_file(argv[0]) or [_basename(argv[0])] + argv[1:2] in GATE_RECIPES
+
+
+def stages_full_tree(args: list[str]) -> bool:
+    return any({w, w.rstrip("/")} & FULL_ADD or w[:1] == "-" != w[1:2] and {"A", "u"} & set(w) for w in args)
 
 
 def sets_hooks_path(argv: list[str], sub: Optional[str], args: list[str]) -> bool:
@@ -171,7 +205,7 @@ def git_rules(argv: list[str], fails: set[str]) -> None:
     args = argv[index + 1 :]
     if sets_hooks_path(argv, sub, args):
         fails.add("gate-weakened")
-    if sub in ("add", "stage") and FULL_ADD & set(args):
+    if sub in ("add", "stage") and stages_full_tree(args):
         fails.add("full-tree-staging")
     if sub == "commit":
         flags = commit_flags(args)
@@ -201,8 +235,8 @@ for command, failed in shell_results():
     gate = False
     commands = parsed(command)
     if commands is None:
-        # The parser gave up: read each command between operators on its own.
-        commands = [a for part in OPERATOR.split(script(command))[::2] for a in parsed(part) or []]
+        # The parser gave up: parse each command alone.
+        commands = [argv for _, argvs in segments(command) for argv in argvs]
     for argv in commands:
         if _basename(argv[0]) == "git":
             git_rules(argv, failures)
@@ -212,8 +246,8 @@ for command, failed in shell_results():
                 failures.add("gate-weakened")
         gate = gate or runs_gate(argv)
     chained, reports_gate, before = gate_links(command) if gate else (False, False, False)
-    # Only `check.sh && git commit` ties a commit to the gate; `check.sh; x` or
-    # `x || check.sh` hides its result, and a commit before the gate meets the old one.
+    # Only `gate && git commit` ties a commit to the gate; `gate; x` and `x || gate`
+    # hide its result; a commit before the gate meets the old result.
     if commits and (gate_ok is False and (not chained or before) or (gate and not reports_gate)):
         failures.add("commit-after-failed-gate")
     if gate and reports_gate:
