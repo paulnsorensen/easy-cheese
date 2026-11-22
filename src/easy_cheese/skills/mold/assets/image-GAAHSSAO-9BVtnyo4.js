@@ -1,1 +1,0 @@
-export{dn as decodePngMetadata,un as encodePngMetadata}from"./index-ClWHzfud.js";

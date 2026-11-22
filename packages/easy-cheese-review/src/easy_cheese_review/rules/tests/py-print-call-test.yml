@@ -1,0 +1,6 @@
+id: py-print-call
+valid:
+  - logger.debug("processing %s", item)
+  - pprint(item)
+invalid:
+  - print(f"processing {item}")

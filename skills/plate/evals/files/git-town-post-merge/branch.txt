@@ -1,0 +1,18 @@
+Repository: easy-cheese. Trunk: main (git-town.main-branch is set). Provider: Git Town.
+PR #511 (the bottom branch, feat/a-schema) merged on GitHub just now. Branches feat/b-impl and feat/c-wiring remain.
+
+$ git town branch
+  main
+    feat/a-schema
+      feat/b-impl
+*       feat/c-wiring
+
+$ git status --short
+(clean)
+
+When the sync runs, it halts on a conflict. Treat this as the result of the first sync command:
+$ git town sync --stack --non-interactive
+Sync halted at feat/b-impl: merge conflict in src/easy_cheese/skills/cook/runner.py
+Resolve the conflict, stage it, and run `git town continue`.
+
+Assume you resolve src/easy_cheese/skills/cook/runner.py and stage it by name.

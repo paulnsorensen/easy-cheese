@@ -1,5 +1,5 @@
 import {test, expect} from '@playwright/test';
-import {mkdtemp, writeFile} from 'node:fs/promises';
+import {mkdtemp, readFile, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -77,12 +77,53 @@ test('sketch example renders ledger, placement, diagram, trail, and revisions', 
   }
 });
 
+test('evidence leads into each fork and the ledger decisions read as EARS requirements', async ({page}) => {
+  const s = await serveExample('02-sketch.json');
+  try {
+    await page.goto(s.url);
+    const conversation = page.getByRole('complementary', {name: 'Conversation'});
+    const lead = 'Based on F-1 one SQLite file and F-2 one writer lock must guard every write, the next question is:';
+    await expect(conversation.locator('.mc-fork-basis')).toHaveText(lead);
+    await expect(conversation.locator('.mc-fork-basis code')).toHaveText(['F-1', 'F-2']);
+    await expect(conversation.getByRole('group', {name: 'Which shape does the public interface take?'})).toHaveAccessibleDescription(lead);
+    const ledger = page.getByRole('region', {name: 'Ledger'});
+    await expect(ledger).toContainText('WHEN two agents write at once THE store SHALL serialize the writes');
+    await expect(ledger).toContainText('THE store SHALL import only the Python standard library.');
+    await expect(page.getByRole('region', {name: 'Requirements'})).toContainText('F-3 · Which shape does the public interface take?');
+  } finally {
+    s.child.kill();
+  }
+});
+
+test('a basis joins three items, marks a hedged one, and drops malformed entries', async ({page}) => {
+  const s = await serveDocument({questions: [
+    {id: 'F-1', prompt: 'Three reasons', basis: [
+      {ref: 'ev-1', text: 'the `web` app times out'},
+      {text: 'no ref here'},
+      {ref: 'ev-3', text: 'the queue drops jobs', confidence: 'speculating'},
+      {ref: 'ev-4'},
+      'ev-5',
+    ], options: [{id: 'a', label: 'A'}]},
+    {id: 'F-2', prompt: 'No reasons', basis: [{ref: 'ev-9', text: ' '}], options: [{id: 'b', label: 'B'}]},
+  ]});
+  try {
+    await page.goto(s.url);
+    const conversation = page.getByRole('complementary', {name: 'Conversation'});
+    await expect(conversation.locator('.mc-fork-basis')).toHaveCount(1);
+    await expect(conversation.locator('.mc-fork-basis')).toHaveText('Based on ev-1 the web app times out, no ref here, and ev-3 the queue drops jobs (speculating), the next question is:');
+    await expect(conversation.locator('.mc-fork-basis code')).toHaveText(['ev-1', 'web', 'ev-3']);
+    await expect(conversation.getByRole('group', {name: 'No reasons'})).not.toHaveAttribute('aria-describedby');
+  } finally {
+    s.child.kill();
+  }
+});
+
 test('annotate mode pins numbered notes and explore mode hides them', async ({page, request}) => {
   const s = await serveExample('02-sketch.json');
   try {
     await page.goto(s.url);
     const ledger = page.getByRole('region',{name:'Ledger'});
-    await ledger.getByRole('button').filter({hasText: 'WAL mode plus a single writer lock file'}).click();
+    await ledger.getByRole('button').filter({hasText: 'serialize the writes through one writer lock file'}).click();
     await page.getByLabel('Note text').fill('a');
     await page.getByRole('button', {name: 'queue note'}).click();
     await expect(ledger.getByLabel('note 1')).toBeVisible();
@@ -123,7 +164,7 @@ test('switching to explore mode closes an open pin editor, inline and block', as
   try {
     await page.goto(s.url);
     const ledger = page.getByRole('region',{name:'Ledger'});
-    await ledger.getByRole('button').filter({hasText: 'WAL mode plus a single writer lock file'}).click();
+    await ledger.getByRole('button').filter({hasText: 'serialize the writes through one writer lock file'}).click();
     await expect(page.getByLabel('Note text')).toBeVisible();
     await page.getByRole('button', {name: 'explore'}).click();
     await expect(page.getByLabel('Note text')).toHaveCount(0);
@@ -213,7 +254,10 @@ test('decision map example opens on the decision map view', async ({page}) => {
 });
 
 test('phone width turns the conversation into a bottom sheet', async ({page}) => {
-  const s = await serveExample('01-bounds.json');
+  // The bottom sheet is the legacy layout: a document without requirements.
+  const {requirements, ...legacy} = JSON.parse(await readFile(example('01-bounds.json'), 'utf8'));
+  expect(requirements.length).toBeGreaterThan(0);
+  const s = await serveDocument(legacy);
   try {
     await page.setViewportSize({width: 390, height: 844});
     await page.goto(s.url);
@@ -445,14 +489,16 @@ for (const viewport of [{width: 375, height: 667}, {width: 844, height: 390}]) {
     try {
       await page.setViewportSize(viewport);
       await page.goto(s.url);
+      await expect(page.locator('main.mc-shell--requirements')).toBeAttached();
       const stack = page.locator('.mc-shapes > .mc-stack');
       await stack.scrollIntoViewIfNeeded();
       expect(await stack.evaluate(element => element.clientHeight)).toBeGreaterThanOrEqual(160);
-      const [shapesBox, conversationBox] = await Promise.all([
-        page.locator('section.mc-shapes').boundingBox(),
-        page.getByRole('complementary', {name: 'Conversation'}).boundingBox(),
-      ]);
-      expect(shapesBox.y + shapesBox.height).toBeLessThanOrEqual(conversationBox.y);
+      // Two boundingBox calls are two round trips; a late layout or scroll between them mixes coordinates, so read both rects in one frame and retry until they settle.
+      await expect.poll(() => page.evaluate(() => {
+        const shapes = document.querySelector('section.mc-shapes').getBoundingClientRect();
+        const conversation = document.querySelector('aside[aria-label="Conversation"]').getBoundingClientRect();
+        return conversation.y - (shapes.y + shapes.height);
+      })).toBeGreaterThanOrEqual(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     } finally {
       s.child.kill();

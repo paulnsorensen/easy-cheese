@@ -1,0 +1,15 @@
+Repository: easy-cheese (owner example). Trunk: main. Provider: gh stack, stack-tools status `available`, http_status 200.
+Stack: feat/a-schema, feat/b-impl, feat/c-wiring. Nothing is verified yet.
+
+$ gh stack submit --auto --open --remote origin; echo "exit=$?"
+Pushing branches...
+Created PR #701 for feat/a-schema
+Created PR #702 for feat/b-impl
+Created PR #703 for feat/c-wiring
+⚠ Failed to update stack on GitHub: HTTP 422
+exit=0
+
+When you run the verifier it answers:
+$ python3 skills/plate/scripts/plate.pyz gh-stack-verify --trunk main --remote origin
+error: remote stack mapping differs: expected PRs [701, 702, 703], GitHub stack holds [701]
+(exit 1)

@@ -49,6 +49,13 @@ def _normalize_planner(argv: list[str]) -> int:
     return normalize_planner_main(argv)
 
 
+@bundle_command("planner-brief")
+def _planner_brief(argv: list[str]) -> int:
+    from easy_cheese.skills.mold.planner_brief import main
+
+    return main(argv)
+
+
 @bundle_command("review")
 def _review(argv: list[str]) -> int:
     from easy_cheese.skills.mold.review import close_main, poll_main, publish_main, serve_main
@@ -81,6 +88,13 @@ def _validate_spec(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("tier")
+def _tier(argv: list[str]) -> int:
+    from easy_cheese.skills.mold.tier import main
+
+    return main(argv)
+
+
 COMMANDS = (
     derive_command(_review, "Serve and manage the local Mold review canvas"),
     derive_command(
@@ -94,6 +108,10 @@ COMMANDS = (
     derive_command(
         _normalize_planner,
         "Materialize a planner writer envelope into a canonical PlannerResult",
+    ),
+    derive_command(
+        _planner_brief,
+        "Emit the planner writer contract and request-bound examples",
     ),
     derive_command(
         _curd_count, "Count candidate curds in a spec and recommend the next skill"
@@ -114,6 +132,7 @@ COMMANDS = (
         "Run the applicability, contract, and fork-coherence taste gate;"
         + " --precheck runs the lexical pre-check on the draft without a verdict",
     ),
+    derive_command(_tier, "Pick the Mold tier from the Bounds-pass facts"),
     derive_command(
         _validate_spec,
         "Check a spec against the current Mold specification requirements",

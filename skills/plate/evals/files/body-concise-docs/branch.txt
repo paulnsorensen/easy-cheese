@@ -5,6 +5,9 @@ PR template: .github/PULL_REQUEST_TEMPLATE.md with sections What changed / Why /
 $ git log --oneline main..HEAD
 7f2 docs(readme): replace the retired /gh install line with the gh CLI prerequisite
 
+$ git diff --name-status --find-renames main...HEAD
+M	README.md
+
 $ git diff main...HEAD
  README.md | 6 +++---
 -- Install the `/gh` skill for GitHub plumbing.

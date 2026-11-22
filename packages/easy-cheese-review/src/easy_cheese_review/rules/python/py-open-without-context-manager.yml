@@ -1,0 +1,10 @@
+id: py-open-without-context-manager
+language: python
+severity: warning
+message: A file opened outside `with` leaks the handle when a later line raises.
+note: Use `with open(...) as handle:`.
+metadata:
+  dimension: correctness
+  base: low
+rule:
+  pattern: $NAME = open($$$ARGS)

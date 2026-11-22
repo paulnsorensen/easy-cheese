@@ -54,7 +54,7 @@ Probe at **Ground** phase entry. In other Modes (Shape/Sketch/Grill), probe at d
 
 Skip the probe in pure Explore mode when there is no named system. Also skip it in Diagnose mode. Diagnose evidence comes from code and logs, not rationale documents.
 
-Cite hits in that round's decision ledger under `Decided / Asking / [AGENT-DECIDED]`. See `../SKILL.md` § Rules. Put a settled wiki decision under `Decided` and cite its wiki page. Do not reopen it as a new question.
+Cite hits in that round's decision ledger under `Decided / Asking / [AGENT-DECIDED]`. See `../SKILL.md` § Rules. Put a settled wiki decision under `Decided` as an EARS requirement and cite its wiki page ([`decision-ledger.md`](decision-ledger.md)). Do not reopen it as a new question. A hit that opens a new fork goes into that fork's basis.
 
 ## Prior-evidence fast path
 

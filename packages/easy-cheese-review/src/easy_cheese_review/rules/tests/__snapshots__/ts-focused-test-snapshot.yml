@@ -1,0 +1,22 @@
+id: ts-focused-test
+snapshots:
+  "describe.only(\"store\", () => {});":
+    labels:
+    - source: describe.only("store", () => {})
+      style: primary
+      start: 0
+      end: 32
+    - source: describe.only
+      style: secondary
+      start: 0
+      end: 13
+  "it.only(\"saves\", () => {});":
+    labels:
+    - source: it.only("saves", () => {})
+      style: primary
+      start: 0
+      end: 26
+    - source: it.only
+      style: secondary
+      start: 0
+      end: 7

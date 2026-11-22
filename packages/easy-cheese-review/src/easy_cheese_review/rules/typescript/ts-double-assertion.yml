@@ -1,0 +1,10 @@
+id: ts-double-assertion
+language: typescript
+severity: warning
+message: '`as unknown as T` lets any value claim any type.'
+note: Validate the value at the boundary instead.
+metadata:
+  dimension: correctness
+  base: medium
+rule:
+  pattern: $VALUE as unknown as $TYPE

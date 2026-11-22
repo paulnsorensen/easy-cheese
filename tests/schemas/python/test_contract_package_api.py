@@ -107,7 +107,56 @@ def test_top_level_package_exposes_stable_contract_api() -> None:
     assert "SUPPORTED_CONTRACT_VERSIONS" not in schemas.__all__
     assert not hasattr(schemas, "REGISTERED_CONTRACTS")
     assert not hasattr(schemas, "SUPPORTED_CONTRACT_VERSIONS")
-    assert schemas.__version__ == "3.0.0"
+    assert schemas.__version__ == "4.0.1"
+
+
+def test_review_vocabularies_match_the_4_0_0_contract() -> None:
+    """AC-1: 4.0.0 adds four dimensions, `static` evidence, and `blocker`."""
+    expected_dimensions = [
+        "correctness",
+        "security",
+        "encapsulation",
+        "spec",
+        "complexity",
+        "deslop",
+        "assertions",
+        "nih",
+        "efficiency",
+        "telemetry",
+        "conventions",
+        "altitude",
+        "reframe",
+        "tests",
+        "compat",
+        "scope",
+        "dependencies",
+    ]
+    assert [member.value for member in schemas.ReviewDimension] == expected_dimensions
+    assert [member.value for member in schemas.ReviewSeverity] == [
+        "blocker",
+        "high",
+        "medium",
+        "low",
+    ]
+    assert [member.value for member in schemas.EvidenceKind] == [
+        "source",
+        "review",
+        "diagnosis",
+        "verification",
+        "runtime",
+        "static",
+    ]
+    with pytest.raises(ValueError, match="'critical' is not a valid ReviewSeverity"):
+        _ = schemas.ReviewSeverity("critical")
+    assert schemas.EvidenceKind("static") is schemas.EvidenceKind.STATIC
+
+    document = cast(
+        "dict[str, dict[str, dict[str, dict[str, dict[str, list[str]]]]]]",
+        json.loads(schemas.schema_bytes("https://schemas.easy-cheese.dev/review-result")),
+    )
+    finding = document["$defs"]["ReviewFinding"]["properties"]
+    assert finding["severity"]["enum"] == ["blocker", "high", "medium", "low"]
+    assert finding["dimension"]["enum"] == expected_dimensions
 
 
 def test_canonical_plan_digest_is_verified_by_strict_runtime() -> None:
@@ -177,16 +226,18 @@ def test_installed_wheel_exposes_exact_bundled_fixtures(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
     )
-    wheel = next(wheel_dir.glob("easy_cheese_schemas-3.0.0-*.whl"))
+    wheel = next(wheel_dir.glob("easy_cheese_schemas-4.0.1-*.whl"))
     environment = tmp_path / "venv"
     venv.EnvBuilder(with_pip=True).create(environment)
     python = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     site_packages = next((environment / "lib").glob("python*/site-packages"))
     dependency_roots: set[str] = set()
-    for dependency in ("attrs", "cattrs"):
+    for dependency in ("attrs", "cattrs", "typing_extensions"):
         spec = find_spec(dependency)
         assert spec is not None and spec.origin is not None
-        dependency_roots.add(str(Path(spec.origin).resolve().parent.parent))
+        # A package's origin is its __init__.py; a module's origin is the file itself.
+        root = Path(spec.origin).resolve().parent
+        dependency_roots.add(str(root.parent if spec.submodule_search_locations else root))
     _ = (site_packages / "_easy_cheese_runtime_dependencies.pth").write_text(
         "\n".join(sorted(dependency_roots)) + "\n"
     )
@@ -210,8 +261,8 @@ from importlib import metadata
 from pathlib import Path
 import easy_cheese_schemas as schemas
 
-assert schemas.__version__ == "3.0.0"
-assert metadata.version("easy-cheese-schemas") == "3.0.0"
+assert schemas.__version__ == "4.0.1"
+assert metadata.version("easy-cheese-schemas") == "4.0.1"
 assert Path(schemas.__file__).resolve().is_relative_to(Path(__import__("sys").prefix))
 for name in ("AGENTS.md", "CLAUDE.md"):
     assert not Path(schemas.__file__).with_name(name).exists(), name

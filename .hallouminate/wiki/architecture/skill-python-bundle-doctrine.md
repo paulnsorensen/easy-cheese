@@ -2,7 +2,7 @@
 
 Every Python-backed skill ships one same-named `.pyz` archive.
 Wedge builds the archive; it adds no runtime launcher, sidecar lock, or first-run download.
-Runtime source stays under `src/`; skill archives are generated deployment files.
+Runtime source stays under `src/` and `packages/easy-cheese-review/src/`; skill archives are generated deployment files.
 `main` tracks no archive. CI commits them only to `dist`, the default branch.[^1]
 
 ## Skill deployment contract
@@ -18,7 +18,7 @@ Runtime source stays under `src/`; skill archives are generated deployment files
 
 ## Source and package layout
 
-Runtime Python uses two import packages:
+Runtime Python has two import roots under `src/`, plus one package under `packages/`:
 
 ```text
 src/
@@ -30,8 +30,22 @@ src/
 └── easy_cheese_schemas/
 ```
 
-`easy_cheese_schemas` is the independently published distribution.
+`easy_cheese_schemas` is an independently published distribution.
 Wedge copies selected local runtime packages directly; this build does not create internal application or shared-runtime wheels.[^3]
+
+`easy-cheese-review` is a second distribution with its own project directory. It builds its own wheel. `publish-pypi.yml` publishes it in a job that waits for the schemas job, because the review package can require a schemas version that only that job uploads:
+
+```text
+packages/easy-cheese-review/
+├── pyproject.toml          # its own wheel; depends on easy-cheese-schemas>=4.0.1,<5
+└── src/easy_cheese_review/ # rubric, ast-grep rule pack (package data), facts
+```
+
+A separate project directory lets the package build its own wheel and sdist without a second `pyproject.toml` at the repository root.
+The package may import only `easy_cheese_schemas`, never `easy_cheese`.
+`skills/age/wedge.toml` lists it in `include`, so only the `/age` archive carries it.
+A skill-level `include` replaces the shared one, so that list repeats the schemas.
+`src/easy_cheese/skills/age/commands.py` keeps the `severity` leaves literal (`_SEVERITY_LEAVES`) and imports its targets lazily, so repository scripts that import the manifest from `src/` alone still work.[^11]
 
 Skill slugs use kebab-case. Python package segments use underscores.
 Skill-owned code lives in `src/easy_cheese/skills/<python_skill_name>/`.
@@ -46,9 +60,11 @@ Each archive contains:
 1. its own skill package and immutable resources;
 2. `easy_cheese.shared`, `easy_cheese.cli`, and required package initializers;
 3. `easy_cheese_schemas`;
-4. the pure-Python dependencies pinned by `uv.lock`.
+4. `easy_cheese_review`, only in an archive whose `wedge.toml` includes it (today, `/age`);
+5. the pure-Python dependencies pinned by `uv.lock`.
 
 Each manifest's `source_paths` selects local files beneath `src/easy_cheese` without flattening package paths.
+The `/age` manifest also includes the review package from `packages/easy-cheese-review/src/`.
 It explicitly includes initializers, shared support, CLI support, and its own skill.
 It does not include other skill packages or infer an import closure.[^4]
 
@@ -142,5 +158,6 @@ The [Pyz bundling pipeline](./pyz-bundling-pipeline.md) records the current buil
 [^8]: src/easy_cheese/shared/bundle_commands.py; src/easy_cheese/skills/*/commands.py
 [^9]: https://github.com/paulnsorensen/easy-cheese/pull/729; https://github.com/paulnsorensen/easy-cheese/issues/732
 [^10]: https://github.com/paulnsorensen/easy-cheese/pull/807; .github/workflows/publish-dist.yml; scripts/publish_dist.py; .github/workflows/retarget-dist-prs.yml
+[^11]: packages/easy-cheese-review/pyproject.toml; skills/age/wedge.toml; src/easy_cheese/skills/age/commands.py
 
-_Source: user-approved A correction to PR #729 and the dist move in PR #807 · Updated: 2026-10-17 · Supersedes: launcher-and-lock deployment, whole-runtime vendoring, and temporary test archives; the custom builder remains retired._
+_Source: user-approved A correction to PR #729 and the dist move in PR #807 · Updated: 2026-11-21 · Supersedes: launcher-and-lock deployment, whole-runtime vendoring, and temporary test archives; the custom builder remains retired._

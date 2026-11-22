@@ -29,7 +29,7 @@ Both bumps can apply to one finding. Cap the result at `blocker`.
 2. **Location bump** — Add one tier when `location = contract` and the dimension is location-sensitive (see § Location sensitivity).
 3. **Compounding bump** — Add one tier when `fix-cost-later = structural`.
 
-Do not compute the formula mentally. Invoke `src/easy_cheese/shared/severity.py compute`:
+Do not compute the formula mentally. Run the `severity compute` command, which applies the `easy_cheese_review.severity` rubric:
 
 ```bash
 python3 skills/age/scripts/age.pyz severity compute \
@@ -47,7 +47,7 @@ Every finding carries these fields:
 
 | Field | Values | Source |
 | --- | --- | --- |
-| `dimension` | correctness, security, encapsulation, spec, complexity, deslop, assertions, nih, efficiency, telemetry, conventions, altitude, reframe | reviewer-tagged |
+| `dimension` | correctness, security, encapsulation, spec, complexity, deslop, assertions, nih, efficiency, telemetry, conventions, altitude, reframe, tests, compat, scope, dependencies | reviewer-tagged |
 | `severity` | `blocker / high / medium / low` | computed (formula above) |
 | `location` | `class / module / cross-module / contract` | reviewer-classified |
 | `fix-cost-now` | `contained / moderate / sprawling` | bucketed from blast-radius count |
@@ -86,12 +86,16 @@ Apply the `contract` bump only to dimensions where boundary position changes fin
 | conventions | no | An explicit rule remains independently evidenced wherever it occurs; boundary position does not change the convention claim |
 | altitude | no | Placement quality is graded from its symptom and concrete cost, not from API location alone |
 | reframe | no | A reframe is graded by the complexity it deletes, not by API location |
+| tests | no | A coverage gap is graded by the risk of the untested behavior; its rubric already names contract paths |
+| compat | no | Every compat finding sits at a contract, so the base tier already grades the boundary; a bump would count it twice |
+| scope | no | Scope grades how the change set is cut, not where the code lives |
+| dependencies | no | The manifest is the boundary; the base tier already grades who installs the dependency |
 
 ## Fix-cost-now
 
 > "How hard would it be to fix this *right now*?"
 
-Count files in the proposed fix's blast radius. Do not bucket the count mentally. Pipe raw file/module counts through `src/easy_cheese/shared/severity.py bucket`:
+Count files in the proposed fix's blast radius. Do not bucket the count mentally. Pipe raw file/module counts through the `severity bucket` command:
 
 ```bash
 python3 skills/age/scripts/age.pyz severity bucket --files <N> [--modules <M>]
@@ -134,6 +138,10 @@ Per-dimension `structural` anchors:
 | efficiency | An unbounded structure runs on a long-running path. Retained references accumulate as callers grow. |
 | telemetry | New code standardizes on a hand-rolled logging shape. Migrating to the real logger later touches every call site. |
 | reframe | New features keep landing as special cases on the incidental model. Each one adds a branch that the reframe must later delete. |
+| tests | An untested public behavior becomes the base for new callers. Each caller adds behavior that a later test must pin down at once. |
+| compat | Consumers adapt to a break that has no version or migration path. Each consumer that adapts makes a revert a second break. |
+| scope | A mixed change lands as one commit. Later reverts, bisects, and backports must split it by hand. |
+| dependencies | Other modules import a new dependency. Removing or replacing it later requires migrating every import. |
 
 The `structural` tag adds the compounding `+1` bump in the formula.
 Use the tag to record that the repair cost grows over time.
@@ -155,7 +163,7 @@ For each changed function, method, exported type, or wrapper, find its callers a
 
 ## Per-dimension rubrics
 
-Each dimension uses a base-severity table for each violation shape before modifiers. Apply location and compounding modifiers after the base tier.
+Each dimension uses a base-severity table for each violation shape before modifiers. Apply location and compounding modifiers after the base tier. When more than one row of a rubric matches, the highest matching row wins.
 
 ### correctness
 
@@ -264,7 +272,7 @@ The diff can extend an inherited god function or parameter sprawl by a few lines
 
 Route boundary-leaking parameters to encapsulation. Route exported-decision parameters to encapsulation. Route pass-through and same-abstraction layers to complexity. Route fake-modularity file sprawl to deslop. Route cache decisions to complexity. Route runtime cost to efficiency. Read the full rules in § Dimension boundaries.
 
-Complexity has no default `blocker` row. A base `high` finding with `fix-cost-later: structural` still reaches `blocker` after the `+1` compounding bump. The phrase "No blocker row" means no base blocker. It does not mean complexity caps at high. When criticality returns, its floor may raise complexity findings on `critical`-tier paths.
+Complexity has no default `blocker` row. A base `high` finding with `fix-cost-later: structural` still reaches `blocker` after the `+1` compounding bump. The phrase "No blocker row" means no base blocker. It does not mean complexity caps at high. When criticality returns, its floor may raise complexity findings on high-criticality paths.
 
 **The budget is a smell trigger, not a target.** Do not split a coherent function into shallow pieces just to stay under 40 lines. That split creates a `complexity` finding. Grade the resulting call depth and interface cost, not only the line count. When a function exceeds the budget but has no clean decomposition, grade it clean and record why. Fire budget rows only when an available decomposition leaves each piece independently understandable.
 
@@ -481,6 +489,81 @@ Boundaries: § Dimension boundaries owns every ownership rule. Read that table b
 
 Recommendation shape: "Reframe `<model>` as `<new model>` so `<branches>` disappear" / "Make `<default>` the only flow and delete `<special cases>`" / "Extend `<existing abstraction>` and delete `<new layer>`".
 
+### tests
+
+Review whether tests defend the behavior that the diff changes. `assertions` grades the quality of a test that exists. `tests` grades a changed behavior that no test reaches. Look for changed source paths with no matching test change. Look for a bug fix with no regression test. Look for new public behavior with no test. Look for a deleted test with no replacement. Look for a new branch, error path, or boundary case that no test executes.
+
+| Base | Trigger |
+| --- | --- |
+| `high` | Assign `high` when changed behavior on a published contract, security, or data path has no test that reaches it, or a bug fix on such a path lands without a regression test |
+| `medium` | Assign `medium` when a new or changed internal branch, error path, or boundary case has no test and the module has tests to extend, or a test is deleted with no replacement, or a bug fix off those paths lands without a regression test |
+| `low` | Assign `low` when a small leaf change has no test and a test costs only a few lines |
+
+Tests has no default `blocker` row. A base `high` finding with `fix-cost-later: structural` still reaches `blocker` after the compounding bump.
+
+A changed source path without a changed test path is a candidate, not a finding. Read the existing tests first: a test that already reaches the changed behavior closes the gap. Name the untested behavior and the input that a test must use.
+
+Boundaries: § Dimension boundaries owns every ownership rule. Read that table before you assign a dimension.
+
+Recommendation shape: "Add a test that drives `<input>` through `<function>` and asserts `<result>`" / "Add a regression test for `<bug>` before the fix" / "Restore the deleted `<test>` or replace it with `<test>`".
+
+### compat
+
+Review whether the change breaks consumers of a published surface. A published surface is something that callers outside the diff can use. It can be an exported symbol, a CLI flag or command, a configuration key, a wire or file format, a schema, or an enum value. Look for a removed or renamed export. Look for a changed signature, return shape, or default. Look for a removed enum value, field, or CLI flag. Check for a version bump, a migration, a deprecation path, and updated callers.
+
+| Base | Trigger |
+| --- | --- |
+| `blocker` | Assign `blocker` when a released library API or a wire protocol breaks existing consumers and no major version bump, migration, or compatibility path exists. Also assign `blocker` when a stored data format breaks and no migration or documented recovery path exists, even with a major version bump |
+| `high` | Assign `high` when the diff removes, renames, or reshapes an export, CLI surface, or configuration key that known callers use, and the diff does not update those callers |
+| `medium` | Assign `medium` when a versioned break leaves documentation, examples, or the changelog stale, or a changed default silently changes behavior for existing callers |
+| `low` | Assign `low` when the diff removes or renames an export with no known consumer and records no note of the change |
+
+A removed export is a candidate, not a finding. Search for callers inside and outside the repository first, and read the version and release notes. Name the broken consumer or the published surface that consumers can use.
+
+Boundaries: § Dimension boundaries owns every ownership rule. Read that table before you assign a dimension.
+
+Recommendation shape: "Keep `<old-name>` as a deprecated alias until `<version>`" / "Bump the major version and record the break in `<changelog>`" / "Update `<caller>` to the new `<signature>` in this change".
+
+### scope
+
+Review whether the diff is one coherent change. Look for two or more change groups with no import or call between them. Look for a mechanical change, such as a rename, a format pass, or a file move. Look for a behavior change mixed into that mechanical change. Look for drive-by edits outside the stated purpose. A mixed change is harder to review, revert, bisect, and backport.
+
+| Base | Trigger |
+| --- | --- |
+| `high` | Assign `high` when a mechanical change hides a behavior change in the same hunks, or unrelated behavior changes ship together so that one cannot be reverted alone |
+| `medium` | Assign `medium` when the diff holds two or more independent change groups that can land and revert separately |
+| `low` | Assign `low` to a small drive-by edit outside the stated purpose |
+
+Scope has no default `blocker` row. A base `high` finding with `fix-cost-later: structural` still reaches `blocker` after the compounding bump.
+
+Two file groups with no import between them are a candidate, not a finding. A shared purpose, such as one feature across a client and a server, keeps the groups one change. Name each group and the purpose that it serves.
+
+Boundaries: § Dimension boundaries owns every ownership rule. Read that table before you assign a dimension.
+
+Recommendation shape: "Split `<group>` into its own PR" / "Land the `<mechanical change>` first, then the behavior change" / "Move the drive-by edit to `<file>` into a separate commit".
+
+### dependencies
+
+Review dependency changes in manifests, lockfiles, and imports. Look for a manifest change without its lockfile, and a lockfile change without its manifest. Look for an import of a package that no manifest declares. Look for a new third-party package for a task that the standard library or an existing dependency already does. Look for a version range that is wider than the project's pin style. Look for a dependency that stays declared after its last import leaves.
+
+| Base | Trigger |
+| --- | --- |
+| `high` | Assign `high` when the manifest and the lockfile disagree, or runtime code imports a package that no manifest declares |
+| `medium` | Assign `medium` when a new third-party package does a task that the standard library or an existing dependency already does, or a runtime version range is wider than the project's pin style |
+| `low` | Assign `low` when a development-only dependency misses the pin style, or a declared dependency has no remaining import |
+
+Dependencies has no default `blocker` row. A base `high` finding with `fix-cost-later: structural` still reaches `blocker` after the compounding bump.
+
+Read the manifest, the lockfile, and the import sites together before grading. A new import that a manifest already declares is not a finding. A lockfile-only change that the manifest ranges still satisfy is not a finding.
+
+Boundaries: § Dimension boundaries owns every ownership rule. Read that table before you assign a dimension.
+
+Recommendation shape: "Regenerate `<lockfile>` with `<command>`" / "Declare `<package>` in `<manifest>`" / "Use `<stdlib-or-existing-dependency>` instead of adding `<package>`" / "Remove `<package>` from `<manifest>`".
+
+## Static evidence
+
+A deterministic fact or an ast-grep hit can support a finding in any dimension. Cite it as the optional `- evidence:` sub-bullet of the finding form in `report-example.md`: `- evidence: static — <rule-or-fact> \`path:line\``. A hit is evidence to confirm or reject, never a finding by itself. Read the cited code before you emit the finding. When no static evidence is available, review every dimension from the diff and the source. Do not report the gap as a finding.
+
 ## Dimension boundaries
 
 This table is the single ownership rule for the whole file.
@@ -522,5 +605,14 @@ Look for one primary dimension per finding. Use this table to choose the primary
 | reframe / complexity | Use `complexity` for one shape defect with a local fix. Use `reframe` when one new model deletes several branches, modes, or layers; name the `complexity` findings that the reframe subsumes. |
 | reframe / deslop | Use `deslop` for dead code or residue that a direct delete removes. Use `reframe` when the deletion needs a model change first. |
 | reframe / spec | Use `spec` for a named approved model that the diff contradicts. Use `reframe` for a new model that the approved design does not fix. A reframe of an approved design is an explicit decision, not an automatic `/cure` rewrite. |
+| tests / assertions | Use `tests` when no test reaches the changed behavior. Use `assertions` when a test reaches it but cannot fail on a wrong result. |
+| tests / spec | Use `spec` when the spec names an acceptance check that the diff does not add. Use `tests` for a coverage gap that no spec names. |
+| compat / correctness | Use `compat` for a published surface change that breaks consumers. Use `correctness` for a wrong result inside the changed code. Emit both when a break also gives a wrong result at run time. |
+| compat / encapsulation | Use `encapsulation` when the surface exposes internals. Use `compat` when the surface changes in a way that breaks its consumers. |
+| compat / spec | Use `spec` when the diff departs from the approved surface. Use `compat` for broken consumers whether or not a spec approves the change. Emit both when both hold. |
+| scope / spec | Use `spec` when the diff adds behavior that the spec does not ask for. Use `scope` when the diff holds independent change groups, whether or not a spec names them. |
+| scope / complexity | Use `complexity` for the shape of one function, file, or layer. Use `scope` for how the change set is cut. |
+| dependencies / nih | Use `nih` when the diff hand-rolls a task that an available import already does. Use `dependencies` when the diff adds a package for a task that the standard library or an existing dependency already does. |
+| dependencies / security | A dependency with a known vulnerability, an untrusted source, or an install-time script belongs to security. Use `dependencies` for manifest, lockfile, and import consistency. |
 
 Architecture preference alone is not a finding. Every `altitude` row must carry its symptom, owner, better placement, and concrete cost. Every `reframe` row must carry its incidental complexity, new model, deleted concepts, and preserved behavior. A violation of an approved design remains an explicit decision to confirm or reject; it does not authorize `/cure` to rewrite the design automatically.

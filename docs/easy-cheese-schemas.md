@@ -109,7 +109,7 @@ One case returns a value *and* problems: a `schema_version` stamp that is not an
 ## The `schema_version` contract
 
 ```python
-SCHEMA_VERSION = 4   # what this package writes and fully understands
+SCHEMA_VERSION = 5   # what this package writes and fully understands
 MIN_READABLE = 1     # oldest stamp still readable; widens as the schema evolves
 STAMP_KEY = "schema_version"
 ```
@@ -141,11 +141,15 @@ The package is semver'd, and the version governs the **artifact contracts**, not
 
 - **Patch** — no contract change. Bug fixes, problem-message wording, documentation.
 - **Minor** — additive only. New optional fields, new types, new exports. Every artifact a previous minor could write is still read as `CURRENT`, and every artifact a previous minor could read still parses.
-- **Major** — a breaking contract change: a removed or renamed field, a narrowed type, a field made required, or a raised `MIN_READABLE`. Accompanied by a `SCHEMA_VERSION` bump, so previously-written artifacts become `PRIOR` or `STALE` rather than silently misparsing.
+- **Major** — a breaking contract change: a removed or renamed field, a narrowed type, a field made required, or a raised `MIN_READABLE`. Accompanied by a `SCHEMA_VERSION` bump, so previously-written artifacts become `PRIOR` or `STALE` rather than silently misparsing. A clean-break release (`src/easy_cheese_schemas/AGENTS.md`, section "Clean-break redesign") can rename a field without a `SCHEMA_VERSION` bump when its release note says so.
 
 The **additive-only discipline** is what makes `FUTURE` provenance safe, and it is a hard rule, not a preference. Because unknown fields are ignored, an older reader handed a newer artifact will silently drop anything it does not recognize. That is correct behavior when new fields are additive and optional, and it is data loss when they are not — the older reader would produce a value that looks complete and is not. So within a `SCHEMA_VERSION`, new fields must be additive and optional. Anything else waits for the major bump.
 
 Pre-1.0 caveat: while the version is `0.x`, minor bumps may break. The policy above binds from 1.0.
+
+**4.0.0 note.** Version 4.0.0 renames `ReviewSeverity.CRITICAL` (`critical`) to `BLOCKER` (`blocker`). It renames `ReviewDebt.critical` to `ReviewDebt.blocker`. It also adds `static` to `EvidenceKind` and the `tests`, `compat`, `scope`, and `dependencies` values to `ReviewDimension`. This release does not bump `SCHEMA_VERSION`. The clean-break rule applies (`src/easy_cheese_schemas/AGENTS.md`, section "Clean-break redesign"). A stored 3.x artifact fails closed on load only when it carries the removed `critical` value. That is a review finding with severity `critical`, or a remediation state with a `critical` debt key. Other 3.x artifacts still load. Do not delete a rejected artifact. Move it out of the active location and keep it for inspection. Then run the review again.
+
+**4.0.1 note.** Versions 2.0.0 through 4.0.0 declare Python 3.11 support but fail to import on 3.11, because they import `override` from `typing`. Version 4.0.1 imports it from `typing-extensions` and adds that dependency. It makes no contract change.
 
 ## Releasing (repo owner)
 

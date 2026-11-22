@@ -1,0 +1,51 @@
+id: py-swallowed-exception
+snapshots:
+  "try:\n    run()\nexcept BaseException as exc:\n    # ignore\n    pass\n":
+    labels:
+    - source: |-
+        except BaseException as exc:
+            # ignore
+            pass
+      style: primary
+      start: 15
+      end: 65
+    - source: pass
+      style: secondary
+      start: 61
+      end: 65
+    - source: pass
+      style: secondary
+      start: 61
+      end: 65
+  "try:\n    run()\nexcept Exception:\n    pass\n":
+    labels:
+    - source: |-
+        except Exception:
+            pass
+      style: primary
+      start: 15
+      end: 41
+    - source: pass
+      style: secondary
+      start: 37
+      end: 41
+    - source: pass
+      style: secondary
+      start: 37
+      end: 41
+  "try:\n    run()\nexcept:\n    pass\n":
+    labels:
+    - source: |-
+        except:
+            pass
+      style: primary
+      start: 15
+      end: 31
+    - source: pass
+      style: secondary
+      start: 27
+      end: 31
+    - source: pass
+      style: secondary
+      start: 27
+      end: 31

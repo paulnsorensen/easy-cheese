@@ -8,9 +8,13 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
 SRC_ROOT = REPO_ROOT / "src"
-for entry in (REPO_ROOT / "scripts", SRC_ROOT):
+# easy-cheese-review is its own distribution with its own src/ layout.
+REVIEW_SRC_ROOT = REPO_ROOT / "packages" / "easy-cheese-review" / "src"
+for entry in (REPO_ROOT / "scripts", REVIEW_SRC_ROOT, SRC_ROOT):
     if str(entry) not in sys.path:
         sys.path.insert(0, str(entry))
 os.environ["PYTHONPATH"] = os.pathsep.join(
-    part for part in (str(SRC_ROOT), os.environ.get("PYTHONPATH", "")) if part
+    part
+    for part in (str(SRC_ROOT), str(REVIEW_SRC_ROOT), os.environ.get("PYTHONPATH", ""))
+    if part
 )
