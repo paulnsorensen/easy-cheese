@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from collections.abc import Mapping
@@ -520,6 +521,46 @@ def test_third_failed_verdict_halts_after_two_corrections(taste: _MoldTasteTestM
     assert not taste.decomposition_gate(result, correction_round=1).halted
     final = taste.decomposition_gate(result, correction_round=2)
     assert final.halted and not final.allowed
+
+
+def test_cli_reports_blocker_category_and_text_without_changing_exit_codes(
+    taste: _MoldTasteTestModule,
+    tmp_path: Path,
+) -> None:
+    draft_path = tmp_path / "draft.md"
+    ledger_path = tmp_path / "ledger.json"
+    verdict_path = tmp_path / "verdict.json"
+    _ = draft_path.write_text(DRAFT)
+    _ = ledger_path.write_text(json.dumps(LEDGER))
+    blocked = verdict(taste)
+    blocked["verdict"] = "fail"
+    blocked["acceptance_gaps"] = ["AC-2 has no observable witness"]
+    _ = verdict_path.write_text(json.dumps(blocked))
+    mold = REPO_ROOT / "skills/mold/scripts/mold.pyz"
+    command = [
+        sys.executable,
+        str(mold),
+        "taste-test",
+        "--draft",
+        str(draft_path),
+        "--ledger",
+        str(ledger_path),
+        "--verdict",
+        str(verdict_path),
+    ]
+    failed = subprocess.run(
+        command, cwd=tmp_path, env={**os.environ, "PYTHONPATH": ""},
+        capture_output=True, text=True, check=False,
+    )
+    assert failed.returncode == 4
+    assert "reopen=none" in failed.stderr
+    assert "acceptance_gaps: AC-2 has no observable witness" in failed.stderr
+    _ = verdict_path.write_text("{}")
+    malformed = subprocess.run(
+        command, cwd=tmp_path, env={**os.environ, "PYTHONPATH": ""},
+        capture_output=True, text=True, check=False,
+    )
+    assert malformed.returncode == 2
 
 
 def _document_problems(taste: _MoldTasteTestModule, spec: str) -> tuple[str, ...]:
